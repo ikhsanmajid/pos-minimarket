@@ -12,7 +12,7 @@ import ProductController from '@/actions/App/Http/Controllers/ProductController'
 import ProductTableToolbar, { type ProductFilters } from './component/ProductSearch'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import { ProductActionsCell } from './component/ProductActionsCell'
-import { DialogAddProduct } from './component/AddProduct'
+import { DialogAddProduct } from './component/DialogAddProduct'
 
 export interface Category {
     id: number
