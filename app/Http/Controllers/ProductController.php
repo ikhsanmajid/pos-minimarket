@@ -6,7 +6,6 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -109,7 +108,7 @@ class ProductController extends Controller
                 'active' => (bool) $product->active,
             ]);
 
-        $categories = Category::orderBy('name')->get(['id', 'name']);
+        $categories = Category::orderBy('name')->get(['id', 'name', 'is_active']);
 
         return Inertia::render('POS/Product/Product', [
             'products' => $products,
@@ -137,27 +136,6 @@ class ProductController extends Controller
 
         return redirect()->route('pos.products.index')
             ->with('success', 'Produk berhasil ditambahkan.');
-    }
-
-    public function categories(Request $request): JsonResponse
-    {
-        Gate::authorize('viewAny', Product::class);
-
-        $search = trim((string) $request->input('search', $request->input('q', '')));
-
-        $categories = Category::query()
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where('name', 'ilike', "%{$search}%");
-            })
-            ->orderBy('name')
-            ->limit(25)
-            ->get(['id', 'name'])
-            ->map(fn (Category $cat) => [
-                'value' => $cat->id,
-                'label' => $cat->name,
-            ]);
-
-        return response()->json($categories);
     }
 
     public function show(Product $product): Response

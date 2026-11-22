@@ -297,6 +297,7 @@ export default function ProductTableToolbar({
                     onChange={(val) => handleCategoryChange(val ? String(val) : 'all')}
                     placeholder="Semua Kategori"
                     defaultOptions={categoryOptions.length > 0 ? categoryOptions : true}
+                    onlyActive={false}
                     isClearable
                     disabled={isLoading}
                     className="w-full sm:w-[185px] lg:w-[205px]"

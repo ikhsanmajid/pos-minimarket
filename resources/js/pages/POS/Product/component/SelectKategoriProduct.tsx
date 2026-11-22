@@ -2,7 +2,7 @@ import React, { useId, useMemo, useState } from 'react';
 import AsyncSelect from 'react-select/async';
 import { useDebouncedCallback } from 'use-debounce';
 import { cn } from '@/lib/utils';
-import ProductController from '@/actions/App/Http/Controllers/ProductController';
+import CategoryController from '@/actions/App/Http/Controllers/CategoryController';
 import type { ActionMeta, SingleValue } from 'react-select';
 
 export interface CategoryOption {
@@ -23,6 +23,8 @@ export interface SelectKategoriProductProps {
      * atau boolean true untuk fetch otomatis saat komponen dimuat.
      */
     defaultOptions?: CategoryOption[] | boolean;
+    /** Hanya ambil kategori yang berstatus aktif (default: true) */
+    onlyActive?: boolean;
     /** Callback saat pilihan berubah */
     onChange?: (value: number | null, option: CategoryOption | null) => void;
     /** Placeholder teks */
@@ -46,12 +48,15 @@ export interface SelectKategoriProductProps {
 }
 
 /**
- * Fetch kategori dari backend POS (/pos/products/categories)
+ * Fetch kategori dari backend POS (/pos/categories/search)
  */
-async function fetchCategoriesApi(search: string): Promise<CategoryOption[]> {
+async function fetchCategoriesApi(search: string, onlyActive: boolean = true): Promise<CategoryOption[]> {
     try {
-        const url = ProductController.categories.url({
-            query: search.trim() ? { search: search.trim() } : undefined,
+        const url = CategoryController.search.url({
+            query: {
+                ...(search.trim() ? { search: search.trim() } : {}),
+                only_active: onlyActive,
+            },
         });
 
         const response = await fetch(url, {
@@ -79,6 +84,7 @@ export default function SelectKategoriProduct({
     defaultValue,
     initialOption = null,
     defaultOptions = true,
+    onlyActive = true,
     onChange,
     placeholder = 'Pilih kategori produk...',
     isClearable = true,
@@ -104,7 +110,7 @@ export default function SelectKategoriProduct({
     // Debounced search ketika user mengetik
     const debouncedSearch = useDebouncedCallback(
         (query: string, callback: (options: CategoryOption[]) => void) => {
-            fetchCategoriesApi(query).then((options) => callback(options));
+            fetchCategoriesApi(query, onlyActive).then((options) => callback(options));
         },
         300
     );
@@ -116,7 +122,7 @@ export default function SelectKategoriProduct({
     ) => {
         if (!inputValue.trim()) {
             // Jika pencarian kosong, fetch langsung tanpa delay debounce
-            fetchCategoriesApi('').then((options) => callback(options));
+            fetchCategoriesApi('', onlyActive).then((options) => callback(options));
             return;
         }
 
