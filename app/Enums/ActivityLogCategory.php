@@ -4,6 +4,8 @@ namespace App\Enums;
 
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\PurchaseOrder;
+use App\Models\Supplier;
 use App\Models\User;
 
 enum ActivityLogCategory: string
@@ -13,6 +15,8 @@ enum ActivityLogCategory: string
     case User = 'user';
     case Category = 'category';
     case Transaction = 'transaction';
+    case Supplier = 'supplier';
+    case PurchaseOrder = 'purchase_order';
     case Default = 'default';
 
     /**
@@ -26,6 +30,8 @@ enum ActivityLogCategory: string
             self::User => 'Pengguna & Akun',
             self::Category => 'Kategori Produk',
             self::Transaction => 'Transaksi Penjualan',
+            self::Supplier => 'Pemasok / Supplier',
+            self::PurchaseOrder => 'Purchase Order (Pengadaan)',
             self::Default => 'Master Data (Lainnya)',
         };
     }
@@ -41,6 +47,8 @@ enum ActivityLogCategory: string
             self::User => 'Pengguna',
             self::Category => 'Kategori',
             self::Transaction => 'Transaksi',
+            self::Supplier => 'Supplier',
+            self::PurchaseOrder => 'Purchase Order',
             self::Default => 'Master Data',
         };
     }
@@ -54,6 +62,8 @@ enum ActivityLogCategory: string
             self::Product => Product::class,
             self::User => User::class,
             self::Category => Category::class,
+            self::Supplier => Supplier::class,
+            self::PurchaseOrder => PurchaseOrder::class,
             default => null,
         };
     }

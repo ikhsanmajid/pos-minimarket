@@ -4,7 +4,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout'
 import { DataTable, type DataTableColumn } from '@/components/dataTable'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Eye, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Eye } from 'lucide-react'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import type { PageProps } from '@/types'
 import { roleBadgeClass } from '../Users/Users'
@@ -15,6 +15,7 @@ import ActivityLogSearch, {
     type SubjectTypeOption,
 } from './component/ActivityLogSearch'
 import ActivityLogDetailDialog from './component/ActivityLogDetailDialog'
+import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 
 export type ActivityRow = {
     id: number
@@ -58,97 +59,6 @@ export const eventBadgeClass: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// SortHeader Component
-// ---------------------------------------------------------------------------
-
-function SortHeader({
-    label,
-    field,
-    tableSort,
-    tableDirection,
-    toolbarSort,
-    toolbarDirection,
-    onSort,
-}: {
-    label: string
-    field: string
-    tableSort?: string
-    tableDirection?: string
-    toolbarSort?: string
-    toolbarDirection?: string
-    onSort: (field: string) => void
-}) {
-    const isPrimary = tableSort === field
-    const isToolbarSorted = toolbarSort === field
-    const hasBoth = Boolean(tableSort && toolbarSort && tableSort !== toolbarSort)
-
-    let tooltip = `Urutkan ${label} (A-Z / Terendah)`
-    if (isToolbarSorted) {
-        tooltip = `Kolom ${label} sedang diurutkan via toolbar (${toolbarDirection === 'asc' ? 'A-Z / Terendah' : 'Z-A / Tertinggi'}). Tidak dapat diurutkan di header tabel.`
-    } else if (isPrimary) {
-        if (tableDirection === 'asc') {
-            tooltip = `Urutkan ${label} (Z-A / Tertinggi)`
-        } else if (tableDirection === 'desc') {
-            tooltip = `Batal urutkan (Default / Unsorted)`
-        }
-    }
-
-    if (isToolbarSorted) {
-        return (
-            <div
-                title={tooltip}
-                className="flex items-center gap-1.5 font-medium text-muted-foreground/80 cursor-not-allowed select-none"
-            >
-                <span>{label}</span>
-                <div className="flex items-center gap-1">
-                    {toolbarDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    )}
-                    <span
-                        className="flex h-3.5 items-center justify-center rounded bg-muted px-1 text-[9px] font-medium text-muted-foreground leading-none"
-                        title="Diurutkan via Toolbar (Nonaktif di Header)"
-                    >
-                        Toolbar
-                    </span>
-                </div>
-            </div>
-        )
-    }
-
-    return (
-        <button
-            type="button"
-            onClick={() => onSort(field)}
-            title={tooltip}
-            className="flex items-center gap-1.5 font-medium hover:text-foreground text-left cursor-pointer select-none group"
-        >
-            <span>{label}</span>
-            {isPrimary ? (
-                <div className="flex items-center gap-1">
-                    {tableDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
-                    )}
-                    {hasBoth && (
-                        <span
-                            className="flex h-3.5 min-w-3.5 px-0.5 items-center justify-center rounded bg-primary/10 text-[9px] font-bold text-primary leading-none"
-                            title="Urutan Utama (Ke-1)"
-                        >
-                            1
-                        </span>
-                    )}
-                </div>
-            ) : (
-                <ArrowUpDown className="h-3.5 w-3.5 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-            )}
-        </button>
-    )
-}
-
-// ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
 
@@ -169,12 +79,12 @@ const getColumns = ({
         id: 'no',
         header: 'No',
         cell: (info) => (from ?? 1) + info.row.index,
-        size: 8,
+        size: 50,
     },
     {
         accessorKey: 'created_at',
         header: () => (
-            <SortHeader
+            <DataTableSortHeader
                 label="Waktu"
                 field="created_at"
                 tableSort={filters.table_sort}
@@ -239,7 +149,7 @@ const getColumns = ({
     {
         accessorKey: 'description',
         header: () => (
-            <SortHeader
+            <DataTableSortHeader
                 label="Aktivitas"
                 field="description"
                 tableSort={filters.table_sort}
@@ -268,22 +178,24 @@ const getColumns = ({
     },
     {
         id: 'actions',
-        header: 'Detail',
+        header: () => <span className="text-right block w-full pr-2">Aksi</span>,
         cell: (info) => {
             const row = info.row.original
             return (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onSelect(row)}
-                    className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                >
-                    <Eye className="h-3.5 w-3.5" />
-                    Detail
-                </Button>
+                <div className="flex justify-end pr-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onSelect(row)}
+                        className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                        <Eye className="h-3.5 w-3.5" />
+                        Detail
+                    </Button>
+                </div>
             )
         },
-        size: 10,
+        size: 80,
     },
 ]
 
