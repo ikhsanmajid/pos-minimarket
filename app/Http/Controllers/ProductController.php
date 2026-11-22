@@ -6,6 +6,7 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -19,18 +20,32 @@ class ProductController extends Controller
     {
         Gate::authorize('viewAny', Product::class);
 
-        $filters = $request->only(['search', 'status', 'category_id', 'stock_status', 'sort', 'direction']);
+        $filters = $request->only([
+            'search',
+            'status',
+            'category_id',
+            'stock_status',
+            'sort',
+            'direction',
+            'table_sort',
+            'table_direction',
+        ]);
 
         $perPage = $request->integer('per_page', 10);
 
-        $sort = $request->input('sort', 'created_at');
-        $direction = strtolower($request->input('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
-        $allowedSorts = ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active', 'created_at'];
-        if (! in_array($sort, $allowedSorts, true)) {
-            $sort = 'created_at';
-        }
+        // Sorting definitions
+        $allowedTableSorts = ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active'];
+        $allowedToolbarSorts = ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active', 'created_at'];
 
-        $products = Product::with('category')
+        $tableSort = $request->input('table_sort');
+        $tableDirection = strtolower((string) $request->input('table_direction')) === 'desc' ? 'desc' : 'asc';
+        $hasTableSort = ! empty($tableSort) && in_array($tableSort, $allowedTableSorts, true);
+
+        $toolbarSort = $request->input('sort');
+        $toolbarDirection = strtolower((string) $request->input('direction')) === 'asc' ? 'asc' : 'desc';
+        $hasToolbarSort = ! empty($toolbarSort) && in_array($toolbarSort, $allowedToolbarSorts, true);
+
+        $query = Product::with('category')
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'ilike', "%{$search}%")
@@ -58,9 +73,27 @@ class ProductController extends Controller
                     'in_stock' => $query->whereColumn('stock', '>', 'min_stock'),
                     default => null,
                 };
-            })
-            ->orderBy($sort, $direction)
-            ->paginate($perPage)
+            });
+
+        // Multi-column sorting:
+        // 1. Table header sort is the primary sort (if active)
+        if ($hasTableSort) {
+            $query->orderBy($tableSort, $tableDirection);
+        }
+
+        // 2. Toolbar select sort is the secondary sort (or primary if table sort is not active)
+        if ($hasToolbarSort && (! $hasTableSort || $toolbarSort !== $tableSort)) {
+            $query->orderBy($toolbarSort, $toolbarDirection);
+        }
+
+        // Fallback default sorting if neither is active, or tie-breaker for deterministic pagination
+        if (! $hasTableSort && ! $hasToolbarSort) {
+            $query->orderBy('created_at', 'desc');
+        } elseif (($hasTableSort && $tableSort !== 'created_at') && (! $hasToolbarSort || $toolbarSort !== 'created_at')) {
+            $query->orderBy('id', 'desc');
+        }
+
+        $products = $query->paginate($perPage)
             ->withQueryString()
             ->through(fn (Product $product) => [
                 'id' => $product->id,
@@ -85,16 +118,9 @@ class ProductController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(): RedirectResponse
     {
-        Gate::authorize('create', Product::class);
-
-        $categories = Category::orderBy('name')
-            ->get(['id', 'name']);
-
-        return Inertia::render('POS/Product/AddProduct', [
-            'categories' => $categories,
-        ]);
+        return redirect()->route('pos.products.index');
     }
 
     public function store(StoreProductRequest $request): RedirectResponse
@@ -111,6 +137,27 @@ class ProductController extends Controller
 
         return redirect()->route('pos.products.index')
             ->with('success', 'Produk berhasil ditambahkan.');
+    }
+
+    public function categories(Request $request): JsonResponse
+    {
+        Gate::authorize('viewAny', Product::class);
+
+        $search = trim((string) $request->input('search', $request->input('q', '')));
+
+        $categories = Category::query()
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where('name', 'ilike', "%{$search}%");
+            })
+            ->orderBy('name')
+            ->limit(25)
+            ->get(['id', 'name'])
+            ->map(fn (Category $cat) => [
+                'value' => $cat->id,
+                'label' => $cat->name,
+            ]);
+
+        return response()->json($categories);
     }
 
     public function show(Product $product): Response
