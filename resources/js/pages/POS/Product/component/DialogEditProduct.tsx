@@ -271,11 +271,14 @@ export function DialogEditProduct({
                                     <Input
                                         id="edit-stock"
                                         type="number"
-                                        min="0"
                                         value={data.stock}
-                                        onChange={(e) => setData('stock', e.target.value)}
-                                        aria-invalid={!!errors.stock}
+                                        disabled
+                                        className="bg-muted text-muted-foreground cursor-not-allowed opacity-80"
+                                        title="Stok tidak dapat diedit langsung untuk menjaga keakuratan mutasi stok"
                                     />
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        Terkunci (kelola via mutasi stok).
+                                    </p>
                                     <FieldError>{errors.stock}</FieldError>
                                 </Field>
 

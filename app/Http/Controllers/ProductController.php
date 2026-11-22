@@ -211,6 +211,7 @@ class ProductController extends Controller
     public function update(UpdateProductRequest $request, Product $product): RedirectResponse
     {
         $data = $request->validated();
+        unset($data['stock']); // Cegah override perhitungan stok dari form edit
 
         if ($request->hasFile('image')) {
             if ($product->image) {
