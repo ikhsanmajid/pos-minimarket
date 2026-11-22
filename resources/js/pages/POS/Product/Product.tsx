@@ -12,6 +12,7 @@ import ProductController from '@/actions/App/Http/Controllers/ProductController'
 import ProductTableToolbar, { type ProductFilters } from './component/ProductSearch'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import { ProductActionsCell } from './component/ProductActionsCell'
+import { DialogAddProduct } from './component/AddProduct'
 
 export interface Category {
     id: number
@@ -39,27 +40,59 @@ interface PaginatedProducts extends PaginationMeta {
 interface SortHeaderProps {
     label: string
     field: string
-    currentSort?: string
-    currentDirection?: string
+    tableSort?: string
+    tableDirection?: string
+    toolbarSort?: string
+    toolbarDirection?: string
     onSort: (field: string) => void
 }
 
 function SortHeader({
     label,
     field,
-    currentSort,
-    currentDirection,
+    tableSort,
+    tableDirection,
+    toolbarSort,
+    toolbarDirection,
     onSort,
 }: SortHeaderProps) {
-    const isSorted = currentSort === field
+    const isPrimary = tableSort === field
+    const isToolbarSorted = toolbarSort === field
+    const hasBoth = Boolean(tableSort && toolbarSort && tableSort !== toolbarSort)
 
     let tooltip = `Urutkan ${label} (A-Z / Terendah)`
-    if (isSorted) {
-        if (currentDirection === 'asc') {
+    if (isToolbarSorted) {
+        tooltip = `Kolom ${label} sedang diurutkan via toolbar (${toolbarDirection === 'asc' ? 'A-Z / Terendah' : 'Z-A / Tertinggi'}). Tidak dapat diurutkan di header tabel.`
+    } else if (isPrimary) {
+        if (tableDirection === 'asc') {
             tooltip = `Urutkan ${label} (Z-A / Tertinggi)`
-        } else if (currentDirection === 'desc') {
+        } else if (tableDirection === 'desc') {
             tooltip = `Batal urutkan (Default / Unsorted)`
         }
+    }
+
+    if (isToolbarSorted) {
+        return (
+            <div
+                title={tooltip}
+                className="flex items-center gap-1.5 font-medium text-muted-foreground/80 cursor-not-allowed select-none"
+            >
+                <span>{label}</span>
+                <div className="flex items-center gap-1">
+                    {toolbarDirection === 'asc' ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    )}
+                    <span
+                        className="flex h-3.5 items-center justify-center rounded bg-muted px-1 text-[9px] font-medium text-muted-foreground leading-none"
+                        title="Diurutkan via Toolbar (Nonaktif di Header)"
+                    >
+                        Toolbar
+                    </span>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -70,12 +103,22 @@ function SortHeader({
             className="flex items-center gap-1.5 font-medium hover:text-foreground text-left cursor-pointer select-none group"
         >
             <span>{label}</span>
-            {isSorted ? (
-                currentDirection === 'asc' ? (
-                    <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
-                ) : (
-                    <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
-                )
+            {isPrimary ? (
+                <div className="flex items-center gap-1">
+                    {tableDirection === 'asc' ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
+                    ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
+                    )}
+                    {hasBoth && (
+                        <span
+                            className="flex h-3.5 min-w-3.5 px-0.5 items-center justify-center rounded bg-primary/10 text-[9px] font-bold text-primary leading-none"
+                            title="Urutan Utama (Ke-1)"
+                        >
+                            1
+                        </span>
+                    )}
+                </div>
             ) : (
                 <ArrowUpDown className="h-3.5 w-3.5 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
             )}
@@ -100,196 +143,206 @@ const getColumns = ({
     filters,
     onSort,
 }: GetColumnsOptions): DataTableColumn<Product>[] => [
-    {
-        id: 'no',
-        header: 'No',
-        cell: (info) => (from ?? 1) + info.row.index,
-        size: 10,
-    },
-    {
-        accessorKey: 'name',
-        header: () => (
-            <SortHeader
-                label="Produk"
-                field="name"
-                currentSort={filters.sort}
-                currentDirection={filters.direction}
-                onSort={onSort}
-            />
-        ),
-        cell: (info) => {
-            const row = info.row.original
-            return (
-                <div className="flex items-center gap-3 py-0.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40 overflow-hidden">
-                        {row.image ? (
-                            <img
-                                src={row.image}
-                                alt={row.name}
-                                className="h-full w-full object-cover"
-                            />
-                        ) : (
-                            <Package className="h-5 w-5 text-muted-foreground" />
-                        )}
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                        <span className="font-medium text-foreground truncate max-w-[220px]">
-                            {row.name}
-                        </span>
-                        <span className="text-xs text-muted-foreground font-mono">
-                            {row.barcode}
-                        </span>
-                    </div>
-                </div>
-            )
+        {
+            id: 'no',
+            header: 'No',
+            cell: (info) => (from ?? 1) + info.row.index,
+            size: 10,
         },
-    },
-    {
-        accessorKey: 'category',
-        header: 'Kategori',
-        cell: (info) => (
-            <span className="text-muted-foreground">
-                {info.getValue<string>() ?? '-'}
-            </span>
-        ),
-    },
-    {
-        accessorKey: 'buy_price',
-        header: () => (
-            <SortHeader
-                label="Harga Beli"
-                field="buy_price"
-                currentSort={filters.sort}
-                currentDirection={filters.direction}
-                onSort={onSort}
-            />
-        ),
-        size: 30,
-        cell: (info) =>
-            new Intl.NumberFormat('id-ID', {
-                style: 'currency',
-                currency: 'IDR',
-                minimumFractionDigits: 0,
-            }).format(Number(info.getValue<string>())),
-    },
-    {
-        accessorKey: 'sell_price',
-        header: () => (
-            <SortHeader
-                label="Harga Jual"
-                field="sell_price"
-                currentSort={filters.sort}
-                currentDirection={filters.direction}
-                onSort={onSort}
-            />
-        ),
-        size: 30,
-        cell: (info) => (
-            <span className="font-medium text-primary">
-                {new Intl.NumberFormat('id-ID', {
+        {
+            accessorKey: 'name',
+            header: () => (
+                <SortHeader
+                    label="Produk"
+                    field="name"
+                    tableSort={filters.table_sort}
+                    tableDirection={filters.table_direction}
+                    toolbarSort={filters.sort}
+                    toolbarDirection={filters.direction}
+                    onSort={onSort}
+                />
+            ),
+            cell: (info) => {
+                const row = info.row.original
+                return (
+                    <div className="flex items-center gap-3 py-0.5">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40 overflow-hidden">
+                            {row.image ? (
+                                <img
+                                    src={row.image}
+                                    alt={row.name}
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <Package className="h-5 w-5 text-muted-foreground" />
+                            )}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="font-medium text-foreground truncate max-w-[220px]">
+                                {row.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground font-mono">
+                                {row.barcode}
+                            </span>
+                        </div>
+                    </div>
+                )
+            },
+        },
+        {
+            accessorKey: 'category',
+            header: 'Kategori',
+            cell: (info) => (
+                <span className="text-muted-foreground">
+                    {info.getValue<string>() ?? '-'}
+                </span>
+            ),
+        },
+        {
+            accessorKey: 'buy_price',
+            header: () => (
+                <SortHeader
+                    label="Harga Beli"
+                    field="buy_price"
+                    tableSort={filters.table_sort}
+                    tableDirection={filters.table_direction}
+                    toolbarSort={filters.sort}
+                    toolbarDirection={filters.direction}
+                    onSort={onSort}
+                />
+            ),
+            size: 30,
+            cell: (info) =>
+                new Intl.NumberFormat('id-ID', {
                     style: 'currency',
                     currency: 'IDR',
                     minimumFractionDigits: 0,
-                }).format(Number(info.getValue<string>()))}
-            </span>
-        ),
-    },
-    {
-        accessorKey: 'stock',
-        header: () => (
-            <SortHeader
-                label="Stok"
-                field="stock"
-                currentSort={filters.sort}
-                currentDirection={filters.direction}
-                onSort={onSort}
-            />
-        ),
-        size: 20,
-        cell: (info) => {
-            const row = info.row.original
-            if (row.stock === 0) {
+                }).format(Number(info.getValue<string>())),
+        },
+        {
+            accessorKey: 'sell_price',
+            header: () => (
+                <SortHeader
+                    label="Harga Jual"
+                    field="sell_price"
+                    tableSort={filters.table_sort}
+                    tableDirection={filters.table_direction}
+                    toolbarSort={filters.sort}
+                    toolbarDirection={filters.direction}
+                    onSort={onSort}
+                />
+            ),
+            size: 30,
+            cell: (info) => (
+                <span className="font-medium text-primary">
+                    {new Intl.NumberFormat('id-ID', {
+                        style: 'currency',
+                        currency: 'IDR',
+                        minimumFractionDigits: 0,
+                    }).format(Number(info.getValue<string>()))}
+                </span>
+            ),
+        },
+        {
+            accessorKey: 'stock',
+            header: () => (
+                <SortHeader
+                    label="Stok"
+                    field="stock"
+                    tableSort={filters.table_sort}
+                    tableDirection={filters.table_direction}
+                    toolbarSort={filters.sort}
+                    toolbarDirection={filters.direction}
+                    onSort={onSort}
+                />
+            ),
+            size: 20,
+            cell: (info) => {
+                const row = info.row.original
+                if (row.stock === 0) {
+                    return (
+                        <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-destructive">{row.stock}</span>
+                            <Badge className="bg-red-300 text-red-700 dark:bg-red-950 dark:text-red-300">
+                                Habis!
+                            </Badge>
+                        </div>
+                    )
+                }
+                if (row.stock > 0 && row.stock <= row.min_stock) {
+                    return (
+                        <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-orange-600 dark:text-orange-400">
+                                {row.stock}
+                            </span>
+                            <Badge className="bg-orange-300 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+                                Hampir Habis
+                            </Badge>
+                        </div>
+                    )
+                }
                 return (
                     <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-destructive">{row.stock}</span>
-                        <Badge className="bg-red-300 text-red-700 dark:bg-red-950 dark:text-red-300">
-                            Habis!
-                        </Badge>
-                    </div>
-                )
-            }
-            if (row.stock > 0 && row.stock <= row.min_stock) {
-                return (
-                    <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-orange-600 dark:text-orange-400">
+                        <span className="font-semibold text-green-600 dark:text-green-400">
                             {row.stock}
                         </span>
-                        <Badge className="bg-orange-300 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
-                            Hampir Habis
+                        <Badge className="bg-green-300 text-green-700 dark:bg-green-950 dark:text-green-300">
+                            Aman
                         </Badge>
                     </div>
                 )
-            }
-            return (
-                <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-green-600 dark:text-green-400">
-                        {row.stock}
-                    </span>
-                    <Badge className="bg-green-300 text-green-700 dark:bg-green-950 dark:text-green-300">
-                        Aman
-                    </Badge>
-                </div>
-            )
+            },
         },
-    },
-    {
-        accessorKey: 'min_stock',
-        header: 'Min. Stok',
-        size: 10,
-        cell: (info) => (
-            <span className="text-muted-foreground">
-                {info.getValue<number>()}
-            </span>
-        ),
-    },
-    {
-        accessorKey: 'active',
-        header: () => (
-            <SortHeader
-                label="Status"
-                field="active"
-                currentSort={filters.sort}
-                currentDirection={filters.direction}
-                onSort={onSort}
-            />
-        ),
-        size: 10,
-        cell: (info) =>
-            info.getValue<boolean>() ? (
-                <Badge variant="success">Aktif</Badge>
-            ) : (
-                <Badge variant="secondary">Nonaktif</Badge>
+        {
+            accessorKey: 'min_stock',
+            header: 'Min. Stok',
+            size: 10,
+            cell: (info) => (
+                <span className="text-muted-foreground">
+                    {info.getValue<number>()}
+                </span>
             ),
-    },
-    {
-        id: 'actions',
-        header: '',
-        size: 20,
-        cell: (info) => {
-            const row = info.row.original
-            return (
-                <ProductActionsCell
-                    product={row}
-                    categories={categories}
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    detailUrl={ProductController.show.url(row.id)}
-                    destroyUrl={ProductController.destroy.url(row.id)}
-                />
-            )
         },
-    },
-]
+        {
+            accessorKey: 'active',
+            header: () => (
+                <SortHeader
+                    label="Status"
+                    field="active"
+                    tableSort={filters.table_sort}
+                    tableDirection={filters.table_direction}
+                    toolbarSort={filters.sort}
+                    toolbarDirection={filters.direction}
+                    onSort={onSort}
+                />
+            ),
+            size: 10,
+            cell: (info) =>
+                info.getValue<boolean>() ? (
+                    <Badge variant="success">Aktif</Badge>
+                ) : (
+                    <Badge variant="secondary">Nonaktif</Badge>
+                ),
+        },
+        {
+            id: 'actions',
+            header: '',
+            size: 20,
+            cell: (info) => {
+                const row = info.row.original
+                return (
+                    <ProductActionsCell
+                        product={row}
+                        categories={categories}
+                        canEdit={canEdit}
+                        canDelete={canDelete}
+                        detailUrl={ProductController.show.url(row.id)}
+                        destroyUrl={ProductController.destroy.url(row.id)}
+                    />
+                )
+            },
+        },
+    ]
 
 type ProductPageProps = PageProps<{
     products: PaginatedProducts
@@ -306,14 +359,19 @@ const ProductPage = () => {
     const canDelete = user?.role === 'admin'
 
     const handleSort = (field: string) => {
-        const isCurrent = filters.sort === field
+        // Jika kolom ini sudah dipilih di toolbar, tidak bisa disortir di header tabel
+        if (filters.sort === field) {
+            return
+        }
+
+        const isCurrent = filters.table_sort === field
         let nextSort: string | undefined = field
         let nextDirection: 'asc' | 'desc' | undefined = 'asc'
 
         if (isCurrent) {
-            if (filters.direction === 'asc') {
+            if (filters.table_direction === 'asc') {
                 nextDirection = 'desc'
-            } else if (filters.direction === 'desc') {
+            } else if (filters.table_direction === 'desc') {
                 // Siklus 3-state: asc -> desc -> unsorted
                 nextSort = undefined
                 nextDirection = undefined
@@ -323,8 +381,8 @@ const ProductPage = () => {
         router.visit(
             ProductController.index({
                 mergeQuery: {
-                    sort: nextSort,
-                    direction: nextDirection,
+                    table_sort: nextSort,
+                    table_direction: nextDirection,
                     page: 1,
                 },
             }),
@@ -346,7 +404,16 @@ const ProductPage = () => {
                 filters,
                 onSort: handleSort,
             }),
-        [products.from, categories, canEdit, canDelete, filters.sort, filters.direction]
+        [
+            products.from,
+            categories,
+            canEdit,
+            canDelete,
+            filters.table_sort,
+            filters.table_direction,
+            filters.sort,
+            filters.direction,
+        ]
     )
 
     useEffect(() => {
@@ -375,13 +442,10 @@ const ProductPage = () => {
                     </p>
                 </div>
                 {canEdit && (
-                    <Button
-                        render={<Link href={ProductController.create.url()} />}
-                        className="w-full sm:w-auto"
-                    >
-                        <Plus className="h-4 w-4" />
-                        Tambah Produk
-                    </Button>
+                    <DialogAddProduct
+                        categories={categories}
+                        storeUrl={ProductController.store.url()}
+                    />
                 )}
             </div>
 
