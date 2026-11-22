@@ -17,6 +17,7 @@ import { DialogAddProduct } from './component/DialogAddProduct'
 export interface Category {
     id: number
     name: string
+    is_active?: boolean
 }
 
 export type Product = {

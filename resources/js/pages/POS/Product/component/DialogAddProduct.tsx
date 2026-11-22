@@ -120,10 +120,12 @@ export function DialogAddProduct({
     }
 
     const categoryOptions = React.useMemo<CategoryOption[]>(() => {
-        return categories.map((c) => ({
-            value: c.id,
-            label: c.name,
-        }))
+        return categories
+            .filter((c) => c.is_active !== false)
+            .map((c) => ({
+                value: c.id,
+                label: c.name,
+            }))
     }, [categories])
 
     return (
@@ -266,6 +268,7 @@ export function DialogAddProduct({
                                 id="add-category"
                                 value={data.category_id ? Number(data.category_id) : null}
                                 defaultOptions={categoryOptions.length > 0 ? categoryOptions : true}
+                                onlyActive={true}
                                 onChange={(val) => setData('category_id', val ? String(val) : '')}
                                 error={errors.category_id}
                                 placeholder="Cari atau pilih kategori produk..."

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\UserController;
@@ -30,12 +31,15 @@ Route::middleware('auth')->group(function () {
             Route::get('/', [ProductController::class, 'index'])->name('index'); // pos.products.index
             Route::get('/create', [ProductController::class, 'create'])->name('create'); // pos.products.create
             Route::post('/create', [ProductController::class, 'store'])->name('store'); // pos.products.store
-            Route::get('/categories', [ProductController::class, 'categories'])->name('categories'); // pos.products.categories
             Route::get('/{product}', [ProductController::class, 'show'])->name('show'); // pos.products.show
             Route::get('/{product}/edit', [ProductController::class, 'edit'])->name('edit'); // pos.products.edit
             Route::match(['post', 'patch'], '/{product}', [ProductController::class, 'update'])->name('update'); // pos.products.update
             Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy'); // pos.products.destroy
         });
+
+        // Categories
+        Route::get('/categories/search', [CategoryController::class, 'search'])->name('categories.search');
+        Route::resource('categories', CategoryController::class)->only(['index', 'store', 'update', 'destroy']);
 
         // Manajemen Users
         Route::prefix('/users')->name('users.')->group(function () {

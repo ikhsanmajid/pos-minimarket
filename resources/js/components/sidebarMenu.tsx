@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { usePage } from "@inertiajs/react"
 import users from "@/routes/pos/users"
 import products from "@/routes/pos/products"
+import categories from "@/routes/pos/categories"
 import dashboard from "@/routes/pos/dashboard"
 
 interface NavSubItem {
@@ -69,12 +70,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             title: "Produk & Stok",
             url: "#",
             icon: <Package />,
-            isActive: url.startsWith('/pos/products'),
+            isActive: url.startsWith('/pos/products') || url.startsWith('/pos/categories'),
             roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
             items: [
                 {
                     title: "Daftar Produk",
                     url: products.index.url(),
+                    roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
+                },
+                {
+                    title: "Kategori",
+                    url: categories.index.url(),
                     roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
                 },
                 {
