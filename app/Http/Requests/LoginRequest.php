@@ -34,10 +34,16 @@ class LoginRequest extends FormRequest
 
     public function authenticate(): void
     {
-        $user = User::where('email', $this->only('email'))->first(['email']);
+        $user = User::where('email', $this->input('email'))->first();
         if (! $user) {
             throw ValidationException::withMessages([
                 'email' => __('Email tidak terdaftar'),
+            ]);
+        }
+
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => __('Akun Anda telah dinonaktifkan. Silakan hubungi administrator.'),
             ]);
         }
 

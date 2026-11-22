@@ -94,8 +94,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             title: "Manajemen User",
             url: "#",
             icon: <Users />,
-            isActive: url.startsWith('/pos/users'),
-            roles: ['admin'],
+            isActive: url.startsWith('/pos/users') || url.startsWith('/pos/activity-logs'),
+            roles: ['admin', 'supervisor'],
             items: [
                 {
                     title: "Karyawan",
@@ -104,8 +104,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 },
                 {
                     title: "Log Aktifitas",
-                    url: "#",
-                    roles: ['admin'],
+                    url: "/pos/activity-logs",
+                    roles: ['admin', 'supervisor'],
                 },
                 {
                     title: "Sesi Shift",

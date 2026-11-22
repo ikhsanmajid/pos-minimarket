@@ -27,9 +27,11 @@ export interface PaginationMeta {
 
 interface DataTablePaginationProps {
     meta: PaginationMeta
-    routeUrl: (options?: RouteQueryOptions) => RouteDefinition<'get'>
+    routeUrl?: (options?: RouteQueryOptions) => RouteDefinition<'get'>
     pageSizeOptions?: number[]
     isLoading?: boolean
+    only?: string[]
+    onNavigate?: (params: Record<string, string | number | undefined>) => void
 }
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
@@ -39,16 +41,26 @@ export default function DataTablePagination({
     routeUrl,
     pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
     isLoading = false,
+    only,
+    onNavigate,
 }: DataTablePaginationProps) {
     const { current_page, last_page, per_page, total, from, to } = meta
 
     // Navigasi menggunakan mergeQuery agar filter (search, status) tidak hilang
     const navigateTo = (params: Record<string, string | number | undefined>) => {
+        if (onNavigate) {
+            onNavigate(params)
+            return
+        }
+
+        if (!routeUrl) return
+
         router.visit(
             routeUrl({
                 mergeQuery: params,
             }),
             {
+                only: only,
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
