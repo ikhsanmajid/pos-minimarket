@@ -6,12 +6,13 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Activitylog\Models\Activity;
 
 class ProductController extends Controller
 {
@@ -138,7 +139,7 @@ class ProductController extends Controller
             ->with('success', 'Produk berhasil ditambahkan.');
     }
 
-    public function show(Product $product): Response
+    public function show(Request $request, Product $product): Response
     {
         Gate::authorize('view', $product);
 
@@ -160,6 +161,55 @@ class ProductController extends Controller
                 'created_at' => $product->created_at?->format('d M Y H:i'),
                 'updated_at' => $product->updated_at?->format('d M Y H:i'),
             ],
+            'activities' => Inertia::optional(function () use ($request, $product) {
+                $perPage = $request->integer('per_page', 10);
+
+                $paginated = Activity::forSubject($product)
+                    ->with('causer')
+                    ->latest('id')
+                    ->paginate($perPage)
+                    ->withQueryString();
+
+                $categoryIds = collect($paginated->items())
+                    ->flatMap(function (Activity $act) {
+                        $changes = $act->attribute_changes?->toArray() ?? [];
+                        $props = $act->properties?->toArray() ?? [];
+                        $old = $changes['old'] ?? $props['old'] ?? [];
+                        $new = $changes['attributes'] ?? $props['attributes'] ?? [];
+
+                        return array_filter([$old['category_id'] ?? null, $new['category_id'] ?? null]);
+                    })
+                    ->unique()
+                    ->filter()
+                    ->values();
+
+                $categoryMap = Category::withTrashed()
+                    ->whereIn('id', $categoryIds)
+                    ->pluck('name', 'id')
+                    ->all();
+
+                return [
+                    'data' => collect($paginated->items())->map(fn (Activity $act) => [
+                        'id' => $act->id,
+                        'description' => $act->description,
+                        'event' => $act->event,
+                        'causer_name' => $act->causer instanceof User ? $act->causer->name : ($act->causer_id ? 'User #'.$act->causer_id : 'Sistem'),
+                        'causer_role' => $act->causer instanceof User ? ($act->causer->role?->label() ?? $act->causer->role?->value) : null,
+                        'attribute_changes' => $act->attribute_changes?->toArray() ?? [],
+                        'properties' => $act->properties?->toArray() ?? [],
+                        'category_map' => $categoryMap,
+                        'created_at' => $act->created_at?->format('d M Y H:i:s'),
+                        'created_at_human' => $act->created_at?->diffForHumans(),
+                    ])->all(),
+                    'category_map' => $categoryMap,
+                    'current_page' => $paginated->currentPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'per_page' => $paginated->perPage(),
+                    'total' => $paginated->total(),
+                    'from' => $paginated->firstItem(),
+                    'to' => $paginated->lastItem(),
+                ];
+            }),
         ]);
     }
 
@@ -192,9 +242,6 @@ class ProductController extends Controller
         unset($data['stock']); // Cegah override perhitungan stok dari form edit
 
         if ($request->hasFile('image')) {
-            if ($product->image) {
-                Storage::disk('public')->delete($product->image);
-            }
             $data['image'] = $request->file('image')->store('products', 'public');
         } else {
             unset($data['image']);
@@ -209,10 +256,6 @@ class ProductController extends Controller
     public function destroy(Product $product): RedirectResponse
     {
         Gate::authorize('delete', $product);
-
-        if ($product->image) {
-            Storage::disk('public')->delete($product->image);
-        }
 
         $product->delete();
 

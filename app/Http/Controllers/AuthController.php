@@ -18,7 +18,7 @@ class AuthController extends Controller
     public function index(): Response
     {
         //
-        
+
         return Inertia::render('Auth/Login');
     }
 
@@ -33,10 +33,21 @@ class AuthController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
-        //
-
         $request->authenticate();
         $request->session()->regenerate();
+
+        /** @var User|null $user */
+        $user = Auth::user();
+        if ($user) {
+            $user->updateQuietly([
+                'last_login_at' => now(),
+            ]);
+
+            activity('auth')
+                ->causedBy($user)
+                ->performedOn($user)
+                ->log('User berhasil login');
+        }
 
         return redirect()->intended(route('pos.dashboard.index'));
     }
@@ -62,7 +73,15 @@ class AuthController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
-        //
+        /** @var User|null $user */
+        $user = Auth::user();
+        if ($user) {
+            activity('auth')
+                ->causedBy($user)
+                ->performedOn($user)
+                ->log('User logout');
+        }
+
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

@@ -1,0 +1,16 @@
+ M app/Http/Controllers/AuthController.php
+ M app/Http/Controllers/ProductController.php
+ M app/Http/Controllers/UserController.php
+ M app/Http/Requests/LoginRequest.php
+ M app/Http/Requests/StoreUserRequest.php
+ M app/Http/Requests/UpdateUserRequest.php
+ M app/Models/Category.php
+ M app/Models/Product.php
+ M app/Models/User.php
+ M routes/web.php
+?? app/Http/Controllers/ActivityLogController.php
+?? app/Http/Controllers/ProfileController.php
+?? app/Http/Requests/UpdateProfileRequest.php
+?? config/activitylog.php
+?? database/migrations/2026_11_22_144943_create_activity_log_table.php
+?? database/migrations/2026_11_22_144953_add_pos_details_to_users_table.php

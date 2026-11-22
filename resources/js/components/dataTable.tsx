@@ -3,6 +3,7 @@ import {
     tableFeatures,
     useTable,
     type ColumnDef,
+    type RowData,
 } from '@tanstack/react-table'
 import {
     Table,
@@ -17,9 +18,9 @@ import { Loader2 } from 'lucide-react'
 
 const baseFeatures = tableFeatures({ columnSizingFeature })
 
-export type DataTableColumn<TData> = ColumnDef<typeof baseFeatures, TData>
+export type DataTableColumn<TData extends RowData = any> = ColumnDef<typeof baseFeatures, TData>
 
-interface DataTableProps<TData> {
+interface DataTableProps<TData extends RowData = any> {
     columns: DataTableColumn<TData>[]
     data: TData[]
     tableKey?: string
@@ -27,7 +28,7 @@ interface DataTableProps<TData> {
     isLoading?: boolean
 }
 
-export function DataTable<TData>({
+export function DataTable<TData extends RowData = any>({
     columns,
     data,
     tableKey = 'data-table',

@@ -17,7 +17,7 @@ class BarcodeExists implements ValidationRule
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         //
-        $exists = Product::where('barcode', $value)->first();
+        $exists = Product::withTrashed()->where('barcode', $value)->first();
 
         if ($exists) {
             $fail('Barcode sudah terdaftar');
