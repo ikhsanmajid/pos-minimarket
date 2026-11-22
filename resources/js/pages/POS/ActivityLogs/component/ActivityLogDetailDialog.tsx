@@ -9,7 +9,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { History, ImageIcon, ExternalLink } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { History, ImageIcon, ExternalLink, Package, ArrowRight, ShoppingBag, CheckCircle2, Ban, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ActivityRow } from '../Index'
 
@@ -29,6 +30,15 @@ const fieldLabels: Record<string, string> = {
     code: 'Kode Kategori',
     slug: 'Slug',
     description: 'Deskripsi',
+}
+
+const formatRupiah = (val: number | string | undefined | null) => {
+    const num = Number(val) || 0
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+    }).format(num)
 }
 
 const formatDiffValue = (key: string, val: any, categoryMap?: Record<string | number, string>) => {
@@ -158,7 +168,214 @@ export default function ActivityLogDetailDialog({
     const newData = changes.attributes || properties.attributes || {}
     const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]))
 
+    const renderGoodsReceived = (props: Record<string, any>) => {
+        const receivedItems = Array.isArray(props.received_items) ? props.received_items : []
+
+        return (
+            <div className="space-y-4">
+                {/* Header Ringkasan Penerimaan */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs p-3 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40">
+                    <div>
+                        <span className="text-muted-foreground block text-[11px]">No. PO:</span>
+                        <p className="font-mono font-bold text-foreground text-sm mt-0.5">{props.po_number || '-'}</p>
+                    </div>
+                    <div>
+                        <span className="text-muted-foreground block text-[11px]">Status Dokumen:</span>
+                        <Badge variant="outline" className="mt-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300">
+                            {props.status === 'received' ? 'Selesai / Diterima Penuh' : 'Diterima Sebagian'}
+                        </Badge>
+                    </div>
+                    <div>
+                        <span className="text-muted-foreground block text-[11px]">Waktu Penerimaan:</span>
+                        <p className="font-mono text-muted-foreground mt-0.5">{props.received_at || '-'}</p>
+                    </div>
+                    <div>
+                        <span className="text-muted-foreground block text-[11px]">Diterima Oleh:</span>
+                        <p className="font-medium text-foreground mt-0.5">{props.received_by || '-'}</p>
+                    </div>
+                </div>
+
+                {/* Tabel Rincian Barang yang Diterima */}
+                {receivedItems.length > 0 && (
+                    <div className="space-y-2">
+                        <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                            <Package className="h-3.5 w-3.5 text-primary" />
+                            Rincian Barang Diterima & Penyesuaian Harga Beli (Weighted Average):
+                        </span>
+                        <div className="overflow-x-auto rounded-md border">
+                            <table className="w-full text-xs text-left">
+                                <thead className="bg-muted text-muted-foreground font-semibold border-b">
+                                    <tr>
+                                        <th className="p-2.5 min-w-[160px]">Produk & Barcode</th>
+                                        <th className="p-2.5 text-center min-w-[110px]">Diterima Kali Ini</th>
+                                        <th className="p-2.5 text-center min-w-[120px]">Akumulasi / Total</th>
+                                        <th className="p-2.5 min-w-[120px]">Perubahan Stok</th>
+                                        <th className="p-2.5 min-w-[200px]">Harga Beli Lama ➔ Weighted Baru</th>
+                                        <th className="p-2.5 min-w-[100px]">Expired Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y font-mono">
+                                    {receivedItems.map((item: any, idx: number) => (
+                                        <tr key={idx} className="hover:bg-muted/40">
+                                            <td className="p-2.5 font-sans">
+                                                <div className="font-medium text-foreground">{item.product_name || '-'}</div>
+                                                <div className="text-[11px] text-muted-foreground font-mono">{item.barcode || '-'}</div>
+                                            </td>
+                                            <td className="p-2.5 text-center">
+                                                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 font-bold text-[11px]">
+                                                    +{item.quantity_received_now} unit
+                                                </Badge>
+                                            </td>
+                                            <td className="p-2.5 text-center text-xs text-muted-foreground">
+                                                <strong className="text-foreground">{item.total_quantity_received}</strong> / {item.quantity_ordered} unit
+                                            </td>
+                                            <td className="p-2.5 text-xs text-muted-foreground">
+                                                <span>{item.old_stock}</span>
+                                                <span className="mx-1 text-primary">➔</span>
+                                                <strong className="text-foreground">{item.new_stock}</strong>
+                                            </td>
+                                            <td className="p-2.5 text-xs">
+                                                <span className="line-through text-muted-foreground mr-1">
+                                                    {formatRupiah(item.old_buy_price)}
+                                                </span>
+                                                <span className="mx-1 text-primary">➔</span>
+                                                <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                                    {formatRupiah(item.new_weighted_buy_price)}
+                                                </strong>
+                                            </td>
+                                            <td className="p-2.5 text-[11px] text-muted-foreground">
+                                                {item.expired_date || '-'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    const renderPaymentStatusUpdated = (props: Record<string, any>) => (
+        <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+            <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-primary" />
+                <span className="font-semibold text-xs">Pembaruan Status Pembayaran PO</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">No. PO:</span>
+                    <span className="font-mono font-bold">{props.po_number || '-'}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">Perubahan Status:</span>
+                    <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline">{props.old_payment_status || '-'}</Badge>
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            {props.new_payment_status || '-'}
+                        </Badge>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+
+    const renderClosedRemaining = (props: Record<string, any>) => (
+        <div className="p-4 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40 space-y-3 text-xs">
+            <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-amber-600" />
+                <span className="font-semibold text-foreground">Sisa Pesanan PO Ditutup (Selesai Lebih Awal)</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">No. PO:</span>
+                    <span className="font-mono font-bold">{props.po_number || '-'}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">Penyesuaian Total Tagihan:</span>
+                    <span className="font-mono font-bold text-primary">{formatRupiah(props.adjusted_total_amount)}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">Perubahan Status:</span>
+                    <span>{props.previous_status} ➔ <strong>{props.new_status}</strong></span>
+                </div>
+            </div>
+            {props.reason && (
+                <div className="pt-2 border-t border-amber-200/60 dark:border-amber-800/40">
+                    <span className="text-muted-foreground block text-[11px]">Alasan Penutupan:</span>
+                    <p className="mt-0.5 text-foreground italic">{props.reason}</p>
+                </div>
+            )}
+        </div>
+    )
+
+    const renderCancelled = (props: Record<string, any>) => (
+        <div className="p-4 rounded-lg border bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40 space-y-3 text-xs">
+            <div className="flex items-center gap-2">
+                <Ban className="h-4 w-4 text-destructive" />
+                <span className="font-semibold text-foreground">Purchase Order Dibatalkan</span>
+            </div>
+            <div>
+                <span className="text-muted-foreground block text-[11px]">No. PO:</span>
+                <span className="font-mono font-bold">{props.po_number || '-'}</span>
+            </div>
+            {props.reason && (
+                <div className="pt-2 border-t border-rose-200/60 dark:border-rose-800/40">
+                    <span className="text-muted-foreground block text-[11px]">Alasan Pembatalan:</span>
+                    <p className="mt-0.5 text-foreground italic">{props.reason}</p>
+                </div>
+            )}
+        </div>
+    )
+
+    const renderPOCreated = (props: Record<string, any>) => (
+        <div className="p-4 rounded-lg border bg-muted/30 space-y-3 text-xs">
+            <div className="flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4 text-primary" />
+                <span className="font-semibold text-foreground">Pembuatan Purchase Order Baru</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">No. PO:</span>
+                    <span className="font-mono font-bold">{props.po_number || '-'}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">Status Awal:</span>
+                    <Badge variant="outline" className="mt-0.5">{props.status || 'draft'}</Badge>
+                </div>
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">Total Nilai PO:</span>
+                    <span className="font-mono font-bold text-primary">{formatRupiah(props.total_amount)}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground block text-[11px]">Jumlah Item:</span>
+                    <span className="font-mono">{props.items_count ?? '-'} item</span>
+                </div>
+            </div>
+        </div>
+    )
+
     const renderPropertiesDiff = () => {
+        // 1. Cek event khusus Purchase Order
+        if (properties.event === 'goods_received' || Array.isArray(properties.received_items)) {
+            return renderGoodsReceived(properties)
+        }
+        if (properties.event === 'payment_status_updated') {
+            return renderPaymentStatusUpdated(properties)
+        }
+        if (properties.event === 'closed_remaining') {
+            return renderClosedRemaining(properties)
+        }
+        if (properties.event === 'cancelled') {
+            return renderCancelled(properties)
+        }
+        if (properties.event === 'created' && properties.po_number) {
+            return renderPOCreated(properties)
+        }
+
+        // 2. Render perubahan atribut Model (Old vs New)
         if (allKeys.length > 0) {
             return (
                 <div className="overflow-x-auto rounded-md border">
@@ -216,11 +433,35 @@ export default function ActivityLogDetailDialog({
             )
         }
 
+        // 3. Fallback jika ada properties lain
         const remainingProps: Record<string, any> = { ...properties }
         delete remainingProps.old
         delete remainingProps.attributes
 
-        if (Object.keys(remainingProps).length > 0) {
+        const remainingKeys = Object.keys(remainingProps)
+        if (remainingKeys.length > 0) {
+            // Jika semua bernilai primitif, render grid rapi
+            const isAllPrimitive = remainingKeys.every(
+                (k) => typeof remainingProps[k] !== 'object' || remainingProps[k] === null
+            )
+
+            if (isAllPrimitive) {
+                return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/30 text-xs">
+                        {remainingKeys.map((k) => (
+                            <div key={k}>
+                                <span className="text-muted-foreground block text-[11px]">
+                                    {fieldLabels[k] || k}:
+                                </span>
+                                <span className="font-mono font-medium text-foreground">
+                                    {String(remainingProps[k] ?? '-')}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )
+            }
+
             return (
                 <pre className="rounded-md bg-muted p-3 text-xs font-mono overflow-x-auto max-h-60">
                     {JSON.stringify(remainingProps, null, 2)}
@@ -235,37 +476,44 @@ export default function ActivityLogDetailDialog({
         )
     }
 
+    const isCustomEvent = Boolean(properties.event || properties.received_items)
+    const sectionTitle = isCustomEvent
+        ? 'Detail Rincian Aktivitas / Transaksi:'
+        : allKeys.length > 0
+        ? 'Perubahan Atribut (Old vs New):'
+        : 'Data / Properti Tambahan:'
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[88vh] overflow-y-auto">
-                <DialogHeader>
+            <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+                <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                         <History className="h-5 w-5 text-primary" />
                         Detail Log Aktivitas #{activity.id}
                     </DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="text-xs">
                         Informasi detail dan riwayat perubahan data pada sistem.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 pt-2">
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs p-3.5 rounded-lg bg-muted/50 border">
                         <div>
-                            <span className="text-muted-foreground">Waktu:</span>
+                            <span className="text-muted-foreground block text-[11px]">Waktu:</span>
                             <p className="font-medium font-mono mt-0.5">{activity.created_at}</p>
                         </div>
                         <div>
-                            <span className="text-muted-foreground">Pengguna:</span>
+                            <span className="text-muted-foreground block text-[11px]">Pengguna:</span>
                             <p className="font-medium mt-0.5">
                                 {activity.causer_name} ({activity.causer_role ?? 'Sistem'})
                             </p>
                         </div>
                         <div>
-                            <span className="text-muted-foreground">Kategori Log:</span>
+                            <span className="text-muted-foreground block text-[11px]">Kategori Log:</span>
                             <p className="font-medium mt-0.5">{activity.log_name_label ?? activity.log_name}</p>
                         </div>
                         <div>
-                            <span className="text-muted-foreground">Objek / Modul:</span>
+                            <span className="text-muted-foreground block text-[11px]">Objek / Modul:</span>
                             <p className="font-medium font-mono mt-0.5">
                                 {activity.subject_type ?? '-'} {activity.subject_id ? `#${activity.subject_id}` : ''}
                             </p>
@@ -280,13 +528,13 @@ export default function ActivityLogDetailDialog({
                     </div>
 
                     <div>
-                        <h4 className="text-xs font-semibold mb-2">Perubahan Atribut (Old vs New):</h4>
+                        <h4 className="text-xs font-semibold mb-2">{sectionTitle}</h4>
                         {renderPropertiesDiff()}
                     </div>
                 </div>
 
-                <DialogFooter>
-                    <DialogClose render={<Button variant="outline">Tutup</Button>} />
+                <DialogFooter className="px-6 py-3 border-t bg-muted/20 shrink-0">
+                    <DialogClose render={<Button variant="outline" size="sm">Tutup</Button>} />
                 </DialogFooter>
             </DialogContent>
         </Dialog>

@@ -11,7 +11,7 @@ import { index, store, show, destroy } from '@/actions/App/Http/Controllers/User
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import { DialogAddUser } from './component/DialogAddUser'
 import { UserActionsCell } from './component/UserActionsCell'
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,97 +51,6 @@ export const roleBadgeClass: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// SortHeader Component
-// ---------------------------------------------------------------------------
-
-function SortHeader({
-    label,
-    field,
-    tableSort,
-    tableDirection,
-    toolbarSort,
-    toolbarDirection,
-    onSort,
-}: {
-    label: string
-    field: string
-    tableSort?: string
-    tableDirection?: string
-    toolbarSort?: string
-    toolbarDirection?: string
-    onSort: (field: string) => void
-}) {
-    const isPrimary = tableSort === field
-    const isToolbarSorted = toolbarSort === field
-    const hasBoth = Boolean(tableSort && toolbarSort && tableSort !== toolbarSort)
-
-    let tooltip = `Urutkan ${label} (A-Z / Terendah)`
-    if (isToolbarSorted) {
-        tooltip = `Kolom ${label} sedang diurutkan via toolbar (${toolbarDirection === 'asc' ? 'A-Z / Terendah' : 'Z-A / Tertinggi'}). Tidak dapat diurutkan di header tabel.`
-    } else if (isPrimary) {
-        if (tableDirection === 'asc') {
-            tooltip = `Urutkan ${label} (Z-A / Tertinggi)`
-        } else if (tableDirection === 'desc') {
-            tooltip = `Batal urutkan (Default / Unsorted)`
-        }
-    }
-
-    if (isToolbarSorted) {
-        return (
-            <div
-                title={tooltip}
-                className="flex items-center gap-1.5 font-medium text-muted-foreground/80 cursor-not-allowed select-none"
-            >
-                <span>{label}</span>
-                <div className="flex items-center gap-1">
-                    {toolbarDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    )}
-                    <span
-                        className="flex h-3.5 items-center justify-center rounded bg-muted px-1 text-[9px] font-medium text-muted-foreground leading-none"
-                        title="Diurutkan via Toolbar (Nonaktif di Header)"
-                    >
-                        Toolbar
-                    </span>
-                </div>
-            </div>
-        )
-    }
-
-    return (
-        <button
-            type="button"
-            onClick={() => onSort(field)}
-            title={tooltip}
-            className="flex items-center gap-1.5 font-medium hover:text-foreground text-left cursor-pointer select-none group"
-        >
-            <span>{label}</span>
-            {isPrimary ? (
-                <div className="flex items-center gap-1">
-                    {tableDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
-                    )}
-                    {hasBoth && (
-                        <span
-                            className="flex h-3.5 min-w-3.5 px-0.5 items-center justify-center rounded bg-primary/10 text-[9px] font-bold text-primary leading-none"
-                            title="Urutan Utama (Ke-1)"
-                        >
-                            1
-                        </span>
-                    )}
-                </div>
-            ) : (
-                <ArrowUpDown className="h-3.5 w-3.5 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-            )}
-        </button>
-    )
-}
-
-// ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
 
@@ -158,12 +67,12 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
         id: 'no',
         header: 'No',
         cell: (info) => (from ?? 1) + info.row.index,
-        size: 8,
+        size: 50,
     },
     {
         accessorKey: 'name',
         header: () => (
-            <SortHeader
+            <DataTableSortHeader
                 label="Pengguna"
                 field="name"
                 tableSort={filters.table_sort}
@@ -186,7 +95,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
     {
         accessorKey: 'phone',
         header: () => (
-            <SortHeader
+            <DataTableSortHeader
                 label="No. HP"
                 field="phone"
                 tableSort={filters.table_sort}
@@ -209,7 +118,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
     {
         accessorKey: 'role_name',
         header: () => (
-            <SortHeader
+            <DataTableSortHeader
                 label="Role"
                 field="role"
                 tableSort={filters.table_sort}
@@ -251,7 +160,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
     {
         accessorKey: 'is_active',
         header: () => (
-            <SortHeader
+            <DataTableSortHeader
                 label="Status"
                 field="is_active"
                 tableSort={filters.table_sort}
@@ -274,7 +183,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
     {
         accessorKey: 'last_login_at',
         header: () => (
-            <SortHeader
+            <DataTableSortHeader
                 label="Login Terakhir"
                 field="last_login_at"
                 tableSort={filters.table_sort}
@@ -296,18 +205,20 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
     },
     {
         id: 'actions',
-        header: '',
-        size: 12,
+        header: () => <span className="text-right block w-full pr-2">Aksi</span>,
+        size: 70,
         cell: (info) => {
             const row = info.row.original
             return (
-                <UserActionsCell
-                    user={row}
-                    roles={roles}
-                    currentUserId={currentUserId}
-                    detailUrl={show.url(row.id)}
-                    destroyUrl={destroy.url(row.id)}
-                />
+                <div className="flex justify-end pr-2">
+                    <UserActionsCell
+                        user={row}
+                        roles={roles}
+                        currentUserId={currentUserId}
+                        detailUrl={show.url(row.id)}
+                        destroyUrl={destroy.url(row.id)}
+                    />
+                </div>
             )
         },
     },

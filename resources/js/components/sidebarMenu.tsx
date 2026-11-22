@@ -8,7 +8,7 @@ import {
     SidebarContent,
     SidebarFooter,
 } from "@/components/ui/sidebar"
-import { Users, House, Package, ShoppingCart, BarChart3 } from "lucide-react"
+import { Users, House, Package, ShoppingCart, BarChart3, Truck } from "lucide-react"
 import ThemeToggle from "./themetoggle"
 import { useAuth } from "@/hooks/use-auth"
 import { usePage } from "@inertiajs/react"
@@ -87,6 +87,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     title: "Tambah Produk",
                     url: products.create.url(),
                     roles: ['admin', 'warehouse'],
+                },
+            ],
+        },
+        {
+            title: "Pengadaan / PO",
+            url: "#",
+            icon: <Truck />,
+            isActive: url.startsWith('/pos/purchase-orders') || url.startsWith('/pos/suppliers'),
+            roles: ['admin', 'warehouse', 'supervisor'],
+            items: [
+                {
+                    title: "Purchase Orders",
+                    url: "/pos/purchase-orders",
+                    roles: ['admin', 'warehouse', 'supervisor'],
+                },
+                {
+                    title: "Suppliers",
+                    url: "/pos/suppliers",
+                    roles: ['admin', 'warehouse', 'supervisor'],
                 },
             ],
         },

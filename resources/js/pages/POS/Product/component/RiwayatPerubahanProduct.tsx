@@ -455,37 +455,37 @@ export function RiwayatPerubahanProduct({
 
             {/* Modal Detail Perubahan */}
             <Dialog open={!!selectedActivity} onOpenChange={(open) => !open && setSelectedActivity(null)}>
-                <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[88vh] overflow-y-auto">
-                    <DialogHeader>
+                <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+                    <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
                         <DialogTitle className="flex items-center gap-2 text-base">
                             <History className="h-4 w-4 text-primary" />
                             Detail Perubahan Data #{selectedActivity?.id}
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="text-xs">
                             Rincian perbandingan data sebelum dan sesudah perubahan.
                         </DialogDescription>
                     </DialogHeader>
 
                     {selectedActivity && (
-                        <div className="space-y-4 pt-1">
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs p-3.5 rounded-lg bg-muted/50 border">
                                 <div>
-                                    <span className="text-muted-foreground">Waktu:</span>
+                                    <span className="text-muted-foreground block text-[11px]">Waktu:</span>
                                     <p className="font-medium font-mono mt-0.5">{selectedActivity.created_at}</p>
                                 </div>
                                 <div>
-                                    <span className="text-muted-foreground">Pengguna:</span>
+                                    <span className="text-muted-foreground block text-[11px]">Pengguna:</span>
                                     <p className="font-medium mt-0.5">
                                         {selectedActivity.causer_name}
                                         {selectedActivity.causer_role && ` (${selectedActivity.causer_role})`}
                                     </p>
                                 </div>
                                 <div>
-                                    <span className="text-muted-foreground">Tipe Event:</span>
+                                    <span className="text-muted-foreground block text-[11px]">Tipe Event:</span>
                                     <p className="font-medium capitalize mt-0.5">{selectedActivity.event ?? '-'}</p>
                                 </div>
                                 <div>
-                                    <span className="text-muted-foreground">Deskripsi:</span>
+                                    <span className="text-muted-foreground block text-[11px]">Deskripsi:</span>
                                     <p className="font-medium mt-0.5">{selectedActivity.description}</p>
                                 </div>
                             </div>
@@ -497,8 +497,8 @@ export function RiwayatPerubahanProduct({
                         </div>
                     )}
 
-                    <DialogFooter>
-                        <DialogClose render={<Button variant="outline">Tutup</Button>} />
+                    <DialogFooter className="px-6 py-3 border-t bg-muted/20 shrink-0">
+                        <DialogClose render={<Button variant="outline" size="sm">Tutup</Button>} />
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

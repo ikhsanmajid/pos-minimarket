@@ -11,6 +11,7 @@ import { toast } from 'react-toastify'
 import ProductController from '@/actions/App/Http/Controllers/ProductController'
 import ProductTableToolbar, { type ProductFilters } from './component/ProductSearch'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
+import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 import { ProductActionsCell } from './component/ProductActionsCell'
 import { DialogAddProduct } from './component/DialogAddProduct'
 
@@ -38,95 +39,6 @@ interface PaginatedProducts extends PaginationMeta {
     data: Product[]
 }
 
-interface SortHeaderProps {
-    label: string
-    field: string
-    tableSort?: string
-    tableDirection?: string
-    toolbarSort?: string
-    toolbarDirection?: string
-    onSort: (field: string) => void
-}
-
-function SortHeader({
-    label,
-    field,
-    tableSort,
-    tableDirection,
-    toolbarSort,
-    toolbarDirection,
-    onSort,
-}: SortHeaderProps) {
-    const isPrimary = tableSort === field
-    const isToolbarSorted = toolbarSort === field
-    const hasBoth = Boolean(tableSort && toolbarSort && tableSort !== toolbarSort)
-
-    let tooltip = `Urutkan ${label} (A-Z / Terendah)`
-    if (isToolbarSorted) {
-        tooltip = `Kolom ${label} sedang diurutkan via toolbar (${toolbarDirection === 'asc' ? 'A-Z / Terendah' : 'Z-A / Tertinggi'}). Tidak dapat diurutkan di header tabel.`
-    } else if (isPrimary) {
-        if (tableDirection === 'asc') {
-            tooltip = `Urutkan ${label} (Z-A / Tertinggi)`
-        } else if (tableDirection === 'desc') {
-            tooltip = `Batal urutkan (Default / Unsorted)`
-        }
-    }
-
-    if (isToolbarSorted) {
-        return (
-            <div
-                title={tooltip}
-                className="flex items-center gap-1.5 font-medium text-muted-foreground/80 cursor-not-allowed select-none"
-            >
-                <span>{label}</span>
-                <div className="flex items-center gap-1">
-                    {toolbarDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    )}
-                    <span
-                        className="flex h-3.5 items-center justify-center rounded bg-muted px-1 text-[9px] font-medium text-muted-foreground leading-none"
-                        title="Diurutkan via Toolbar (Nonaktif di Header)"
-                    >
-                        Toolbar
-                    </span>
-                </div>
-            </div>
-        )
-    }
-
-    return (
-        <button
-            type="button"
-            onClick={() => onSort(field)}
-            title={tooltip}
-            className="flex items-center gap-1.5 font-medium hover:text-foreground text-left cursor-pointer select-none group"
-        >
-            <span>{label}</span>
-            {isPrimary ? (
-                <div className="flex items-center gap-1">
-                    {tableDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
-                    )}
-                    {hasBoth && (
-                        <span
-                            className="flex h-3.5 min-w-3.5 px-0.5 items-center justify-center rounded bg-primary/10 text-[9px] font-bold text-primary leading-none"
-                            title="Urutan Utama (Ke-1)"
-                        >
-                            1
-                        </span>
-                    )}
-                </div>
-            ) : (
-                <ArrowUpDown className="h-3.5 w-3.5 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-            )}
-        </button>
-    )
-}
-
 interface GetColumnsOptions {
     from: number | null
     categories: Category[]
@@ -148,12 +60,12 @@ const getColumns = ({
             id: 'no',
             header: 'No',
             cell: (info) => (from ?? 1) + info.row.index,
-            size: 10,
+            size: 50,
         },
         {
             accessorKey: 'name',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Produk"
                     field="name"
                     tableSort={filters.table_sort}
@@ -202,7 +114,7 @@ const getColumns = ({
         {
             accessorKey: 'buy_price',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Harga Beli"
                     field="buy_price"
                     tableSort={filters.table_sort}
@@ -212,7 +124,7 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
-            size: 30,
+            size: 130,
             cell: (info) =>
                 new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -223,7 +135,7 @@ const getColumns = ({
         {
             accessorKey: 'sell_price',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Harga Jual"
                     field="sell_price"
                     tableSort={filters.table_sort}
@@ -233,7 +145,7 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
-            size: 30,
+            size: 130,
             cell: (info) => (
                 <span className="font-medium text-primary">
                     {new Intl.NumberFormat('id-ID', {
@@ -247,7 +159,7 @@ const getColumns = ({
         {
             accessorKey: 'stock',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Stok"
                     field="stock"
                     tableSort={filters.table_sort}
@@ -257,7 +169,7 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
-            size: 20,
+            size: 130,
             cell: (info) => {
                 const row = info.row.original
                 if (row.stock === 0) {
@@ -307,7 +219,7 @@ const getColumns = ({
         {
             accessorKey: 'active',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Status"
                     field="active"
                     tableSort={filters.table_sort}

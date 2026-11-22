@@ -6,12 +6,12 @@ import { Badge } from '@/components/ui/badge'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import CategoryTableToolbar, { type CategoryFilters } from './component/CategorySearch'
 import { DialogAddCategory } from './component/DialogAddCategory'
 import { CategoryActionsCell } from './component/CategoryActionsCell'
 import CategoryController from '@/actions/App/Http/Controllers/CategoryController'
+import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 
 export type CategoryRow = {
     id: number
@@ -33,95 +33,6 @@ type CategoryPageProps = PageProps<{
     filters: CategoryFilters
 }>
 
-interface SortHeaderProps {
-    label: string
-    field: string
-    tableSort?: string
-    tableDirection?: string
-    toolbarSort?: string
-    toolbarDirection?: string
-    onSort: (field: string) => void
-}
-
-function SortHeader({
-    label,
-    field,
-    tableSort,
-    tableDirection,
-    toolbarSort,
-    toolbarDirection,
-    onSort,
-}: SortHeaderProps) {
-    const isPrimary = tableSort === field
-    const isToolbarSorted = toolbarSort === field
-    const hasBoth = Boolean(tableSort && toolbarSort && tableSort !== toolbarSort)
-
-    let tooltip = `Urutkan ${label} (A-Z / Terendah)`
-    if (isToolbarSorted) {
-        tooltip = `Kolom ${label} sedang diurutkan via toolbar (${toolbarDirection === 'asc' ? 'A-Z / Terendah' : 'Z-A / Tertinggi'}). Tidak dapat diurutkan di header tabel.`
-    } else if (isPrimary) {
-        if (tableDirection === 'asc') {
-            tooltip = `Urutkan ${label} (Z-A / Tertinggi)`
-        } else if (tableDirection === 'desc') {
-            tooltip = `Batal urutkan (Default / Unsorted)`
-        }
-    }
-
-    if (isToolbarSorted) {
-        return (
-            <div
-                title={tooltip}
-                className="flex items-center gap-1.5 font-medium text-muted-foreground/80 cursor-not-allowed select-none"
-            >
-                <span>{label}</span>
-                <div className="flex items-center gap-1">
-                    {toolbarDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    )}
-                    <span
-                        className="flex h-3.5 items-center justify-center rounded bg-muted px-1 text-[9px] font-medium text-muted-foreground leading-none"
-                        title="Diurutkan via Toolbar (Nonaktif di Header)"
-                    >
-                        Toolbar
-                    </span>
-                </div>
-            </div>
-        )
-    }
-
-    return (
-        <button
-            type="button"
-            onClick={() => onSort(field)}
-            title={tooltip}
-            className="flex items-center gap-1.5 font-medium hover:text-foreground text-left cursor-pointer select-none group"
-        >
-            <span>{label}</span>
-            {isPrimary ? (
-                <div className="flex items-center gap-1">
-                    {tableDirection === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
-                    ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
-                    )}
-                    {hasBoth && (
-                        <span
-                            className="flex h-3.5 min-w-3.5 px-0.5 items-center justify-center rounded bg-primary/10 text-[9px] font-bold text-primary leading-none"
-                            title="Urutan Utama (Ke-1)"
-                        >
-                            1
-                        </span>
-                    )}
-                </div>
-            ) : (
-                <ArrowUpDown className="h-3.5 w-3.5 opacity-30 group-hover:opacity-100 transition-opacity shrink-0" />
-            )}
-        </button>
-    )
-}
-
 interface GetColumnsOptions {
     from: number | null
     canEdit: boolean
@@ -141,12 +52,12 @@ const getColumns = ({
             id: 'no',
             header: 'No',
             cell: (info) => (from ?? 1) + info.row.index,
-            size: 8,
+            size: 50,
         },
         {
             accessorKey: 'code',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Kode"
                     field="code"
                     tableSort={filters.table_sort}
@@ -169,7 +80,7 @@ const getColumns = ({
         {
             accessorKey: 'name',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Nama Kategori"
                     field="name"
                     tableSort={filters.table_sort}
@@ -196,7 +107,7 @@ const getColumns = ({
         {
             accessorKey: 'products_count',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Jumlah Produk"
                     field="products_count"
                     tableSort={filters.table_sort}
@@ -219,7 +130,7 @@ const getColumns = ({
         {
             accessorKey: 'is_active',
             header: () => (
-                <SortHeader
+                <DataTableSortHeader
                     label="Status"
                     field="is_active"
                     tableSort={filters.table_sort}
@@ -241,16 +152,18 @@ const getColumns = ({
         },
         {
             id: 'actions',
-            header: '',
-            size: 10,
+            header: () => <span className="text-right block w-full pr-2">Aksi</span>,
+            size: 70,
             cell: (info) => {
                 const row = info.row.original
                 return (
-                    <CategoryActionsCell
-                        category={row}
-                        canEdit={canEdit}
-                        canDelete={canDelete}
-                    />
+                    <div className="flex justify-end pr-2">
+                        <CategoryActionsCell
+                            category={row}
+                            canEdit={canEdit}
+                            canDelete={canDelete}
+                        />
+                    </div>
                 )
             },
         },

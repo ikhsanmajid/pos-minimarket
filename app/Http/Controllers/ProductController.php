@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -251,6 +252,43 @@ class ProductController extends Controller
 
         return redirect()->route('pos.products.index')
             ->with('success', 'Data produk berhasil diperbarui.');
+    }
+
+    public function search(Request $request): JsonResponse
+    {
+        Gate::authorize('viewAny', Product::class);
+
+        $search = trim((string) $request->input('search', $request->input('q', '')));
+        $onlyActive = $request->boolean('only_active', true);
+
+        $products = Product::query()
+            ->with('category:id,name')
+            ->when($onlyActive, function ($query) {
+                $query->where('active', true);
+            })
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'ilike', "%{$search}%")
+                        ->orWhere('barcode', 'ilike', "%{$search}%");
+                });
+            })
+            ->orderBy('name')
+            ->limit(25)
+            ->get(['id', 'name', 'barcode', 'buy_price', 'sell_price', 'stock', 'min_stock', 'category_id'])
+            ->map(fn (Product $p) => [
+                'value' => $p->id,
+                'label' => "{$p->name} ({$p->barcode}) - Stok: {$p->stock}",
+                'id' => $p->id,
+                'name' => $p->name,
+                'barcode' => $p->barcode,
+                'buy_price' => (float) $p->buy_price,
+                'sell_price' => (float) $p->sell_price,
+                'stock' => (int) $p->stock,
+                'min_stock' => (int) $p->min_stock,
+                'category_name' => $p->category?->name ?? '-',
+            ]);
+
+        return response()->json($products);
     }
 
     public function destroy(Product $product): RedirectResponse
