@@ -198,7 +198,7 @@ class ActivityLogController extends Controller
             ->sortBy('label')
             ->values();
 
-        return Inertia::render('POS/ActivityLogs/Index', [
+        return Inertia::render('POS/ActivityLogs/ActivityLog', [
             'activities' => $activities,
             'filters' => $filters,
             'logNames' => $logNames,

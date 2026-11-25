@@ -166,7 +166,25 @@ Untuk menghindari bug overflow atau isi dialog yang terpotong saat layar kecil a
 
 ---
 
-## 5. Ringkasan Checklist Setiap Membuat / Mengubah Modul Tabel
+## 5. Konvensi Penamaan File Halaman (`resources/js/pages/POS/`)
+
+- **Dilarang menggunakan `Index.tsx`** untuk file halaman utama modul.
+- **Gunakan nama file `PascalCase` sesuai nama modul/domain**, contoh:
+  - `POS/Product/Product.tsx`
+  - `POS/Categories/Category.tsx`
+  - `POS/Suppliers/Supplier.tsx`
+  - `POS/Users/Users.tsx`
+  - `POS/ActivityLogs/ActivityLog.tsx`
+  - `POS/Profile/Profile.tsx`
+- **Halaman detail** menggunakan pola `Detail<Modul>.tsx` (misalnya `DetailProduct.tsx`, `DetailSupplier.tsx`, `DetailUser.tsx`).
+- **Nama komponen `export default`** dan **path `Inertia::render()`** di controller harus selaras dengan nama file tersebut (misalnya `Inertia::render('POS/ActivityLogs/ActivityLog', [...])`).
+- **Komponen lokal modul** diletakkan di subfolder `component/` (misalnya `POS/ActivityLogs/component/ActivityLogSearch.tsx`).
+
+---
+
+## 6. Ringkasan Checklist Setiap Membuat / Mengubah Modul Tabel
+
+- [ ] Apakah nama file halaman utama menggunakan nama modul `PascalCase` (bukan `Index.tsx`) dan selaras dengan `Inertia::render()`?
 
 - [ ] Apakah komponen sorting menggunakan `DataTableSortHeader` dari `@/components/dataTableSortHeader`?
 - [ ] Apakah kolom `No` memiliki `size: 50` dan menghitung offset `from + index`?
