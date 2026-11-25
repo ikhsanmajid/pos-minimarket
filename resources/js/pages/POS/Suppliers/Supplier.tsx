@@ -62,7 +62,7 @@ function getColumns({
             id: 'no',
             header: 'No',
             cell: ({ row }) => (from ?? 1) + row.index,
-            size: 50,
+            size: 55,
         },
         {
             id: 'code',
@@ -89,7 +89,7 @@ function getColumns({
                     </Link>
                 )
             },
-            size: 110,
+            size: 115,
         },
         {
             id: 'name',
@@ -108,23 +108,23 @@ function getColumns({
             cell: ({ row }) => {
                 const sup = row.original
                 return (
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                         <Link
                             href={SupplierController.show.url(sup.id)}
-                            className="font-semibold text-sm text-foreground hover:text-primary transition-colors hover:underline block"
+                            className="font-semibold text-sm text-foreground hover:text-primary transition-colors hover:underline block truncate"
                         >
                             {sup.name}
                         </Link>
                         {sup.city && (
-                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground min-w-0">
                                 <MapPin className="h-3 w-3 shrink-0" />
-                                <span>{sup.city}</span>
+                                <span className="truncate">{sup.city}</span>
                             </div>
                         )}
                     </div>
                 )
             },
-            size: 200,
+            size: 220,
         },
         {
             id: 'contact',
@@ -132,18 +132,18 @@ function getColumns({
             cell: ({ row }) => {
                 const sup = row.original
                 return (
-                    <div className="space-y-0.5 text-xs">
-                        <div className="font-medium text-foreground">
+                    <div className="space-y-0.5 text-xs min-w-0">
+                        <div className="font-medium text-foreground truncate">
                             {sup.contact_person || '-'}
                         </div>
                         <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
                             <Phone className="h-3 w-3 shrink-0" />
-                            <span>{sup.phone}</span>
+                            <span className="truncate">{sup.phone}</span>
                         </div>
                     </div>
                 )
             },
-            size: 170,
+            size: 190,
         },
         {
             id: 'payment_term_days',
@@ -171,7 +171,7 @@ function getColumns({
                     </div>
                 )
             },
-            size: 120,
+            size: 135,
         },
         {
             id: 'purchase_orders_count',
@@ -195,7 +195,7 @@ function getColumns({
                     </Badge>
                 )
             },
-            size: 100,
+            size: 135,
         },
         {
             id: 'is_active',
@@ -219,7 +219,7 @@ function getColumns({
                     <Badge variant="secondary">Nonaktif</Badge>
                 )
             },
-            size: 90,
+            size: 125,
         },
     ]
 

@@ -64,6 +64,13 @@ class User extends Authenticatable
     {
         return LogOptions::defaults()
             ->useLogName(ActivityLogCategory::User->value)
+            ->setDescriptionForEvent(fn (string $eventName): string => match ($eventName) {
+                'created' => "Pengguna {$this->name} berhasil dibuat.",
+                'updated' => "Pengguna {$this->name} diperbarui.",
+                'deleted' => "Pengguna {$this->name} dihapus.",
+                'restored' => "Pengguna {$this->name} dipulihkan.",
+                default => "Pengguna {$this->name} ({$eventName}).",
+            })
             ->logOnly(['name', 'email', 'role', 'phone', 'is_active'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();

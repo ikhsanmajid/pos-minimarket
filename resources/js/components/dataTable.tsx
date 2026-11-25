@@ -42,6 +42,8 @@ export function DataTable<TData extends RowData = any>({
         data,
     })
 
+    const totalSize = table.getTotalSize()
+
     return (
         <div className="relative w-full max-w-full overflow-hidden rounded-lg border bg-card">
             {isLoading && (
@@ -53,14 +55,25 @@ export function DataTable<TData extends RowData = any>({
                 </div>
             )}
 
-            <Table className={cn(isLoading && 'pointer-events-none opacity-60 transition-opacity')}>
+            <Table
+                className={cn(
+                    'table-fixed w-full',
+                    isLoading && 'pointer-events-none opacity-60 transition-opacity'
+                )}
+                style={{ minWidth: `${totalSize}px` }}
+            >
                 <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
                         <TableRow key={headerGroup.id}>
                             {headerGroup.headers.map((header) => (
                                 <TableHead
                                     key={header.id}
-                                    style={{ width: `${header.getSize()}px` }}
+                                    className="overflow-hidden"
+                                    style={{
+                                        width: totalSize > 0
+                                            ? `${(header.getSize() / totalSize) * 100}%`
+                                            : `${header.getSize()}px`,
+                                    }}
                                 >
                                     {header.isPlaceholder ? null : (
                                         <table.FlexRender header={header} />
@@ -76,7 +89,7 @@ export function DataTable<TData extends RowData = any>({
                         table.getRowModel().rows.map((row) => (
                             <TableRow key={row.id}>
                                 {row.getAllCells().map((cell) => (
-                                    <TableCell key={cell.id}>
+                                    <TableCell key={cell.id} className="overflow-hidden text-ellipsis">
                                         <table.FlexRender cell={cell} />
                                     </TableCell>
                                 ))}

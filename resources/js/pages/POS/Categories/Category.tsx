@@ -52,7 +52,7 @@ const getColumns = ({
             id: 'no',
             header: 'No',
             cell: (info) => (from ?? 1) + info.row.index,
-            size: 50,
+            size: 55,
         },
         {
             accessorKey: 'code',
@@ -75,7 +75,7 @@ const getColumns = ({
                     <span className="text-muted-foreground">-</span>
                 )
             },
-            size: 15,
+            size: 130,
         },
         {
             accessorKey: 'name',
@@ -93,16 +93,17 @@ const getColumns = ({
             cell: (info) => {
                 const row = info.row.original
                 return (
-                    <div className="flex flex-col py-0.5">
-                        <span className="font-medium text-foreground">{row.name}</span>
+                    <div className="flex flex-col py-0.5 min-w-0">
+                        <span className="font-medium text-foreground truncate">{row.name}</span>
                         {row.description && (
-                            <span className="text-xs text-muted-foreground line-clamp-1 max-w-sm">
+                            <span className="text-xs text-muted-foreground whitespace-normal line-clamp-1">
                                 {row.description}
                             </span>
                         )}
                     </div>
                 )
             },
+            size: 385,
         },
         {
             accessorKey: 'products_count',
@@ -125,7 +126,7 @@ const getColumns = ({
                     </span>
                 )
             },
-            size: 15,
+            size: 170,
         },
         {
             accessorKey: 'is_active',
@@ -148,12 +149,12 @@ const getColumns = ({
                     <Badge variant="secondary">Nonaktif</Badge>
                 )
             },
-            size: 15,
+            size: 140,
         },
         {
             id: 'actions',
             header: () => <span className="text-right block w-full pr-2">Aksi</span>,
-            size: 70,
+            size: 80,
             cell: (info) => {
                 const row = info.row.original
                 return (

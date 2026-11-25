@@ -54,6 +54,13 @@ class Supplier extends Model
     {
         return LogOptions::defaults()
             ->useLogName(ActivityLogCategory::Supplier->value)
+            ->setDescriptionForEvent(fn (string $eventName): string => match ($eventName) {
+                'created' => "Supplier {$this->name} berhasil dibuat.",
+                'updated' => "Supplier {$this->name} diperbarui.",
+                'deleted' => "Supplier {$this->name} dihapus.",
+                'restored' => "Supplier {$this->name} dipulihkan.",
+                default => "Supplier {$this->name} ({$eventName}).",
+            })
             ->logOnly([
                 'code',
                 'name',

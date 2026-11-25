@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\Contracts\Activity;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -31,12 +32,19 @@ class Product extends Model
     {
         return LogOptions::defaults()
             ->useLogName(ActivityLogCategory::Product->value)
+            ->setDescriptionForEvent(fn (string $eventName): string => match ($eventName) {
+                'created' => "Produk {$this->name} berhasil dibuat.",
+                'updated' => "Produk {$this->name} diperbarui.",
+                'deleted' => "Produk {$this->name} dihapus.",
+                'restored' => "Produk {$this->name} dipulihkan.",
+                default => "Produk {$this->name} ({$eventName}).",
+            })
             ->logOnly(['category_id', 'barcode', 'name', 'buy_price', 'sell_price', 'stock', 'min_stock', 'image', 'active'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
     }
 
-    public function tapActivity(\Spatie\Activitylog\Contracts\Activity $activity, string $eventName): void
+    public function tapActivity(Activity $activity, string $eventName): void
     {
         if ($this->category_id) {
             $activity->properties = $activity->properties->merge([

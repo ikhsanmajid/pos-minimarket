@@ -2,6 +2,7 @@ import * as React from 'react'
 import { router } from '@inertiajs/react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import {
     Select,
     SelectContent,
@@ -12,6 +13,10 @@ import {
 import { Loader2, Search, X } from 'lucide-react'
 import type { RouteDefinition, RouteQueryOptions } from '@/wayfinder'
 import SelectSupplierAsync, { type SupplierOption } from './SelectSupplierAsync'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export interface PurchaseOrderFilters {
     search?: string
@@ -26,25 +31,16 @@ export interface PurchaseOrderFilters {
     table_direction?: string
 }
 
-interface SupplierProp {
+export interface SupplierProp {
     id: number
     name: string
     code: string | null
     is_active: boolean
 }
 
-interface StatusOption {
+export interface StatusOption {
     value: string
     label: string
-}
-
-interface PurchaseOrderTableToolbarProps {
-    filters: PurchaseOrderFilters
-    suppliers: SupplierProp[]
-    statuses: StatusOption[]
-    paymentStatuses: StatusOption[]
-    routeUrl: (options?: RouteQueryOptions) => RouteDefinition<'get'>
-    isLoading?: boolean
 }
 
 const TABLE_SORT_LABELS: Record<string, string> = {
@@ -57,14 +53,27 @@ const TABLE_SORT_LABELS: Record<string, string> = {
     total_amount: 'Total Tagihan',
 }
 
-export function PurchaseOrderTableToolbar({
+interface PurchaseOrderSearchProps {
+    filters: PurchaseOrderFilters
+    suppliers: SupplierProp[]
+    statuses: StatusOption[]
+    paymentStatuses: StatusOption[]
+    routeUrl: (options?: RouteQueryOptions) => RouteDefinition<'get'>
+    isLoading?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function PurchaseOrderSearch({
     filters,
     suppliers,
     statuses,
     paymentStatuses,
     routeUrl,
     isLoading = false,
-}: PurchaseOrderTableToolbarProps) {
+}: PurchaseOrderSearchProps) {
     const [search, setSearch] = React.useState(filters.search ?? '')
     const [status, setStatus] = React.useState(filters.status ?? 'all')
     const [paymentStatus, setPaymentStatus] = React.useState(filters.payment_status ?? 'all')
@@ -74,12 +83,20 @@ export function PurchaseOrderTableToolbar({
     const isFirstRender = React.useRef(true)
 
     React.useEffect(() => {
+        setSearch(filters.search ?? '')
         setStatus(filters.status ?? 'all')
         setPaymentStatus(filters.payment_status ?? 'all')
         setSupplierId(filters.supplier_id ?? 'all')
         setStartDate(filters.start_date ?? '')
         setEndDate(filters.end_date ?? '')
-    }, [filters.status, filters.payment_status, filters.supplier_id, filters.start_date, filters.end_date])
+    }, [
+        filters.search,
+        filters.status,
+        filters.payment_status,
+        filters.supplier_id,
+        filters.start_date,
+        filters.end_date,
+    ])
 
     // Debounce search 300ms
     React.useEffect(() => {
@@ -103,22 +120,22 @@ export function PurchaseOrderTableToolbar({
         startDateVal?: string
         endDateVal?: string
     } = {}) => {
-        const s = overrides.searchVal !== undefined ? overrides.searchVal : search
-        const st = overrides.statusVal !== undefined ? overrides.statusVal : status
-        const pst = overrides.paymentStatusVal !== undefined ? overrides.paymentStatusVal : paymentStatus
-        const sup = overrides.supplierIdVal !== undefined ? overrides.supplierIdVal : supplierId
-        const sd = overrides.startDateVal !== undefined ? overrides.startDateVal : startDate
-        const ed = overrides.endDateVal !== undefined ? overrides.endDateVal : endDate
+        const sVal = overrides.searchVal !== undefined ? overrides.searchVal : search
+        const stVal = overrides.statusVal !== undefined ? overrides.statusVal : status
+        const pstVal = overrides.paymentStatusVal !== undefined ? overrides.paymentStatusVal : paymentStatus
+        const supVal = overrides.supplierIdVal !== undefined ? overrides.supplierIdVal : supplierId
+        const sdVal = overrides.startDateVal !== undefined ? overrides.startDateVal : startDate
+        const edVal = overrides.endDateVal !== undefined ? overrides.endDateVal : endDate
 
         router.visit(
             routeUrl({
                 mergeQuery: {
-                    search: s || undefined,
-                    status: st !== 'all' ? st : undefined,
-                    payment_status: pst !== 'all' ? pst : undefined,
-                    supplier_id: sup !== 'all' ? sup : undefined,
-                    start_date: sd || undefined,
-                    end_date: ed || undefined,
+                    search: sVal || undefined,
+                    status: stVal !== 'all' ? stVal : undefined,
+                    payment_status: pstVal !== 'all' ? pstVal : undefined,
+                    supplier_id: supVal !== 'all' ? supVal : undefined,
+                    start_date: sdVal || undefined,
+                    end_date: edVal || undefined,
                     page: 1,
                 },
             }),
@@ -148,12 +165,14 @@ export function PurchaseOrderTableToolbar({
         applyFilters({ paymentStatusVal: val })
     }
 
-    const handleStartDateChange = (val: string) => {
+    const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value
         setStartDate(val)
         applyFilters({ startDateVal: val })
     }
 
-    const handleEndDateChange = (val: string) => {
+    const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value
         setEndDate(val)
         applyFilters({ endDateVal: val })
     }
@@ -174,6 +193,7 @@ export function PurchaseOrderTableToolbar({
             }
         }
 
+        // Bersihkan sortir header tabel jika kolom yang dipilih di toolbar sama
         const isSameAsTableSort = Boolean(sortVal && sortVal === filters.table_sort)
 
         router.visit(
@@ -270,15 +290,15 @@ export function PurchaseOrderTableToolbar({
         isTableSorted,
     ].filter(Boolean).length
 
-    const statusItems = React.useMemo(() => [
-        { value: 'all', label: 'Semua Status' },
-        ...statuses,
-    ], [statuses])
+    const statusItems = React.useMemo(
+        () => [{ value: 'all', label: 'Semua Status' }, ...statuses],
+        [statuses]
+    )
 
-    const paymentStatusItems = React.useMemo(() => [
-        { value: 'all', label: 'Semua Bayar' },
-        ...paymentStatuses,
-    ], [paymentStatuses])
+    const paymentStatusItems = React.useMemo(
+        () => [{ value: 'all', label: 'Semua Pembayaran' }, ...paymentStatuses],
+        [paymentStatuses]
+    )
 
     const sortOptions = [
         { value: 'default', label: 'Urutan: Default' },
@@ -291,21 +311,23 @@ export function PurchaseOrderTableToolbar({
         { value: 'created_at_desc', label: 'Terbaru Ditambahkan' },
     ]
 
-    const supplierOptions = React.useMemo<SupplierOption[]>(() => {
-        return suppliers.map((s) => ({
-            value: s.id,
-            label: s.code ? `${s.name} (${s.code})` : s.name,
-        }))
-    }, [suppliers])
+    const supplierOptions = React.useMemo<SupplierOption[]>(
+        () =>
+            suppliers.map((s) => ({
+                value: s.id,
+                label: s.code ? `${s.name} (${s.code})` : s.name,
+            })),
+        [suppliers]
+    )
 
     return (
         <div className="mb-4 space-y-3">
             <div className="flex flex-wrap items-center gap-2.5">
-                {/* Search Input: Khusus No PO */}
-                <div className="relative w-full sm:w-60 lg:w-64">
+                {/* Search Input */}
+                <div className="relative w-full sm:w-64 lg:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
-                        placeholder="Cari No. PO..."
+                        placeholder="Cari No. PO…"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-9 pr-8 h-9 text-sm"
@@ -315,7 +337,7 @@ export function PurchaseOrderTableToolbar({
                             type="button"
                             onClick={() => setSearch('')}
                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                            title="Hapus pencarian No. PO"
+                            title="Hapus pencarian"
                         >
                             <X className="h-3.5 w-3.5" />
                         </button>
@@ -325,7 +347,7 @@ export function PurchaseOrderTableToolbar({
                     )}
                 </div>
 
-                {/* Filter Supplier (React-Select Async) */}
+                {/* Filter Supplier (Async Select) */}
                 <SelectSupplierAsync
                     value={supplierId !== 'all' ? Number(supplierId) : null}
                     onChange={(val) => handleSupplierChange(val ? String(val) : 'all')}
@@ -334,7 +356,7 @@ export function PurchaseOrderTableToolbar({
                     onlyActive={false}
                     isClearable
                     disabled={isLoading}
-                    className="w-full sm:w-[185px] lg:w-[210px]"
+                    className="w-full sm:w-[210px]"
                 />
 
                 {/* Filter Status PO */}
@@ -344,7 +366,7 @@ export function PurchaseOrderTableToolbar({
                     onValueChange={handleStatusChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[145px] h-9">
+                    <SelectTrigger className="w-full sm:w-[165px] h-9">
                         <SelectValue placeholder="Semua Status">
                             {(val) => statusItems.find((s) => s.value === val)?.label}
                         </SelectValue>
@@ -365,8 +387,8 @@ export function PurchaseOrderTableToolbar({
                     onValueChange={handlePaymentStatusChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[145px] h-9">
-                        <SelectValue placeholder="Semua Bayar">
+                    <SelectTrigger className="w-full sm:w-[175px] h-9">
+                        <SelectValue placeholder="Semua Pembayaran">
                             {(val) => paymentStatusItems.find((p) => p.value === val)?.label}
                         </SelectValue>
                     </SelectTrigger>
@@ -379,24 +401,33 @@ export function PurchaseOrderTableToolbar({
                     </SelectContent>
                 </Select>
 
-                {/* Filter Rentang Tanggal Pesanan */}
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                {/* Tanggal Dari */}
+                <div className="flex items-center gap-1.5">
+                    <Label htmlFor="po-date-from" className="text-xs text-muted-foreground whitespace-nowrap">
+                        Dari:
+                    </Label>
                     <Input
+                        id="po-date-from"
                         type="date"
                         value={startDate}
-                        onChange={(e) => handleStartDateChange(e.target.value)}
-                        className="w-[125px] h-9 text-xs"
-                        title="Tanggal Mulai Pesanan"
+                        onChange={handleStartDateChange}
                         disabled={isLoading}
+                        className="h-9 w-[135px] text-xs"
                     />
-                    <span>-</span>
+                </div>
+
+                {/* Tanggal Sampai */}
+                <div className="flex items-center gap-1.5">
+                    <Label htmlFor="po-date-to" className="text-xs text-muted-foreground whitespace-nowrap">
+                        Sampai:
+                    </Label>
                     <Input
+                        id="po-date-to"
                         type="date"
                         value={endDate}
-                        onChange={(e) => handleEndDateChange(e.target.value)}
-                        className="w-[125px] h-9 text-xs"
-                        title="Tanggal Akhir Pesanan"
+                        onChange={handleEndDateChange}
                         disabled={isLoading}
+                        className="h-9 w-[135px] text-xs"
                     />
                 </div>
 
@@ -444,9 +475,9 @@ export function PurchaseOrderTableToolbar({
                 {hasActiveFilters && (
                     <Button
                         variant="outline"
+                        size="sm"
                         onClick={handleReset}
                         disabled={isLoading}
-                        size="sm"
                         className="h-9 px-3 text-xs gap-1.5 text-muted-foreground hover:text-foreground border-dashed"
                     >
                         <X className="h-3.5 w-3.5" />
@@ -463,4 +494,4 @@ export function PurchaseOrderTableToolbar({
     )
 }
 
-export default PurchaseOrderTableToolbar
+export { PurchaseOrderSearch as PurchaseOrderTableToolbar }

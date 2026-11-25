@@ -67,7 +67,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
         id: 'no',
         header: 'No',
         cell: (info) => (from ?? 1) + info.row.index,
-        size: 50,
+        size: 55,
     },
     {
         accessorKey: 'name',
@@ -85,12 +85,13 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
         cell: (info) => {
             const row = info.row.original
             return (
-                <div className="flex flex-col py-0.5">
-                    <span className="font-medium text-foreground">{row.name}</span>
-                    <span className="text-xs text-muted-foreground">{row.email}</span>
+                <div className="flex flex-col py-0.5 min-w-0">
+                    <span className="font-medium text-foreground truncate">{row.name}</span>
+                    <span className="text-xs text-muted-foreground truncate">{row.email}</span>
                 </div>
             )
         },
+        size: 235,
     },
     {
         accessorKey: 'phone',
@@ -113,7 +114,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
                 <span className="text-muted-foreground">-</span>
             )
         },
-        size: 14,
+        size: 145,
     },
     {
         accessorKey: 'role_name',
@@ -133,7 +134,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
             const cls = roleBadgeClass[row.role] ?? ''
             return <Badge className={cls}>{info.getValue<string>()}</Badge>
         },
-        size: 14,
+        size: 135,
     },
     {
         accessorKey: 'has_pin',
@@ -155,7 +156,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
                 </Badge>
             )
         },
-        size: 14,
+        size: 140,
     },
     {
         accessorKey: 'is_active',
@@ -178,7 +179,7 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
                 <Badge variant="secondary">Nonaktif</Badge>
             )
         },
-        size: 12,
+        size: 125,
     },
     {
         accessorKey: 'last_login_at',
@@ -201,12 +202,12 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
                 <span className="text-xs text-muted-foreground">Belum pernah</span>
             )
         },
-        size: 16,
+        size: 180,
     },
     {
         id: 'actions',
         header: () => <span className="text-right block w-full pr-2">Aksi</span>,
-        size: 70,
+        size: 80,
         cell: (info) => {
             const row = info.row.original
             return (

@@ -16,6 +16,18 @@ Semua tabel data di antarmuka web dibangun di atas **TanStack Table v9** dengan 
 
 > **ATURAN WAJIB:** Dilarang membuat komponen `SortHeader` lokal di dalam file page/tabel. Selalu impor dan gunakan `DataTableSortHeader` dari `@/components/dataTableSortHeader`.
 
+### 1.2 Lebar Kolom & Header Tetap (*Fixed Table Layout*)
+Agar ukuran header dan kolom tabel **tidak berubah-ubah (membesar/mengecil)** saat berpindah halaman paginasi, mengubah filter, atau saat data kosong:
+- **Komponen `DataTable` (`@/components/dataTable.tsx`):**
+  - Wajib menggunakan `table-fixed w-full` dengan `style={{ minWidth: `${totalSize}px` }}`.
+  - Lebar setiap `<TableHead>` dihitung secara proporsional dari `header.getSize() / totalSize * 100%` agar tetap konsisten di semua halaman dan mengisi layar secara proporsional tanpa loncatan layout.
+  - Setiap `<TableCell>` wajib menggunakan `overflow-hidden text-ellipsis` (dan gunakan `truncate` atau `whitespace-normal line-clamp-*` pada konten teks panjang di dalam cell).
+- **Definisi Kolom (`getColumns`):**
+  - **SETIAP kolom wajib mendefinisikan properti `size` dalam satuan piksel realistis** (misalnya `55`, `130`, `170`, `220`, `385`).
+  - **Dilarang** mengisi `size` dengan angka terlalu kecil/seperti persentase (misalnya `10`, `14`, `15`, `18`, `20`) atau membiarkan `size` kosong.
+- **Tabel HTML Biasa (`<table>` di halaman detail / modal):**
+  - Wajib menggunakan `table-fixed w-full` disertai `min-w-[...]` dan lebar `w-[...%]` eksplisit pada setiap `<th>` yang totalnya 100%.
+
 ---
 
 ## 2. Standar Struktur Kolom Tabel
@@ -27,10 +39,10 @@ Kolom pertama wajib menampilkan nomor urut yang memperhitungkan halaman paginasi
     id: 'no',
     header: 'No',
     cell: (info) => (from ?? 1) + info.row.index,
-    size: 50,
+    size: 55,
 }
 ```
-- **Ukuran Lebar:** Wajib `size: 50`.
+- **Ukuran Lebar:** Wajib `size: 55` (konsisten di semua halaman).
 - **Align:** Rata kiri default atau tengah rapi dengan font mono kecil jika diperlukan (`font-mono text-xs`).
 
 ---
@@ -182,13 +194,49 @@ Untuk menghindari bug overflow atau isi dialog yang terpotong saat layar kecil a
 
 ---
 
-## 6. Ringkasan Checklist Setiap Membuat / Mengubah Modul Tabel
+## 6. Standar Detail Log Aktivitas & Pemisahan Komponen
+
+### 6.1 Tampilan Detail Log Aktivitas Seragam (`ActivityLogDetailDialog`)
+> **ATURAN WAJIB:** Dilarang membuat renderer, card berwarna, atau layout khusus per modul/event di dalam `ActivityLogDetailDialog.tsx`. Seluruh modul (Produk, Kategori, Pengguna, Supplier, Purchase Order, Auth, dll.) **WAJIB** menggunakan satu format tampilan detail yang seragam.
+
+Struktur standar dialog detail aktivitas:
+1. **Header Dialog:** Judul `Detail Log Aktivitas #{id}` disertai badge `event` (jika tersedia).
+2. **Metadata Grid (4 Kolom):** `Waktu`, `Pengguna`, `Kategori Log`, dan `Objek / Modul`.
+3. **Blok Deskripsi:** Menampilkan `activity.description` apa adanya.
+4. **Tabel Perubahan Data Seragam (3 Kolom):**
+   - Kolom: `Field / Kolom` | `Nilai Sebelumnya (Old)` | `Nilai Sesudahnya (New)`.
+   - Data dinormalisasi secara generik dari `attribute_changes` dan `properties`, termasuk pairing otomatis untuk kunci `old_*` / `previous_*` dengan `new_*`.
+   - Jika terdapat properti berbentuk array of objects (misalnya daftar item transaksi/penerimaan), render menggunakan **sub-tabel generik** dengan gaya tabel yang sama — bukan layout custom per modul.
+5. **Konfigurasi Terpusat:**
+   - Saat menambah modul atau field baru yang dicatat di activity log, cukup daftarkan label field (`fieldLabels`), field mata uang (`CURRENCY_FIELDS`), atau label status (`STATUS_LABELS`) di `resources/js/pages/POS/ActivityLogs/component/activityLogDetailUtils.ts` tanpa mengubah struktur JSX dialog.
+
+### 6.2 Deskripsi Log Aktivitas Seragam di Semua Modul
+> **ATURAN WAJIB:** Dilarang membiarkan deskripsi log aktivitas hanya berupa nama event mentah (misalnya `created`, `updated`, `deleted`) sehingga tampil berulang seperti `[DELETED] deleted`.
+
+- Setiap model Laravel yang menggunakan `LogsActivity` wajib mendefinisikan `->setDescriptionForEvent(...)` dengan pola kalimat deskriptif Bahasa Indonesia yang sama seperti `PurchaseOrder`:
+  - `created`: `"{Modul} {nama/kode} berhasil dibuat."`
+  - `updated`: `"{Modul} {nama/kode} diperbarui."`
+  - `deleted`: `"{Modul} {nama/kode} dihapus."`
+  - `restored`: `"{Modul} {nama/kode} dipulihkan."`
+- Di `ActivityLogController`, data log lama yang masih menyimpan deskripsi mentah (`created`, `updated`, `deleted`, `restored`) wajib dinormalisasi oleh `resolveDescription()` ke pola kalimat di atas.
+
+### 6.3 Pemisahan Logika & Sub-Komponen (*Separation of Concerns*)
+- **Logika Murni (`*Utils.ts`):** Pisahkan konstanta mapping, formatter, normalizer data, dan tipe bantu yang tidak bergantung pada React ke file `.ts` terpisah di folder `component/` (contoh: `activityLogDetailUtils.ts`).
+- **Komponen Stateful:** Pisahkan sub-komponen yang mengelola state lokal sendiri atau dapat digunakan ulang ke file `.tsx` terpisah (contoh: `ActivityLogImagePreview.tsx`).
+- **Hindari Over-Splitting:** Jangan memecah potongan JSX sederhana yang hanya dipakai satu kali dan tidak memiliki state/logika kompleks ke file terpisah.
+
+---
+
+## 7. Ringkasan Checklist Setiap Membuat / Mengubah Modul Tabel
 
 - [ ] Apakah nama file halaman utama menggunakan nama modul `PascalCase` (bukan `Index.tsx`) dan selaras dengan `Inertia::render()`?
-
 - [ ] Apakah komponen sorting menggunakan `DataTableSortHeader` dari `@/components/dataTableSortHeader`?
-- [ ] Apakah kolom `No` memiliki `size: 50` dan menghitung offset `from + index`?
+- [ ] Apakah setiap kolom memiliki `size` piksel yang realistis (bukan angka kecil seperti `10`/`15`/`18`) dan tabel menggunakan `table-fixed` agar header tidak membesar/mengecil antar halaman?
+- [ ] Apakah kolom `No` memiliki `size: 55` dan menghitung offset `from + index`?
 - [ ] Apakah kolom `Aksi` memiliki header rata kanan (`text-right pr-2`) dan cell rata kanan (`justify-end pr-2`)?
 - [ ] Apakah seluruh format rupiah menggunakan `Intl.NumberFormat('id-ID', ...)`?
 - [ ] Apakah dialog modal memiliki header dan footer terkunci (`shrink-0`) serta body `overflow-y-auto overflow-x-hidden`?
+- [ ] Apakah setiap model `LogsActivity` sudah mendefinisikan `setDescriptionForEvent(...)` agar keterangan aktivitas deskriptif dan seragam?
+- [ ] Apakah detail log aktivitas mengikuti format seragam tanpa renderer khusus per modul, dan field baru didaftarkan di `activityLogDetailUtils.ts`?
+- [ ] Apakah logika murni (`*Utils.ts`) dan sub-komponen stateful sudah dipisahkan secara proporsional tanpa *over-splitting*?
 - [ ] Apakah tipe TypeScript lolos verifikasi `npm run types:check` tanpa error?

@@ -334,12 +334,12 @@ export function RiwayatPerubahanProduct({
         if (allKeys.length > 0) {
             return (
                 <div className="overflow-x-auto rounded-md border">
-                    <table className="w-full text-xs text-left">
+                    <table className="w-full min-w-[560px] table-fixed text-xs text-left">
                         <thead className="bg-muted/70 text-muted-foreground font-semibold border-b">
                             <tr>
-                                <th className="p-3 w-[24%] min-w-[140px]">Atribut / Kolom</th>
-                                <th className="p-3 w-[38%] min-w-[220px]">Nilai Sebelumnya (Old)</th>
-                                <th className="p-3 w-[38%] min-w-[220px]">Nilai Sesudahnya (New)</th>
+                                <th className="p-3 w-[24%]">Atribut / Kolom</th>
+                                <th className="p-3 w-[38%]">Nilai Sebelumnya (Old)</th>
+                                <th className="p-3 w-[38%]">Nilai Sesudahnya (New)</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
