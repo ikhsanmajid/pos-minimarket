@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Enums\ActivityLogCategory;
 use App\Enums\UserRoles;
 use App\Models\Category;
-use App\Models\Product;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -120,7 +119,7 @@ class ActivityLogController extends Controller
             'id' => $act->id,
             'log_name' => $act->log_name,
             'log_name_label' => ActivityLogCategory::resolveLabel($act->log_name, $act->subject_type),
-            'description' => $act->description,
+            'description' => $this->resolveDescription($act),
             'event' => $act->event,
             'subject_type' => $act->subject_type ? class_basename($act->subject_type) : null,
             'subject_type_full' => $act->subject_type,
@@ -191,6 +190,8 @@ class ActivityLogController extends Controller
                     'Product' => 'Produk',
                     'User' => 'Pengguna & Akun',
                     'Category' => 'Kategori Produk',
+                    'Supplier' => 'Supplier',
+                    'PurchaseOrder' => 'Purchase Order',
                     'Transaction' => 'Transaksi Penjualan',
                     default => class_basename($type),
                 },
@@ -205,5 +206,56 @@ class ActivityLogController extends Controller
             'subjectTypes' => $subjectTypes,
             'categoryMap' => $categoryMap,
         ]);
+    }
+
+    /**
+     * Format deskripsi aktivitas agar seragam dan deskriptif (termasuk untuk log lama yang hanya menyimpan nama event).
+     */
+    private function resolveDescription(Activity $activity): string
+    {
+        $rawDescription = trim((string) $activity->description);
+        $normalized = strtolower($rawDescription);
+
+        if (! in_array($normalized, ['created', 'updated', 'deleted', 'restored'], true)) {
+            return $rawDescription;
+        }
+
+        $moduleLabel = match ($activity->subject_type ? class_basename($activity->subject_type) : null) {
+            'Product' => 'Produk',
+            'Category' => 'Kategori',
+            'Supplier' => 'Supplier',
+            'User' => 'Pengguna',
+            'PurchaseOrder' => 'Purchase Order',
+            'Transaction' => 'Transaksi',
+            default => $activity->subject_type ? class_basename($activity->subject_type) : 'Data',
+        };
+
+        $changes = $activity->attribute_changes?->toArray() ?? [];
+        $props = $activity->properties?->toArray() ?? [];
+        $attributes = $changes['attributes'] ?? $props['attributes'] ?? [];
+        $old = $changes['old'] ?? $props['old'] ?? [];
+
+        $subject = $activity->subject;
+        $identifier = $subject?->name
+            ?? $subject?->po_number
+            ?? $subject?->code
+            ?? $attributes['name']
+            ?? $old['name']
+            ?? $attributes['po_number']
+            ?? $old['po_number']
+            ?? $props['po_number']
+            ?? $attributes['code']
+            ?? $old['code']
+            ?? ($activity->subject_id ? "#{$activity->subject_id}" : '');
+
+        $target = trim("{$moduleLabel} {$identifier}");
+
+        return match ($normalized) {
+            'created' => "{$target} berhasil dibuat.",
+            'updated' => "{$target} diperbarui.",
+            'deleted' => "{$target} dihapus.",
+            'restored' => "{$target} dipulihkan.",
+            default => $rawDescription,
+        };
     }
 }

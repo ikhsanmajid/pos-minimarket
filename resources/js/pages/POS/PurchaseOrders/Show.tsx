@@ -689,17 +689,17 @@ export function PurchaseOrdersShow({ purchaseOrder, activities }: ShowPOPageProp
                         </CardHeader>
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
-                                <table className="w-full text-xs text-left">
+                                <table className="w-full min-w-[820px] table-fixed text-xs text-left">
                                     <thead className="bg-muted/70 text-muted-foreground font-semibold border-b">
                                         <tr>
-                                            <th className="p-3 w-10 text-center">No</th>
-                                            <th className="p-3">Produk & Barcode</th>
-                                            <th className="p-3">Harga Beli PO</th>
-                                            <th className="p-3 text-center">Dipesan</th>
-                                            <th className="p-3 text-center">Diterima</th>
-                                            <th className="p-3 text-center">Sisa</th>
-                                            <th className="p-3 min-w-[120px]">Progres Item</th>
-                                            <th className="p-3 text-right">Subtotal</th>
+                                            <th className="p-3 w-[6%] text-center">No</th>
+                                            <th className="p-3 w-[26%]">Produk & Barcode</th>
+                                            <th className="p-3 w-[14%]">Harga Beli PO</th>
+                                            <th className="p-3 w-[9%] text-center">Dipesan</th>
+                                            <th className="p-3 w-[9%] text-center">Diterima</th>
+                                            <th className="p-3 w-[8%] text-center">Sisa</th>
+                                            <th className="p-3 w-[14%]">Progres Item</th>
+                                            <th className="p-3 w-[14%] text-right">Subtotal</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y">
@@ -845,13 +845,13 @@ export function PurchaseOrdersShow({ purchaseOrder, activities }: ShowPOPageProp
                                                                 Rincian Kedatangan Barang & Pembaruan Harga Beli:
                                                             </span>
                                                             <div className="rounded-md border bg-background overflow-x-auto">
-                                                                <table className="w-full text-[11px] text-left">
+                                                                <table className="w-full min-w-[600px] table-fixed text-[11px] text-left">
                                                                     <thead className="bg-muted/50 border-b text-muted-foreground">
                                                                         <tr>
-                                                                            <th className="p-2">Produk</th>
-                                                                            <th className="p-2 text-center">Diterima Kali Ini</th>
-                                                                            <th className="p-2">Perubahan Stok</th>
-                                                                            <th className="p-2">Harga Beli Lama ➔ Weighted Baru</th>
+                                                                            <th className="p-2 w-[32%]">Produk</th>
+                                                                            <th className="p-2 w-[18%] text-center">Diterima Kali Ini</th>
+                                                                            <th className="p-2 w-[18%]">Perubahan Stok</th>
+                                                                            <th className="p-2 w-[32%]">Harga Beli Lama ➔ Weighted Baru</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody className="divide-y font-mono">

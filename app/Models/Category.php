@@ -29,6 +29,13 @@ class Category extends Model
     {
         return LogOptions::defaults()
             ->useLogName(ActivityLogCategory::Category->value)
+            ->setDescriptionForEvent(fn (string $eventName): string => match ($eventName) {
+                'created' => "Kategori {$this->name} berhasil dibuat.",
+                'updated' => "Kategori {$this->name} diperbarui.",
+                'deleted' => "Kategori {$this->name} dihapus.",
+                'restored' => "Kategori {$this->name} dipulihkan.",
+                default => "Kategori {$this->name} ({$eventName}).",
+            })
             ->logOnly(['code', 'name', 'slug', 'description', 'is_active'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();

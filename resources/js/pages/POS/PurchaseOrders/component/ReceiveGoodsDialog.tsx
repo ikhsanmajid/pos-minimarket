@@ -214,14 +214,14 @@ export function ReceiveGoodsDialog({
 
                     {/* Tabel Daftar Barang Penerimaan */}
                     <div className="rounded-lg border overflow-x-auto">
-                        <table className="w-full text-xs text-left">
+                        <table className="w-full min-w-[760px] table-fixed text-xs text-left">
                             <thead className="bg-muted/70 text-muted-foreground font-semibold border-b">
                                 <tr>
-                                    <th className="p-3">Produk & Barcode</th>
-                                    <th className="p-3 text-center">Status Pesanan</th>
-                                    <th className="p-3 w-[150px]">Terima Sekarang</th>
-                                    <th className="p-3 w-[150px]">Tgl Expired</th>
-                                    <th className="p-3 min-w-[200px]">Simulasi Harga Beli Baru</th>
+                                    <th className="p-3 w-[26%]">Produk & Barcode</th>
+                                    <th className="p-3 w-[14%] text-center">Status Pesanan</th>
+                                    <th className="p-3 w-[18%]">Terima Sekarang</th>
+                                    <th className="p-3 w-[18%]">Tgl Expired</th>
+                                    <th className="p-3 w-[24%]">Simulasi Harga Beli Baru</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">

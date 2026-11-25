@@ -118,7 +118,7 @@ const getColumns = ({
         id: 'no',
         header: 'No',
         cell: (info) => (from ?? 1) + info.row.index,
-        size: 50,
+        size: 55,
     },
     {
         accessorKey: 'po_number',
@@ -136,10 +136,10 @@ const getColumns = ({
         cell: (info) => {
             const po = info.row.original
             return (
-                <div className="flex flex-col py-0.5">
+                <div className="flex flex-col py-0.5 min-w-0">
                     <Link
                         href={PurchaseOrderController.show.url(po.id)}
-                        className="font-mono text-xs font-bold text-primary hover:underline"
+                        className="font-mono text-xs font-bold text-primary hover:underline truncate"
                     >
                         {po.po_number}
                     </Link>
@@ -149,7 +149,7 @@ const getColumns = ({
                 </div>
             )
         },
-        size: 18,
+        size: 175,
     },
     {
         accessorKey: 'supplier_name',
@@ -157,15 +157,15 @@ const getColumns = ({
         cell: (info) => {
             const po = info.row.original
             return (
-                <div className="flex flex-col py-0.5">
-                    <span className="font-medium text-foreground text-sm">{po.supplier_name}</span>
-                    <span className="text-[11px] text-muted-foreground">
+                <div className="flex flex-col py-0.5 min-w-0">
+                    <span className="font-medium text-foreground text-sm truncate">{po.supplier_name}</span>
+                    <span className="text-[11px] text-muted-foreground truncate">
                         Dibuat: {po.creator_name}
                     </span>
                 </div>
             )
         },
-        size: 22,
+        size: 220,
     },
     {
         accessorKey: 'status',
@@ -182,7 +182,7 @@ const getColumns = ({
                 </Badge>
             )
         },
-        size: 15,
+        size: 150,
     },
     {
         accessorKey: 'payment_status',
@@ -199,7 +199,7 @@ const getColumns = ({
                 </Badge>
             )
         },
-        size: 13,
+        size: 145,
     },
     {
         id: 'progress',
@@ -211,7 +211,7 @@ const getColumns = ({
             const percent = ordered > 0 ? Math.min(100, Math.round((received / ordered) * 100)) : 0
 
             return (
-                <div className="flex flex-col py-0.5 gap-1 min-w-[120px]">
+                <div className="flex flex-col py-0.5 gap-1">
                     <div className="flex items-center justify-between text-[11px] font-mono">
                         <span>{received} / {ordered} unit</span>
                         <span className="font-semibold text-muted-foreground">{percent}%</span>
@@ -231,7 +231,7 @@ const getColumns = ({
                 </div>
             )
         },
-        size: 16,
+        size: 170,
     },
     {
         accessorKey: 'total_amount',
@@ -251,7 +251,7 @@ const getColumns = ({
                 {formatRupiah(info.getValue<number | string>())}
             </span>
         ),
-        size: 15,
+        size: 155,
     },
     {
         id: 'actions',

@@ -60,7 +60,7 @@ const getColumns = ({
             id: 'no',
             header: 'No',
             cell: (info) => (from ?? 1) + info.row.index,
-            size: 50,
+            size: 55,
         },
         {
             accessorKey: 'name',
@@ -75,10 +75,11 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
+            size: 270,
             cell: (info) => {
                 const row = info.row.original
                 return (
-                    <div className="flex items-center gap-3 py-0.5">
+                    <div className="flex items-center gap-3 py-0.5 min-w-0">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40 overflow-hidden">
                             {row.image ? (
                                 <img
@@ -91,10 +92,10 @@ const getColumns = ({
                             )}
                         </div>
                         <div className="flex flex-col min-w-0">
-                            <span className="font-medium text-foreground truncate max-w-[220px]">
+                            <span className="font-medium text-foreground truncate">
                                 {row.name}
                             </span>
-                            <span className="text-xs text-muted-foreground font-mono">
+                            <span className="text-xs text-muted-foreground font-mono truncate">
                                 {row.barcode}
                             </span>
                         </div>
@@ -105,8 +106,9 @@ const getColumns = ({
         {
             accessorKey: 'category',
             header: 'Kategori',
+            size: 140,
             cell: (info) => (
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground block truncate">
                     {info.getValue<string>() ?? '-'}
                 </span>
             ),
@@ -124,7 +126,7 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
-            size: 130,
+            size: 135,
             cell: (info) =>
                 new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -145,7 +147,7 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
-            size: 130,
+            size: 135,
             cell: (info) => (
                 <span className="font-medium text-primary">
                     {new Intl.NumberFormat('id-ID', {
@@ -169,7 +171,7 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
-            size: 130,
+            size: 165,
             cell: (info) => {
                 const row = info.row.original
                 if (row.stock === 0) {
@@ -209,7 +211,7 @@ const getColumns = ({
         {
             accessorKey: 'min_stock',
             header: 'Min. Stok',
-            size: 10,
+            size: 95,
             cell: (info) => (
                 <span className="text-muted-foreground">
                     {info.getValue<number>()}
@@ -229,7 +231,7 @@ const getColumns = ({
                     onSort={onSort}
                 />
             ),
-            size: 10,
+            size: 105,
             cell: (info) =>
                 info.getValue<boolean>() ? (
                     <Badge variant="success">Aktif</Badge>
@@ -239,19 +241,21 @@ const getColumns = ({
         },
         {
             id: 'actions',
-            header: '',
-            size: 20,
+            header: () => <span className="text-right block w-full pr-2">Aksi</span>,
+            size: 70,
             cell: (info) => {
                 const row = info.row.original
                 return (
-                    <ProductActionsCell
-                        product={row}
-                        categories={categories}
-                        canEdit={canEdit}
-                        canDelete={canDelete}
-                        detailUrl={ProductController.show.url(row.id)}
-                        destroyUrl={ProductController.destroy.url(row.id)}
-                    />
+                    <div className="flex justify-end pr-2">
+                        <ProductActionsCell
+                            product={row}
+                            categories={categories}
+                            canEdit={canEdit}
+                            canDelete={canDelete}
+                            detailUrl={ProductController.show.url(row.id)}
+                            destroyUrl={ProductController.destroy.url(row.id)}
+                        />
+                    </div>
                 )
             },
         },
