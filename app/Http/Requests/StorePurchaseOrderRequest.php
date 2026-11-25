@@ -2,11 +2,9 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\PurchaseOrderStatus;
 use App\Models\PurchaseOrder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Enum;
 
 class StorePurchaseOrderRequest extends FormRequest
 {
@@ -23,7 +21,8 @@ class StorePurchaseOrderRequest extends FormRequest
             'order_date' => ['required', 'date'],
             'expected_date' => ['nullable', 'date', 'after_or_equal:order_date'],
             'due_date' => ['nullable', 'date'],
-            'status' => ['nullable', new Enum(PurchaseOrderStatus::class)],
+            'action' => ['nullable', 'in:draft,submit'],
+            'status' => ['nullable', 'in:draft,pending_approval,approved,ordered'],
             'discount_type' => ['required', 'in:fixed,percent'],
             'discount_value' => [
                 'nullable',
@@ -31,12 +30,23 @@ class StorePurchaseOrderRequest extends FormRequest
                 'min:0',
                 Rule::when($this->input('discount_type') === 'percent', ['max:100']),
             ],
+            'tax_type' => ['nullable', 'in:percent,fixed'],
+            'tax_value' => [
+                'nullable',
+                'numeric',
+                'min:0',
+                Rule::when(($this->input('tax_type') ?? 'percent') === 'percent', ['max:100']),
+            ],
             'tax_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.quantity_ordered' => ['required', 'integer', 'min:1'],
+            'items.*.free_qty_ordered' => ['nullable', 'integer', 'min:0'],
             'items.*.unit_cost' => ['required', 'numeric', 'min:0'],
+            'items.*.discount_type' => ['nullable', 'in:fixed,percent'],
+            'items.*.discount_value' => ['nullable', 'numeric', 'min:0'],
             'items.*.expired_date' => ['nullable', 'date'],
         ];
     }
@@ -50,10 +60,12 @@ class StorePurchaseOrderRequest extends FormRequest
             'items.min' => 'Minimal satu produk harus dipesan.',
             'items.*.product_id.required' => 'Produk wajib dipilih.',
             'items.*.quantity_ordered.min' => 'Jumlah pesanan minimal 1.',
+            'items.*.free_qty_ordered.min' => 'Jumlah bonus tidak boleh negatif.',
             'items.*.unit_cost.min' => 'Harga beli satuan tidak boleh negatif.',
             'discount_type.in' => 'Tipe diskon harus berupa nominal (Rp) atau persen (%).',
             'discount_value.max' => 'Diskon persen maksimal 100%.',
-            'tax_percentage.max' => 'Persentase pajak maksimal 100%.',
+            'tax_type.in' => 'Tipe pajak harus berupa persen (%) atau nominal (Rp).',
+            'tax_value.max' => 'Persentase pajak maksimal 100%.',
         ];
     }
 }

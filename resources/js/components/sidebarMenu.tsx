@@ -8,7 +8,7 @@ import {
     SidebarContent,
     SidebarFooter,
 } from "@/components/ui/sidebar"
-import { Users, House, Package, ShoppingCart, BarChart3, Truck } from "lucide-react"
+import { Users, House, Package, ShoppingCart, BarChart3, Truck, Wallet } from "lucide-react"
 import ThemeToggle from "./themetoggle"
 import { useAuth } from "@/hooks/use-auth"
 import { usePage } from "@inertiajs/react"
@@ -16,6 +16,11 @@ import users from "@/routes/pos/users"
 import products from "@/routes/pos/products"
 import categories from "@/routes/pos/categories"
 import dashboard from "@/routes/pos/dashboard"
+import purchaseOrders from "@/routes/pos/purchase-orders"
+import suppliers from "@/routes/pos/suppliers"
+import financeAccounts from "@/routes/pos/finance/accounts"
+import financePayables from "@/routes/pos/finance/payables"
+import financeTransactions from "@/routes/pos/finance/transactions"
 
 interface NavSubItem {
     title: string
@@ -99,13 +104,37 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             items: [
                 {
                     title: "Purchase Orders",
-                    url: "/pos/purchase-orders",
+                    url: purchaseOrders.index.url(),
                     roles: ['admin', 'warehouse', 'supervisor'],
                 },
                 {
                     title: "Suppliers",
-                    url: "/pos/suppliers",
+                    url: suppliers.index.url(),
                     roles: ['admin', 'warehouse', 'supervisor'],
+                },
+            ],
+        },
+        {
+            title: "Keuangan",
+            url: "#",
+            icon: <Wallet />,
+            isActive: url.startsWith('/pos/finance'),
+            roles: ['admin', 'supervisor'],
+            items: [
+                {
+                    title: "Akun Kas / Bank",
+                    url: financeAccounts.index.url(),
+                    roles: ['admin', 'supervisor'],
+                },
+                {
+                    title: "Hutang Dagang",
+                    url: financePayables.index.url(),
+                    roles: ['admin', 'supervisor'],
+                },
+                {
+                    title: "Buku Arus Kas",
+                    url: financeTransactions.index.url(),
+                    roles: ['admin', 'supervisor'],
                 },
             ],
         },

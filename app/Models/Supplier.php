@@ -42,7 +42,7 @@ class Supplier extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (Supplier $supplier) {
+        static::creating(function (Supplier $supplier): void {
             if (empty($supplier->code)) {
                 $latestId = static::withTrashed()->max('id') ?? 0;
                 $supplier->code = sprintf('SUP-%04d', $latestId + 1);
@@ -84,5 +84,10 @@ class Supplier extends Model
     public function purchaseOrders(): HasMany
     {
         return $this->hasMany(PurchaseOrder::class);
+    }
+
+    public function accountPayables(): HasMany
+    {
+        return $this->hasMany(AccountPayable::class);
     }
 }

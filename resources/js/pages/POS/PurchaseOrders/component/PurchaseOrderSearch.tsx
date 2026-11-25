@@ -14,13 +14,10 @@ import { Loader2, Search, X } from 'lucide-react'
 import type { RouteDefinition, RouteQueryOptions } from '@/wayfinder'
 import SelectSupplierAsync, { type SupplierOption } from './SelectSupplierAsync'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export interface PurchaseOrderFilters {
     search?: string
     status?: string
+    receiving_status?: string
     payment_status?: string
     supplier_id?: string
     start_date?: string
@@ -48,7 +45,8 @@ const TABLE_SORT_LABELS: Record<string, string> = {
     order_date: 'Tgl Pesan',
     expected_date: 'Estimasi Datang',
     due_date: 'Jatuh Tempo',
-    status: 'Status',
+    status: 'Status Dokumen',
+    receiving_status: 'Penerimaan',
     payment_status: 'Pembayaran',
     total_amount: 'Total Tagihan',
 }
@@ -57,25 +55,24 @@ interface PurchaseOrderSearchProps {
     filters: PurchaseOrderFilters
     suppliers: SupplierProp[]
     statuses: StatusOption[]
+    receivingStatuses: StatusOption[]
     paymentStatuses: StatusOption[]
     routeUrl: (options?: RouteQueryOptions) => RouteDefinition<'get'>
     isLoading?: boolean
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function PurchaseOrderSearch({
     filters,
     suppliers,
     statuses,
+    receivingStatuses,
     paymentStatuses,
     routeUrl,
     isLoading = false,
 }: PurchaseOrderSearchProps) {
     const [search, setSearch] = React.useState(filters.search ?? '')
     const [status, setStatus] = React.useState(filters.status ?? 'all')
+    const [receivingStatus, setReceivingStatus] = React.useState(filters.receiving_status ?? 'all')
     const [paymentStatus, setPaymentStatus] = React.useState(filters.payment_status ?? 'all')
     const [supplierId, setSupplierId] = React.useState(filters.supplier_id ?? 'all')
     const [startDate, setStartDate] = React.useState(filters.start_date ?? '')
@@ -85,6 +82,7 @@ export default function PurchaseOrderSearch({
     React.useEffect(() => {
         setSearch(filters.search ?? '')
         setStatus(filters.status ?? 'all')
+        setReceivingStatus(filters.receiving_status ?? 'all')
         setPaymentStatus(filters.payment_status ?? 'all')
         setSupplierId(filters.supplier_id ?? 'all')
         setStartDate(filters.start_date ?? '')
@@ -92,13 +90,13 @@ export default function PurchaseOrderSearch({
     }, [
         filters.search,
         filters.status,
+        filters.receiving_status,
         filters.payment_status,
         filters.supplier_id,
         filters.start_date,
         filters.end_date,
     ])
 
-    // Debounce search 300ms
     React.useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false
@@ -112,16 +110,20 @@ export default function PurchaseOrderSearch({
         return () => clearTimeout(timeout)
     }, [search])
 
-    const applyFilters = (overrides: {
-        searchVal?: string
-        statusVal?: string
-        paymentStatusVal?: string
-        supplierIdVal?: string
-        startDateVal?: string
-        endDateVal?: string
-    } = {}) => {
+    const applyFilters = (
+        overrides: {
+            searchVal?: string
+            statusVal?: string
+            receivingStatusVal?: string
+            paymentStatusVal?: string
+            supplierIdVal?: string
+            startDateVal?: string
+            endDateVal?: string
+        } = {}
+    ) => {
         const sVal = overrides.searchVal !== undefined ? overrides.searchVal : search
         const stVal = overrides.statusVal !== undefined ? overrides.statusVal : status
+        const rstVal = overrides.receivingStatusVal !== undefined ? overrides.receivingStatusVal : receivingStatus
         const pstVal = overrides.paymentStatusVal !== undefined ? overrides.paymentStatusVal : paymentStatus
         const supVal = overrides.supplierIdVal !== undefined ? overrides.supplierIdVal : supplierId
         const sdVal = overrides.startDateVal !== undefined ? overrides.startDateVal : startDate
@@ -132,6 +134,7 @@ export default function PurchaseOrderSearch({
                 mergeQuery: {
                     search: sVal || undefined,
                     status: stVal !== 'all' ? stVal : undefined,
+                    receiving_status: rstVal !== 'all' ? rstVal : undefined,
                     payment_status: pstVal !== 'all' ? pstVal : undefined,
                     supplier_id: supVal !== 'all' ? supVal : undefined,
                     start_date: sdVal || undefined,
@@ -145,36 +148,6 @@ export default function PurchaseOrderSearch({
                 replace: true,
             }
         )
-    }
-
-    const handleSupplierChange = (val: string | null) => {
-        if (val == null) return
-        setSupplierId(val)
-        applyFilters({ supplierIdVal: val })
-    }
-
-    const handleStatusChange = (val: string | null) => {
-        if (val == null) return
-        setStatus(val)
-        applyFilters({ statusVal: val })
-    }
-
-    const handlePaymentStatusChange = (val: string | null) => {
-        if (val == null) return
-        setPaymentStatus(val)
-        applyFilters({ paymentStatusVal: val })
-    }
-
-    const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value
-        setStartDate(val)
-        applyFilters({ startDateVal: val })
-    }
-
-    const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value
-        setEndDate(val)
-        applyFilters({ endDateVal: val })
     }
 
     const handleSortChange = (val: string | null) => {
@@ -193,7 +166,6 @@ export default function PurchaseOrderSearch({
             }
         }
 
-        // Bersihkan sortir header tabel jika kolom yang dipilih di toolbar sama
         const isSameAsTableSort = Boolean(sortVal && sortVal === filters.table_sort)
 
         router.visit(
@@ -217,6 +189,7 @@ export default function PurchaseOrderSearch({
         isFirstRender.current = true
         setSearch('')
         setStatus('all')
+        setReceivingStatus('all')
         setPaymentStatus('all')
         setSupplierId('all')
         setStartDate('')
@@ -227,6 +200,7 @@ export default function PurchaseOrderSearch({
                 mergeQuery: {
                     search: undefined,
                     status: undefined,
+                    receiving_status: undefined,
                     payment_status: undefined,
                     supplier_id: undefined,
                     start_date: undefined,
@@ -269,19 +243,10 @@ export default function PurchaseOrderSearch({
     const isSorted = currentSortKey !== 'default'
     const isTableSorted = Boolean(filters.table_sort && filters.table_direction)
 
-    const hasActiveFilters =
-        Boolean(search) ||
-        status !== 'all' ||
-        paymentStatus !== 'all' ||
-        supplierId !== 'all' ||
-        Boolean(startDate) ||
-        Boolean(endDate) ||
-        isSorted ||
-        isTableSorted
-
     const activeFilterCount = [
         Boolean(search),
         status !== 'all',
+        receivingStatus !== 'all',
         paymentStatus !== 'all',
         supplierId !== 'all',
         Boolean(startDate),
@@ -291,8 +256,13 @@ export default function PurchaseOrderSearch({
     ].filter(Boolean).length
 
     const statusItems = React.useMemo(
-        () => [{ value: 'all', label: 'Semua Status' }, ...statuses],
+        () => [{ value: 'all', label: 'Semua Status Dokumen' }, ...statuses],
         [statuses]
+    )
+
+    const receivingStatusItems = React.useMemo(
+        () => [{ value: 'all', label: 'Semua Penerimaan' }, ...receivingStatuses],
+        [receivingStatuses]
     )
 
     const paymentStatusItems = React.useMemo(
@@ -327,7 +297,7 @@ export default function PurchaseOrderSearch({
                 <div className="relative w-full sm:w-64 lg:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
-                        placeholder="Cari No. PO…"
+                        placeholder="Cari No. PO atau supplier…"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-9 pr-8 h-9 text-sm"
@@ -347,27 +317,35 @@ export default function PurchaseOrderSearch({
                     )}
                 </div>
 
-                {/* Filter Supplier (Async Select) */}
+                {/* Filter Supplier */}
                 <SelectSupplierAsync
                     value={supplierId !== 'all' ? Number(supplierId) : null}
-                    onChange={(val) => handleSupplierChange(val ? String(val) : 'all')}
+                    onChange={(val) => {
+                        const next = val ? String(val) : 'all'
+                        setSupplierId(next)
+                        applyFilters({ supplierIdVal: next })
+                    }}
                     placeholder="Semua Supplier"
                     defaultOptions={supplierOptions.length > 0 ? supplierOptions : true}
                     onlyActive={false}
                     isClearable
                     disabled={isLoading}
-                    className="w-full sm:w-[210px]"
+                    className="w-full sm:w-[205px]"
                 />
 
-                {/* Filter Status PO */}
+                {/* Filter Status Dokumen & Approval */}
                 <Select
                     items={statusItems}
                     value={status}
-                    onValueChange={handleStatusChange}
+                    onValueChange={(val) => {
+                        if (!val) return
+                        setStatus(val)
+                        applyFilters({ statusVal: val })
+                    }}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[165px] h-9">
-                        <SelectValue placeholder="Semua Status">
+                    <SelectTrigger className="w-full sm:w-[190px] h-9">
+                        <SelectValue placeholder="Semua Status Dokumen">
                             {(val) => statusItems.find((s) => s.value === val)?.label}
                         </SelectValue>
                     </SelectTrigger>
@@ -380,11 +358,40 @@ export default function PurchaseOrderSearch({
                     </SelectContent>
                 </Select>
 
+                {/* Filter Status Penerimaan */}
+                <Select
+                    items={receivingStatusItems}
+                    value={receivingStatus}
+                    onValueChange={(val) => {
+                        if (!val) return
+                        setReceivingStatus(val)
+                        applyFilters({ receivingStatusVal: val })
+                    }}
+                    disabled={isLoading}
+                >
+                    <SelectTrigger className="w-full sm:w-[175px] h-9">
+                        <SelectValue placeholder="Semua Penerimaan">
+                            {(val) => receivingStatusItems.find((r) => r.value === val)?.label}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {receivingStatusItems.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                                {item.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
                 {/* Filter Status Pembayaran */}
                 <Select
                     items={paymentStatusItems}
                     value={paymentStatus}
-                    onValueChange={handlePaymentStatusChange}
+                    onValueChange={(val) => {
+                        if (!val) return
+                        setPaymentStatus(val)
+                        applyFilters({ paymentStatusVal: val })
+                    }}
                     disabled={isLoading}
                 >
                     <SelectTrigger className="w-full sm:w-[175px] h-9">
@@ -410,7 +417,10 @@ export default function PurchaseOrderSearch({
                         id="po-date-from"
                         type="date"
                         value={startDate}
-                        onChange={handleStartDateChange}
+                        onChange={(e) => {
+                            setStartDate(e.target.value)
+                            applyFilters({ startDateVal: e.target.value })
+                        }}
                         disabled={isLoading}
                         className="h-9 w-[135px] text-xs"
                     />
@@ -425,7 +435,10 @@ export default function PurchaseOrderSearch({
                         id="po-date-to"
                         type="date"
                         value={endDate}
-                        onChange={handleEndDateChange}
+                        onChange={(e) => {
+                            setEndDate(e.target.value)
+                            applyFilters({ endDateVal: e.target.value })
+                        }}
                         disabled={isLoading}
                         className="h-9 w-[135px] text-xs"
                     />
@@ -472,7 +485,7 @@ export default function PurchaseOrderSearch({
                 )}
 
                 {/* Reset Button */}
-                {hasActiveFilters && (
+                {activeFilterCount > 0 && (
                     <Button
                         variant="outline"
                         size="sm"
@@ -482,11 +495,9 @@ export default function PurchaseOrderSearch({
                     >
                         <X className="h-3.5 w-3.5" />
                         Reset Filter
-                        {activeFilterCount > 0 && (
-                            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                                {activeFilterCount}
-                            </span>
-                        )}
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                            {activeFilterCount}
+                        </span>
                     </Button>
                 )}
             </div>

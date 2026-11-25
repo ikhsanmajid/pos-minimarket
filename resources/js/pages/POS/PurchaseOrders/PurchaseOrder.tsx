@@ -7,12 +7,18 @@ import { Button } from '@/components/ui/button'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
-import { Plus, ShoppingBag } from 'lucide-react'
+import { Plus, Lock, ShieldAlert } from 'lucide-react'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import PurchaseOrderTableToolbar, { type PurchaseOrderFilters } from './component/PurchaseOrderSearch'
 import { PurchaseOrderActionsCell } from './component/PurchaseOrderActionsCell'
 import PurchaseOrderController from '@/actions/App/Http/Controllers/PurchaseOrderController'
 import { DataTableSortHeader } from '@/components/dataTableSortHeader'
+import {
+    formatRupiah,
+    poStatusBadgeConfig,
+    receivingStatusBadgeConfig,
+    paymentStatusBadgeConfig,
+} from './component/purchaseOrderUtils'
 
 export type PurchaseOrderRow = {
     id: number
@@ -20,21 +26,31 @@ export type PurchaseOrderRow = {
     supplier_id: number
     supplier_name: string
     creator_name: string
+    approver_name: string | null
     order_date: string
     expected_date: string | null
     received_at: string | null
     due_date: string | null
     status: string
     status_label: string
+    receiving_status: string
+    receiving_status_label: string
     payment_status: string
     payment_status_label: string
+    is_locked: boolean
+    needs_approval: boolean
     items_count: number
-    total_quantity_ordered: number
-    total_quantity_received: number
+    total_base_qty_ordered: number
+    total_base_qty_received: number
     subtotal: string | number
     discount_amount: string | number
     tax_amount: string | number
     total_amount: string | number
+    paid_amount: number
+    remaining_amount: number
+    can_edit: boolean
+    can_delete: boolean
+    can_cancel: boolean
     created_at?: string
 }
 
@@ -46,74 +62,19 @@ type PurchaseOrderPageProps = PageProps<{
     purchaseOrders: PaginatedPurchaseOrders
     filters: PurchaseOrderFilters
     suppliers: { id: number; name: string; code: string | null; is_active: boolean }[]
+    pendingApprovalCount: number
     statuses: { value: string; label: string }[]
+    receivingStatuses: { value: string; label: string }[]
     paymentStatuses: { value: string; label: string }[]
 }>
 
-const formatRupiah = (val: number | string) => {
-    const num = Number(val) || 0
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-    }).format(num)
-}
-
-const statusBadgeConfig: Record<string, { label: string; className: string }> = {
-    draft: {
-        label: 'Draft',
-        className: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700',
-    },
-    ordered: {
-        label: 'Dipesan',
-        className: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-    },
-    partially_received: {
-        label: 'Diterima Sebagian',
-        className: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800',
-    },
-    received: {
-        label: 'Selesai',
-        className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
-    },
-    cancelled: {
-        label: 'Dibatalkan',
-        className: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-200 dark:border-rose-800',
-    },
-}
-
-const paymentBadgeConfig: Record<string, { label: string; className: string }> = {
-    unpaid: {
-        label: 'Belum Dibayar',
-        className: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-200 dark:border-rose-900',
-    },
-    partial: {
-        label: 'Dibayar Sebagian',
-        className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200 dark:border-amber-900',
-    },
-    paid: {
-        label: 'Lunas',
-        className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900',
-    },
-}
-
 interface GetColumnsOptions {
     from: number | null
-    canEdit: boolean
-    canDelete: boolean
-    canCancel: boolean
     filters: PurchaseOrderFilters
     onSort: (field: string) => void
 }
 
-const getColumns = ({
-    from,
-    canEdit,
-    canDelete,
-    canCancel,
-    filters,
-    onSort,
-}: GetColumnsOptions): DataTableColumn<PurchaseOrderRow>[] => [
+const getColumns = ({ from, filters, onSort }: GetColumnsOptions): DataTableColumn<PurchaseOrderRow>[] => [
     {
         id: 'no',
         header: 'No',
@@ -137,19 +98,26 @@ const getColumns = ({
             const po = info.row.original
             return (
                 <div className="flex flex-col py-0.5 min-w-0">
-                    <Link
-                        href={PurchaseOrderController.show.url(po.id)}
-                        className="font-mono text-xs font-bold text-primary hover:underline truncate"
-                    >
-                        {po.po_number}
-                    </Link>
-                    <span className="text-[11px] text-muted-foreground font-mono">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <Link
+                            href={PurchaseOrderController.show.url(po.id)}
+                            className="font-mono text-xs font-bold text-primary hover:underline truncate"
+                        >
+                            {po.po_number}
+                        </Link>
+                        {po.is_locked && (
+                            <span title="PO Terkunci Permanen (Lunas & Diterima Penuh)">
+                                <Lock className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            </span>
+                        )}
+                    </div>
+                    <span className="text-[11px] text-muted-foreground font-mono truncate">
                         {po.order_date}
                     </span>
                 </div>
             )
         },
-        size: 175,
+        size: 185,
     },
     {
         accessorKey: 'supplier_name',
@@ -160,37 +128,102 @@ const getColumns = ({
                 <div className="flex flex-col py-0.5 min-w-0">
                     <span className="font-medium text-foreground text-sm truncate">{po.supplier_name}</span>
                     <span className="text-[11px] text-muted-foreground truncate">
-                        Dibuat: {po.creator_name}
+                        Oleh: {po.creator_name}
                     </span>
                 </div>
             )
         },
-        size: 220,
+        size: 210,
     },
     {
         accessorKey: 'status',
-        header: 'Status PO',
+        header: () => (
+            <DataTableSortHeader
+                label="Status Dokumen"
+                field="status"
+                tableSort={filters.table_sort}
+                tableDirection={filters.table_direction}
+                toolbarSort={filters.sort}
+                toolbarDirection={filters.direction}
+                onSort={onSort}
+            />
+        ),
         cell: (info) => {
-            const status = info.getValue<string>()
-            const cfg = statusBadgeConfig[status] || {
-                label: status,
-                className: '',
-            }
+            const po = info.row.original
+            const cfg = poStatusBadgeConfig[po.status] || { label: po.status_label, className: '' }
             return (
                 <Badge variant="outline" className={`text-[11px] font-medium ${cfg.className}`}>
                     {cfg.label}
                 </Badge>
             )
         },
-        size: 150,
+        size: 165,
+    },
+    {
+        accessorKey: 'receiving_status',
+        header: () => (
+            <DataTableSortHeader
+                label="Penerimaan"
+                field="receiving_status"
+                tableSort={filters.table_sort}
+                tableDirection={filters.table_direction}
+                toolbarSort={filters.sort}
+                toolbarDirection={filters.direction}
+                onSort={onSort}
+            />
+        ),
+        cell: (info) => {
+            const po = info.row.original
+            const cfg = receivingStatusBadgeConfig[po.receiving_status] || {
+                label: po.receiving_status_label,
+                className: '',
+            }
+            const ordered = Number(po.total_base_qty_ordered) || 0
+            const received = Number(po.total_base_qty_received) || 0
+            const percent = ordered > 0 ? Math.min(100, Math.round((received / ordered) * 100)) : 0
+
+            return (
+                <div className="flex flex-col gap-1 py-0.5">
+                    <Badge variant="outline" className={`text-[10px] w-fit font-medium ${cfg.className}`}>
+                        {cfg.label}
+                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                        <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                            <div
+                                className={`h-full ${
+                                    percent >= 100
+                                        ? 'bg-emerald-500'
+                                        : percent > 0
+                                        ? 'bg-amber-500'
+                                        : 'bg-muted-foreground/30'
+                                }`}
+                                style={{ width: `${percent}%` }}
+                            />
+                        </div>
+                        <span className="font-mono text-[10px] text-muted-foreground">{percent}%</span>
+                    </div>
+                </div>
+            )
+        },
+        size: 165,
     },
     {
         accessorKey: 'payment_status',
-        header: 'Pembayaran',
+        header: () => (
+            <DataTableSortHeader
+                label="Pembayaran"
+                field="payment_status"
+                tableSort={filters.table_sort}
+                tableDirection={filters.table_direction}
+                toolbarSort={filters.sort}
+                toolbarDirection={filters.direction}
+                onSort={onSort}
+            />
+        ),
         cell: (info) => {
-            const pStatus = info.getValue<string>()
-            const cfg = paymentBadgeConfig[pStatus] || {
-                label: pStatus,
+            const po = info.row.original
+            const cfg = paymentStatusBadgeConfig[po.payment_status] || {
+                label: po.payment_status_label,
                 className: '',
             }
             return (
@@ -200,38 +233,6 @@ const getColumns = ({
             )
         },
         size: 145,
-    },
-    {
-        id: 'progress',
-        header: 'Progres Penerimaan',
-        cell: (info) => {
-            const po = info.row.original
-            const ordered = Number(po.total_quantity_ordered) || 0
-            const received = Number(po.total_quantity_received) || 0
-            const percent = ordered > 0 ? Math.min(100, Math.round((received / ordered) * 100)) : 0
-
-            return (
-                <div className="flex flex-col py-0.5 gap-1">
-                    <div className="flex items-center justify-between text-[11px] font-mono">
-                        <span>{received} / {ordered} unit</span>
-                        <span className="font-semibold text-muted-foreground">{percent}%</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                        <div
-                            className={`h-full transition-all duration-300 ${
-                                percent >= 100
-                                    ? 'bg-emerald-500'
-                                    : percent > 0
-                                    ? 'bg-amber-500'
-                                    : 'bg-muted-foreground/30'
-                            }`}
-                            style={{ width: `${percent}%` }}
-                        />
-                    </div>
-                </div>
-            )
-        },
-        size: 170,
     },
     {
         accessorKey: 'total_amount',
@@ -247,23 +248,18 @@ const getColumns = ({
             />
         ),
         cell: (info) => (
-            <span className="font-mono text-xs font-bold text-foreground">
+            <span className="font-mono text-xs font-semibold text-foreground">
                 {formatRupiah(info.getValue<number | string>())}
             </span>
         ),
-        size: 155,
+        size: 150,
     },
     {
         id: 'actions',
         header: () => <span className="text-right block w-full pr-2">Aksi</span>,
         cell: (info) => (
             <div className="flex justify-end pr-2">
-                <PurchaseOrderActionsCell
-                    po={info.row.original}
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    canCancel={canCancel}
-                />
+                <PurchaseOrderActionsCell po={info.row.original} />
             </div>
         ),
         size: 70,
@@ -274,12 +270,14 @@ type PurchaseOrderComponent = React.FC & {
     layout?: (page: React.ReactNode) => React.ReactNode
 }
 
-const PurchaseOrdersIndex: PurchaseOrderComponent = () => {
+const PurchaseOrderPage: PurchaseOrderComponent = () => {
     const {
         purchaseOrders,
         filters,
         suppliers = [],
+        pendingApprovalCount = 0,
         statuses = [],
+        receivingStatuses = [],
         paymentStatuses = [],
     } = usePage<PurchaseOrderPageProps>().props
     const { flash, user } = useAuth()
@@ -287,9 +285,7 @@ const PurchaseOrdersIndex: PurchaseOrderComponent = () => {
 
     const userRole = (user?.role as string) || ''
     const canCreate = ['admin', 'supervisor', 'warehouse'].includes(userRole)
-    const canEdit = ['admin', 'supervisor', 'warehouse'].includes(userRole)
-    const canDelete = ['admin', 'supervisor'].includes(userRole)
-    const canCancel = ['admin', 'supervisor'].includes(userRole)
+    const isAdmin = userRole === 'admin'
 
     const handleSort = (field: string) => {
         if (filters.sort === field) {
@@ -325,21 +321,31 @@ const PurchaseOrdersIndex: PurchaseOrderComponent = () => {
         )
     }
 
+    const handleFilterPendingApproval = () => {
+        router.visit(
+            PurchaseOrderController.index({
+                mergeQuery: {
+                    status: 'pending_approval',
+                    page: 1,
+                },
+            }),
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            }
+        )
+    }
+
     const columns = React.useMemo(
         () =>
             getColumns({
                 from: purchaseOrders.from,
-                canEdit,
-                canDelete,
-                canCancel,
                 filters,
                 onSort: handleSort,
             }),
         [
             purchaseOrders.from,
-            canEdit,
-            canDelete,
-            canCancel,
             filters.table_sort,
             filters.table_direction,
             filters.sort,
@@ -348,10 +354,13 @@ const PurchaseOrdersIndex: PurchaseOrderComponent = () => {
     )
 
     useEffect(() => {
-        if (flash.success) {
+        if (flash?.success) {
             toast.success(flash.success)
         }
-    }, [flash.success])
+        if (flash?.error) {
+            toast.error(flash.error)
+        }
+    }, [flash?.success, flash?.error])
 
     useEffect(() => {
         const removeStart = router.on('start', () => setIsLoading(true))
@@ -369,7 +378,7 @@ const PurchaseOrdersIndex: PurchaseOrderComponent = () => {
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Purchase Orders</h1>
                     <p className="text-sm text-muted-foreground">
-                        Kelola pesanan pembelian ke supplier, penerimaan bertahap, dan harga beli rata-rata tertimbang.
+                        Kelola pesanan pembelian Multi-UOM, persetujuan Admin, penerimaan LPB, dan pelunasan hutang.
                     </p>
                 </div>
                 {canCreate && (
@@ -384,10 +393,34 @@ const PurchaseOrdersIndex: PurchaseOrderComponent = () => {
                 )}
             </div>
 
+            {pendingApprovalCount > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-4 py-3 text-xs">
+                    <div className="flex items-center gap-2.5 text-amber-900 dark:text-amber-200">
+                        <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <span>
+                            Terdapat <strong>{pendingApprovalCount} Purchase Order</strong> yang sedang menunggu persetujuan Admin
+                            {isAdmin ? '. Silakan tinjau dan setujui/tolak agar gudang dapat memproses penerimaan.' : '.'}
+                        </span>
+                    </div>
+                    {filters.status !== 'pending_approval' && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            onClick={handleFilterPendingApproval}
+                            className="border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 shrink-0"
+                        >
+                            Filter Menunggu ACC
+                        </Button>
+                    )}
+                </div>
+            )}
+
             <PurchaseOrderTableToolbar
                 filters={filters}
                 suppliers={suppliers}
                 statuses={statuses}
+                receivingStatuses={receivingStatuses}
                 paymentStatuses={paymentStatuses}
                 routeUrl={PurchaseOrderController.index}
                 isLoading={isLoading}
@@ -410,8 +443,8 @@ const PurchaseOrdersIndex: PurchaseOrderComponent = () => {
     )
 }
 
-PurchaseOrdersIndex.layout = (page: React.ReactNode) => (
+PurchaseOrderPage.layout = (page: React.ReactNode) => (
     <AuthenticatedLayout>{page}</AuthenticatedLayout>
 )
 
-export default PurchaseOrdersIndex
+export default PurchaseOrderPage

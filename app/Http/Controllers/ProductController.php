@@ -6,7 +6,10 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductUnit;
+use App\Models\StockMovement;
 use App\Models\User;
+use App\Services\ProductUnitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,7 +37,6 @@ class ProductController extends Controller
 
         $perPage = $request->integer('per_page', 10);
 
-        // Sorting definitions
         $allowedTableSorts = ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active'];
         $allowedToolbarSorts = ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active', 'created_at'];
 
@@ -46,11 +48,14 @@ class ProductController extends Controller
         $toolbarDirection = strtolower((string) $request->input('direction')) === 'asc' ? 'asc' : 'desc';
         $hasToolbarSort = ! empty($toolbarSort) && in_array($toolbarSort, $allowedToolbarSorts, true);
 
-        $query = Product::with('category')
+        $query = Product::with(['category', 'units'])
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'ilike', "%{$search}%")
-                        ->orWhere('barcode', 'ilike', "%{$search}%");
+                        ->orWhere('barcode', 'ilike', "%{$search}%")
+                        ->orWhereHas('units', function ($u) use ($search) {
+                            $u->where('barcode', 'ilike', "%{$search}%");
+                        });
                 });
             })
             ->when($request->category_id && $request->category_id !== 'all', function ($query) use ($request) {
@@ -76,18 +81,14 @@ class ProductController extends Controller
                 };
             });
 
-        // Multi-column sorting:
-        // 1. Table header sort is the primary sort (if active)
         if ($hasTableSort) {
             $query->orderBy($tableSort, $tableDirection);
         }
 
-        // 2. Toolbar select sort is the secondary sort (or primary if table sort is not active)
         if ($hasToolbarSort && (! $hasTableSort || $toolbarSort !== $tableSort)) {
             $query->orderBy($toolbarSort, $toolbarDirection);
         }
 
-        // Fallback default sorting if neither is active, or tie-breaker for deterministic pagination
         if (! $hasTableSort && ! $hasToolbarSort) {
             $query->orderBy('created_at', 'desc');
         } elseif (($hasTableSort && $tableSort !== 'created_at') && (! $hasToolbarSort || $toolbarSort !== 'created_at')) {
@@ -101,6 +102,7 @@ class ProductController extends Controller
                 'category_id' => $product->category_id,
                 'barcode' => $product->barcode,
                 'name' => $product->name,
+                'base_unit' => $product->base_unit ?: 'pcs',
                 'category' => $product->category?->name,
                 'buy_price' => $product->buy_price,
                 'sell_price' => $product->sell_price,
@@ -108,6 +110,16 @@ class ProductController extends Controller
                 'min_stock' => $product->min_stock,
                 'image' => $product->image ? asset('storage/'.$product->image) : null,
                 'active' => (bool) $product->active,
+                'units' => $product->units->map(fn (ProductUnit $unit) => [
+                    'id' => $unit->id,
+                    'unit_name' => $unit->unit_name,
+                    'conversion_factor' => (int) $unit->conversion_factor,
+                    'barcode' => $unit->barcode,
+                    'buy_price' => (float) $unit->buy_price,
+                    'sell_price' => $unit->sell_price !== null ? (float) $unit->sell_price : null,
+                    'is_default_purchase' => (bool) $unit->is_default_purchase,
+                    'is_active' => (bool) $unit->is_active,
+                ])->values()->all(),
             ]);
 
         $categories = Category::orderBy('name')->get(['id', 'name', 'is_active']);
@@ -124,17 +136,18 @@ class ProductController extends Controller
         return redirect()->route('pos.products.index');
     }
 
-    public function store(StoreProductRequest $request): RedirectResponse
+    public function store(StoreProductRequest $request, ProductUnitService $productUnitService): RedirectResponse
     {
         Gate::authorize('insertProduk', Product::class);
 
         $data = $request->validated();
+        $units = $data['units'] ?? [];
 
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('products', 'public');
         }
 
-        Product::create($data);
+        $productUnitService->createProductWithUnits($data, $units);
 
         return redirect()->route('pos.products.index')
             ->with('success', 'Produk berhasil ditambahkan.');
@@ -144,7 +157,7 @@ class ProductController extends Controller
     {
         Gate::authorize('view', $product);
 
-        $product->load('category');
+        $product->load(['category', 'units']);
 
         return Inertia::render('POS/Product/DetailProduct', [
             'product' => [
@@ -153,6 +166,7 @@ class ProductController extends Controller
                 'category_name' => $product->category?->name,
                 'barcode' => $product->barcode,
                 'name' => $product->name,
+                'base_unit' => $product->base_unit ?: 'pcs',
                 'buy_price' => $product->buy_price,
                 'sell_price' => $product->sell_price,
                 'stock' => $product->stock,
@@ -161,7 +175,47 @@ class ProductController extends Controller
                 'active' => (bool) $product->active,
                 'created_at' => $product->created_at?->format('d M Y H:i'),
                 'updated_at' => $product->updated_at?->format('d M Y H:i'),
+                'units' => $product->units->map(fn (ProductUnit $unit) => [
+                    'id' => $unit->id,
+                    'unit_name' => $unit->unit_name,
+                    'conversion_factor' => (int) $unit->conversion_factor,
+                    'barcode' => $unit->barcode,
+                    'buy_price' => (float) $unit->buy_price,
+                    'sell_price' => $unit->sell_price !== null ? (float) $unit->sell_price : null,
+                    'is_default_purchase' => (bool) $unit->is_default_purchase,
+                    'is_active' => (bool) $unit->is_active,
+                ])->values()->all(),
             ],
+            'stockMovements' => Inertia::optional(function () use ($request, $product) {
+                $perPage = $request->integer('mutation_per_page', 15);
+
+                $paginated = StockMovement::where('product_id', $product->id)
+                    ->with('creator:id,name')
+                    ->latest('id')
+                    ->paginate($perPage, ['*'], 'mutation_page')
+                    ->withQueryString();
+
+                return [
+                    'data' => collect($paginated->items())->map(fn (StockMovement $movement) => [
+                        'id' => $movement->id,
+                        'type' => $movement->type->value,
+                        'type_label' => $movement->type->label(),
+                        'stock_before' => (int) $movement->stock_before,
+                        'qty_change' => (int) $movement->qty_change,
+                        'stock_after' => (int) $movement->stock_after,
+                        'unit_cost' => (float) $movement->unit_cost,
+                        'notes' => $movement->notes,
+                        'creator_name' => $movement->creator?->name ?? 'Sistem',
+                        'created_at' => $movement->created_at?->format('d M Y H:i:s'),
+                    ])->all(),
+                    'current_page' => $paginated->currentPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'per_page' => $paginated->perPage(),
+                    'total' => $paginated->total(),
+                    'from' => $paginated->firstItem(),
+                    'to' => $paginated->lastItem(),
+                ];
+            }),
             'activities' => Inertia::optional(function () use ($request, $product) {
                 $perPage = $request->integer('per_page', 10);
 
@@ -218,6 +272,7 @@ class ProductController extends Controller
     {
         Gate::authorize('update', $product);
 
+        $product->load('units');
         $categories = Category::orderBy('name')->get(['id', 'name']);
 
         return Inertia::render('POS/Product/EditProduct', [
@@ -226,21 +281,32 @@ class ProductController extends Controller
                 'category_id' => $product->category_id,
                 'barcode' => $product->barcode,
                 'name' => $product->name,
+                'base_unit' => $product->base_unit ?: 'pcs',
                 'buy_price' => $product->buy_price,
                 'sell_price' => $product->sell_price,
                 'stock' => $product->stock,
                 'min_stock' => $product->min_stock,
                 'image' => $product->image ? asset('storage/'.$product->image) : null,
                 'active' => (bool) $product->active,
+                'units' => $product->units->map(fn (ProductUnit $unit) => [
+                    'id' => $unit->id,
+                    'unit_name' => $unit->unit_name,
+                    'conversion_factor' => (int) $unit->conversion_factor,
+                    'barcode' => $unit->barcode,
+                    'buy_price' => (float) $unit->buy_price,
+                    'sell_price' => $unit->sell_price !== null ? (float) $unit->sell_price : null,
+                    'is_default_purchase' => (bool) $unit->is_default_purchase,
+                    'is_active' => (bool) $unit->is_active,
+                ])->values()->all(),
             ],
             'categories' => $categories,
         ]);
     }
 
-    public function update(UpdateProductRequest $request, Product $product): RedirectResponse
+    public function update(UpdateProductRequest $request, Product $product, ProductUnitService $productUnitService): RedirectResponse
     {
         $data = $request->validated();
-        unset($data['stock']); // Cegah override perhitungan stok dari form edit
+        $units = array_key_exists('units', $data) ? ($data['units'] ?? []) : null;
 
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('products', 'public');
@@ -248,7 +314,7 @@ class ProductController extends Controller
             unset($data['image']);
         }
 
-        $product->update($data);
+        $productUnitService->updateProductWithUnits($product, $data, $units);
 
         return redirect()->route('pos.products.index')
             ->with('success', 'Data produk berhasil diperbarui.');
@@ -262,30 +328,43 @@ class ProductController extends Controller
         $onlyActive = $request->boolean('only_active', true);
 
         $products = Product::query()
-            ->with('category:id,name')
+            ->with(['category:id,name', 'activeUnits'])
             ->when($onlyActive, function ($query) {
                 $query->where('active', true);
             })
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'ilike', "%{$search}%")
-                        ->orWhere('barcode', 'ilike', "%{$search}%");
+                        ->orWhere('barcode', 'ilike', "%{$search}%")
+                        ->orWhereHas('units', function ($u) use ($search) {
+                            $u->where('barcode', 'ilike', "%{$search}%");
+                        });
                 });
             })
             ->orderBy('name')
             ->limit(25)
-            ->get(['id', 'name', 'barcode', 'buy_price', 'sell_price', 'stock', 'min_stock', 'category_id'])
+            ->get(['id', 'name', 'base_unit', 'barcode', 'buy_price', 'sell_price', 'stock', 'min_stock', 'category_id'])
             ->map(fn (Product $p) => [
                 'value' => $p->id,
-                'label' => "{$p->name} ({$p->barcode}) - Stok: {$p->stock}",
+                'label' => "{$p->name} ({$p->barcode}) - Stok: {$p->stock} ".($p->base_unit ?: 'pcs'),
                 'id' => $p->id,
                 'name' => $p->name,
+                'base_unit' => $p->base_unit ?: 'pcs',
                 'barcode' => $p->barcode,
                 'buy_price' => (float) $p->buy_price,
                 'sell_price' => (float) $p->sell_price,
                 'stock' => (int) $p->stock,
                 'min_stock' => (int) $p->min_stock,
                 'category_name' => $p->category?->name ?? '-',
+                'units' => $p->activeUnits->map(fn (ProductUnit $unit) => [
+                    'id' => $unit->id,
+                    'unit_name' => $unit->unit_name,
+                    'conversion_factor' => (int) $unit->conversion_factor,
+                    'barcode' => $unit->barcode,
+                    'buy_price' => (float) $unit->buy_price,
+                    'sell_price' => $unit->sell_price !== null ? (float) $unit->sell_price : null,
+                    'is_default_purchase' => (bool) $unit->is_default_purchase,
+                ])->values()->all(),
             ]);
 
         return response()->json($products);

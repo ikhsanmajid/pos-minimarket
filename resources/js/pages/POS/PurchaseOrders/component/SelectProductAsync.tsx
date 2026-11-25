@@ -4,18 +4,21 @@ import { useDebouncedCallback } from 'use-debounce'
 import { cn } from '@/lib/utils'
 import ProductController from '@/actions/App/Http/Controllers/ProductController'
 import type { ActionMeta, SingleValue } from 'react-select'
+import type { ProductUnitOption } from './purchaseOrderUtils'
 
 export interface ProductOption {
     value: number
     label: string
     id?: number
     name?: string
+    base_unit?: string
     barcode?: string
     buy_price?: number
     sell_price?: number
     stock?: number
     min_stock?: number
     category_name?: string
+    units?: ProductUnitOption[]
 }
 
 export interface SelectProductAsyncProps {

@@ -22,8 +22,10 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Upload, Package, X } from 'lucide-react'
+import { toast } from 'react-toastify'
 import ProductController from '@/actions/App/Http/Controllers/ProductController'
-import type { Category, Product } from '../Product'
+import { ProductUnitsSection, type ProductUnitFormRow } from './ProductUnitsSection'
+import type { Category, Product, ProductUnit } from '../Product'
 
 interface DialogEditProductProps {
     product: Product
@@ -31,6 +33,20 @@ interface DialogEditProductProps {
     open: boolean
     onOpenChange: (open: boolean) => void
 }
+
+const BASE_UNIT_PRESETS = ['pcs', 'botol', 'bungkus', 'kaleng', 'sachet', 'cup', 'gram']
+
+const mapUnitsToForm = (units?: ProductUnit[]): ProductUnitFormRow[] =>
+    (units ?? []).map((u) => ({
+        id: u.id,
+        unit_name: u.unit_name,
+        conversion_factor: String(u.conversion_factor),
+        barcode: u.barcode ?? '',
+        buy_price: String(u.buy_price ?? 0),
+        sell_price: u.sell_price !== null && u.sell_price !== undefined ? String(u.sell_price) : '',
+        is_default_purchase: Boolean(u.is_default_purchase),
+        is_active: Boolean(u.is_active),
+    }))
 
 export function DialogEditProduct({
     product,
@@ -46,15 +62,17 @@ export function DialogEditProduct({
         category_id: String(product.category_id || ''),
         barcode: product.barcode,
         name: product.name,
+        base_unit: product.base_unit || 'pcs',
         buy_price: String(product.buy_price),
         sell_price: String(product.sell_price),
         stock: String(product.stock),
         min_stock: String(product.min_stock),
         image: null as File | null,
         active: Boolean(product.active),
+        units_present: true,
+        units: mapUnitsToForm(product.units),
     })
 
-    // Sync values when different product opened
     React.useEffect(() => {
         if (open) {
             setImagePreview(product.image || null)
@@ -63,15 +81,18 @@ export function DialogEditProduct({
                 category_id: String(product.category_id || ''),
                 barcode: product.barcode,
                 name: product.name,
+                base_unit: product.base_unit || 'pcs',
                 buy_price: String(product.buy_price),
                 sell_price: String(product.sell_price),
                 stock: String(product.stock),
                 min_stock: String(product.min_stock),
                 image: null,
                 active: Boolean(product.active),
+                units_present: true,
+                units: mapUnitsToForm(product.units),
             })
         }
-    }, [open, product.id])
+    }, [open, product])
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -98,6 +119,9 @@ export function DialogEditProduct({
                 onOpenChange(false)
                 reset()
             },
+            onError: () => {
+                toast.error('Periksa kembali inputan produk & satuan konversi Anda.')
+            },
         })
     }
 
@@ -108,11 +132,12 @@ export function DialogEditProduct({
         }))
     }, [categories])
 
+    const baseUnitLabel = data.base_unit.trim() || 'pcs'
+
     return (
         <Dialog
             open={open}
             onOpenChange={(nextOpen, eventDetails) => {
-                // Cegah penutupan jika klik di luar area modal
                 if (!nextOpen && eventDetails?.reason === 'outside-press') {
                     return
                 }
@@ -125,11 +150,11 @@ export function DialogEditProduct({
                     <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
                         <DialogTitle>Edit Produk</DialogTitle>
                         <DialogDescription>
-                            Perbarui informasi produk <strong>{product.name}</strong>.
+                            Perbarui informasi produk & konversi Multi-UOM untuk <strong>{product.name}</strong>.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 custom-scrollbar">
                         <FieldGroup className="space-y-4">
                             {/* Foto Produk */}
                             <div className="flex items-center gap-4 rounded-lg border bg-muted/20 p-3">
@@ -189,7 +214,7 @@ export function DialogEditProduct({
                             {/* Barcode & Nama */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Field>
-                                    <Label htmlFor="edit-barcode">Barcode</Label>
+                                    <Label htmlFor="edit-barcode">Barcode Utama</Label>
                                     <Input
                                         id="edit-barcode"
                                         value={data.barcode}
@@ -211,34 +236,64 @@ export function DialogEditProduct({
                                 </Field>
                             </div>
 
-                            {/* Kategori */}
-                            <Field>
-                                <Label htmlFor="edit-category">Kategori</Label>
-                                <Select
-                                    items={categoryItems}
-                                    value={data.category_id}
-                                    onValueChange={(val) => val && setData('category_id', val)}
-                                >
-                                    <SelectTrigger id="edit-category" className="w-full" aria-invalid={!!errors.category_id}>
-                                        <SelectValue placeholder="Pilih Kategori">
-                                            {(val) => categoryItems.find((c) => c.value === val)?.label}
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {categoryItems.map((c) => (
-                                            <SelectItem key={c.value} value={c.value}>
-                                                {c.label}
-                                            </SelectItem>
+                            {/* Kategori & Satuan Dasar */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field>
+                                    <Label htmlFor="edit-category">Kategori</Label>
+                                    <Select
+                                        items={categoryItems}
+                                        value={data.category_id}
+                                        onValueChange={(val) => val && setData('category_id', val)}
+                                    >
+                                        <SelectTrigger id="edit-category" className="w-full" aria-invalid={!!errors.category_id}>
+                                            <SelectValue placeholder="Pilih Kategori">
+                                                {(val) => categoryItems.find((c) => c.value === val)?.label}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {categoryItems.map((c) => (
+                                                <SelectItem key={c.value} value={c.value}>
+                                                    {c.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FieldError>{errors.category_id}</FieldError>
+                                </Field>
+
+                                <Field>
+                                    <Label htmlFor="edit-base-unit">Satuan Dasar</Label>
+                                    <Input
+                                        id="edit-base-unit"
+                                        value={data.base_unit}
+                                        onChange={(e) => setData('base_unit', e.target.value)}
+                                        placeholder="pcs, botol, bungkus..."
+                                        aria-invalid={!!errors.base_unit}
+                                    />
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                        {BASE_UNIT_PRESETS.map((preset) => (
+                                            <button
+                                                key={preset}
+                                                type="button"
+                                                onClick={() => setData('base_unit', preset)}
+                                                className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors cursor-pointer ${
+                                                    data.base_unit === preset
+                                                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                        : 'border-border text-muted-foreground hover:text-foreground'
+                                                }`}
+                                            >
+                                                {preset}
+                                            </button>
                                         ))}
-                                    </SelectContent>
-                                </Select>
-                                <FieldError>{errors.category_id}</FieldError>
-                            </Field>
+                                    </div>
+                                    <FieldError>{errors.base_unit}</FieldError>
+                                </Field>
+                            </div>
 
                             {/* Harga Beli & Jual */}
                             <div className="grid grid-cols-2 gap-3">
                                 <Field>
-                                    <Label htmlFor="edit-buy-price">Harga Beli (Rp)</Label>
+                                    <Label htmlFor="edit-buy-price">Harga Beli / HPP per {baseUnitLabel} (Rp)</Label>
                                     <Input
                                         id="edit-buy-price"
                                         type="number"
@@ -251,7 +306,7 @@ export function DialogEditProduct({
                                 </Field>
 
                                 <Field>
-                                    <Label htmlFor="edit-sell-price">Harga Jual (Rp)</Label>
+                                    <Label htmlFor="edit-sell-price">Harga Jual per {baseUnitLabel} (Rp)</Label>
                                     <Input
                                         id="edit-sell-price"
                                         type="number"
@@ -267,7 +322,7 @@ export function DialogEditProduct({
                             {/* Stok & Min Stok */}
                             <div className="grid grid-cols-2 gap-3">
                                 <Field>
-                                    <Label htmlFor="edit-stock">Stok</Label>
+                                    <Label htmlFor="edit-stock">Stok ({baseUnitLabel})</Label>
                                     <Input
                                         id="edit-stock"
                                         type="number"
@@ -277,13 +332,13 @@ export function DialogEditProduct({
                                         title="Stok tidak dapat diedit langsung untuk menjaga keakuratan mutasi stok"
                                     />
                                     <p className="text-[11px] text-muted-foreground mt-1">
-                                        Terkunci (kelola via mutasi stok).
+                                        Terkunci (kelola via penerimaan PO / mutasi stok).
                                     </p>
                                     <FieldError>{errors.stock}</FieldError>
                                 </Field>
 
                                 <Field>
-                                    <Label htmlFor="edit-min-stock">Min. Stok</Label>
+                                    <Label htmlFor="edit-min-stock">Min. Stok ({baseUnitLabel})</Label>
                                     <Input
                                         id="edit-min-stock"
                                         type="number"
@@ -295,6 +350,15 @@ export function DialogEditProduct({
                                     <FieldError>{errors.min_stock}</FieldError>
                                 </Field>
                             </div>
+
+                            {/* Konversi Multi-Satuan */}
+                            <ProductUnitsSection
+                                baseUnit={data.base_unit}
+                                baseBuyPrice={Number(data.buy_price) || 0}
+                                units={data.units}
+                                onChange={(nextUnits) => setData('units', nextUnits)}
+                                errors={errors as Record<string, string | undefined>}
+                            />
 
                             {/* Status Aktif */}
                             <div className="flex items-center justify-between rounded-lg border border-border p-3">

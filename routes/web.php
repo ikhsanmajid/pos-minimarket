@@ -1,15 +1,17 @@
 <?php
 
+use App\Http\Controllers\AccountPayableController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\FinancialAccountController;
+use App\Http\Controllers\FinancialTransactionController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
-use App\Models\Product;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -24,22 +26,22 @@ Route::middleware('auth')->group(function () {
     // Logout
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 
-    Route::prefix('/pos')->name('pos.')->group(function () { // pos
+    Route::prefix('/pos')->name('pos.')->group(function () {
         Route::redirect('/', '/pos/dashboard');
 
         // Dashboard
-        Route::get('/dashboard', [HomeController::class, 'index'])->name('dashboard.index'); // pos.dashboard.index
+        Route::get('/dashboard', [HomeController::class, 'index'])->name('dashboard.index');
 
         // Product
         Route::prefix('/products')->name('products.')->group(function () {
-            Route::get('/', [ProductController::class, 'index'])->name('index'); // pos.products.index
-            Route::get('/search', [ProductController::class, 'search'])->name('search'); // pos.products.search
-            Route::get('/create', [ProductController::class, 'create'])->name('create'); // pos.products.create
-            Route::post('/create', [ProductController::class, 'store'])->name('store'); // pos.products.store
-            Route::get('/{product}', [ProductController::class, 'show'])->name('show'); // pos.products.show
-            Route::get('/{product}/edit', [ProductController::class, 'edit'])->name('edit'); // pos.products.edit
-            Route::match(['post', 'patch'], '/{product}', [ProductController::class, 'update'])->name('update'); // pos.products.update
-            Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy'); // pos.products.destroy
+            Route::get('/', [ProductController::class, 'index'])->name('index');
+            Route::get('/search', [ProductController::class, 'search'])->name('search');
+            Route::get('/create', [ProductController::class, 'create'])->name('create');
+            Route::post('/create', [ProductController::class, 'store'])->name('store');
+            Route::get('/{product}', [ProductController::class, 'show'])->name('show');
+            Route::get('/{product}/edit', [ProductController::class, 'edit'])->name('edit');
+            Route::match(['post', 'patch'], '/{product}', [ProductController::class, 'update'])->name('update');
+            Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy');
         });
 
         // Categories
@@ -57,14 +59,35 @@ Route::middleware('auth')->group(function () {
             Route::post('/', [PurchaseOrderController::class, 'store'])->name('store');
             Route::get('/{purchaseOrder}', [PurchaseOrderController::class, 'show'])->name('show');
             Route::get('/{purchaseOrder}/pdf', [PurchaseOrderController::class, 'downloadPdf'])->name('pdf');
+            Route::get('/{purchaseOrder}/receipts/{receipt}/pdf', [PurchaseOrderController::class, 'downloadReceiptPdf'])->name('receipt-pdf');
             Route::get('/{purchaseOrder}/edit', [PurchaseOrderController::class, 'edit'])->name('edit');
             Route::match(['post', 'patch'], '/{purchaseOrder}', [PurchaseOrderController::class, 'update'])->name('update');
             Route::delete('/{purchaseOrder}', [PurchaseOrderController::class, 'destroy'])->name('destroy');
+            Route::post('/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit'])->name('submit');
+            Route::post('/{purchaseOrder}/approve', [PurchaseOrderController::class, 'approve'])->name('approve');
+            Route::post('/{purchaseOrder}/reject', [PurchaseOrderController::class, 'reject'])->name('reject');
+            Route::post('/{purchaseOrder}/revise', [PurchaseOrderController::class, 'revise'])->name('revise');
             Route::post('/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->name('receive');
-            Route::post('/{purchaseOrder}/mark-ordered', [PurchaseOrderController::class, 'markOrdered'])->name('mark-ordered');
+            Route::post('/{purchaseOrder}/payments', [PurchaseOrderController::class, 'recordPayment'])->name('payments.store');
             Route::post('/{purchaseOrder}/close-remaining', [PurchaseOrderController::class, 'closeRemaining'])->name('close-remaining');
-            Route::patch('/{purchaseOrder}/payment-status', [PurchaseOrderController::class, 'updatePaymentStatus'])->name('payment-status');
             Route::post('/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel'])->name('cancel');
+        });
+
+        // Keuangan (Fondasi Finance)
+        Route::prefix('/finance')->name('finance.')->group(function () {
+            Route::prefix('/accounts')->name('accounts.')->group(function () {
+                Route::get('/', [FinancialAccountController::class, 'index'])->name('index');
+                Route::post('/', [FinancialAccountController::class, 'store'])->name('store');
+                Route::patch('/{financialAccount}', [FinancialAccountController::class, 'update'])->name('update');
+                Route::delete('/{financialAccount}', [FinancialAccountController::class, 'destroy'])->name('destroy');
+            });
+
+            Route::prefix('/payables')->name('payables.')->group(function () {
+                Route::get('/', [AccountPayableController::class, 'index'])->name('index');
+                Route::post('/{accountPayable}/payments', [AccountPayableController::class, 'recordPayment'])->name('payments.store');
+            });
+
+            Route::get('/transactions', [FinancialTransactionController::class, 'index'])->name('transactions.index');
         });
 
         // Manajemen Users
@@ -83,9 +106,7 @@ Route::middleware('auth')->group(function () {
 
         // Log Aktivitas
         Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
-
     });
-
 });
 
 // Fallback route to serve public storage files when symlinks cannot be created (e.g. Windows without admin privileges)

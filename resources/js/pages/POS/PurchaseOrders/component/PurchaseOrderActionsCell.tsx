@@ -18,31 +18,23 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Eye, Pencil, Trash2, Ban, FileDown } from 'lucide-react'
-import type { PurchaseOrderRow } from '../Index'
+import { MoreHorizontal, Eye, Pencil, Trash2, Ban, FileDown, Lock } from 'lucide-react'
+import type { PurchaseOrderRow } from '../PurchaseOrder'
 import PurchaseOrderController from '@/actions/App/Http/Controllers/PurchaseOrderController'
 
 interface PurchaseOrderActionsCellProps {
     po: PurchaseOrderRow
-    canEdit: boolean
-    canDelete: boolean
-    canCancel: boolean
 }
 
-export function PurchaseOrderActionsCell({
-    po,
-    canEdit,
-    canDelete,
-    canCancel,
-}: PurchaseOrderActionsCellProps) {
+export function PurchaseOrderActionsCell({ po }: PurchaseOrderActionsCellProps) {
     const [deleteOpen, setDeleteOpen] = React.useState(false)
     const [cancelOpen, setCancelOpen] = React.useState(false)
     const [cancelReason, setCancelReason] = React.useState('')
     const [processing, setProcessing] = React.useState(false)
 
-    const canBeEdited = canEdit && ['draft', 'ordered'].includes(po.status) && po.total_quantity_received === 0
-    const canBeDeleted = canDelete && po.total_quantity_received === 0
-    const canBeCancelled = canCancel && !['received', 'cancelled'].includes(po.status) && po.total_quantity_received === 0
+    const canBeEdited = !po.is_locked && po.can_edit
+    const canBeDeleted = !po.is_locked && po.can_delete
+    const canBeCancelled = !po.is_locked && po.can_cancel
 
     const handleDelete = () => {
         setProcessing(true)
@@ -57,15 +49,17 @@ export function PurchaseOrderActionsCell({
 
     const handleCancel = () => {
         setProcessing(true)
-        router.post(PurchaseOrderController.cancel.url(po.id), {
-            reason: cancelReason,
-        }, {
-            preserveScroll: true,
-            onFinish: () => {
-                setProcessing(false)
-                setCancelOpen(false)
-            },
-        })
+        router.post(
+            PurchaseOrderController.cancel.url(po.id),
+            { reason: cancelReason },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setProcessing(false)
+                    setCancelOpen(false)
+                },
+            }
+        )
     }
 
     return (
@@ -84,7 +78,7 @@ export function PurchaseOrderActionsCell({
                     <MoreHorizontal className="h-4 w-4" />
                 </DropdownMenuTrigger>
 
-                <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuItem
                         render={
                             <Link
@@ -110,6 +104,16 @@ export function PurchaseOrderActionsCell({
                             </a>
                         }
                     />
+
+                    {po.is_locked && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem disabled className="gap-2 text-muted-foreground opacity-80">
+                                <Lock className="h-3.5 w-3.5" />
+                                <span>Terkunci Permanen</span>
+                            </DropdownMenuItem>
+                        </>
+                    )}
 
                     {canBeEdited && (
                         <DropdownMenuItem
@@ -187,14 +191,15 @@ export function PurchaseOrderActionsCell({
                         <AlertDialogTitle className="text-center">Batalkan Purchase Order</AlertDialogTitle>
                         <AlertDialogDescription className="text-center space-y-2">
                             <span>
-                                Yakin ingin membatalkan pesanan PO <strong className="text-foreground">{po.po_number}</strong>?
+                                Yakin ingin membatalkan pesanan PO{' '}
+                                <strong className="text-foreground">{po.po_number}</strong>?
                             </span>
                             <textarea
                                 placeholder="Alasan pembatalan (opsional)..."
                                 value={cancelReason}
                                 onChange={(e) => setCancelReason(e.target.value)}
                                 rows={2}
-                                className="w-full mt-2 rounded-md border border-input bg-background p-2 text-xs"
+                                className="w-full mt-2 rounded-md border border-input bg-background p-2 text-xs text-foreground"
                             />
                         </AlertDialogDescription>
                     </AlertDialogHeader>

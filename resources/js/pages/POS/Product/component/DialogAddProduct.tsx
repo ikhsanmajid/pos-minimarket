@@ -19,6 +19,7 @@ import { Plus, Barcode, Upload, DollarSign, Package, X } from 'lucide-react'
 import { toast } from 'react-toastify'
 import ProductController from '@/actions/App/Http/Controllers/ProductController'
 import SelectKategoriProduct, { type CategoryOption } from './SelectKategoriProduct'
+import { ProductUnitsSection, type ProductUnitFormRow } from './ProductUnitsSection'
 import type { Category } from '../Product'
 
 export interface DialogAddProductProps {
@@ -28,6 +29,8 @@ export interface DialogAddProductProps {
     onOpenChange?: (open: boolean) => void
     trigger?: React.ReactNode
 }
+
+const BASE_UNIT_PRESETS = ['pcs', 'botol', 'bungkus', 'kaleng', 'sachet', 'cup', 'gram']
 
 export function DialogAddProduct({
     categories = [],
@@ -47,16 +50,17 @@ export function DialogAddProduct({
         category_id: '',
         barcode: '',
         name: '',
+        base_unit: 'pcs',
         buy_price: '',
         sell_price: '',
         stock: '',
         min_stock: '',
         image: null as File | null,
         active: true,
+        units: [] as ProductUnitFormRow[],
     })
 
     const handleOpenChange = (nextOpen: boolean, eventDetails?: { reason?: string }) => {
-        // Jangan tutup modal jika user mengklik area di luar modal (click outside)
         if (!nextOpen && eventDetails?.reason === 'outside-press') {
             return
         }
@@ -84,6 +88,7 @@ export function DialogAddProduct({
     const sellPrice = Number(data.sell_price) || 0
     const profit = sellPrice - buyPrice
     const marginPercentage = buyPrice > 0 ? ((profit / buyPrice) * 100).toFixed(1) : '0'
+    const baseUnitLabel = data.base_unit.trim() || 'pcs'
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -152,240 +157,283 @@ export function DialogAddProduct({
                             Tambah Produk Baru
                         </DialogTitle>
                         <DialogDescription>
-                            Isi detail informasi produk baru untuk dimasukkan ke sistem POS.
+                            Isi informasi produk, satuan dasar jual, serta konversi satuan pembelian (Multi-UOM).
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 custom-scrollbar">
                         <FieldGroup className="space-y-4">
                             {/* Foto Produk */}
-                        <div className="flex items-center gap-4 rounded-lg border bg-muted/20 p-3">
-                            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border bg-muted overflow-hidden">
-                                {imagePreview ? (
-                                    <img
-                                        src={imagePreview}
-                                        alt="Preview"
-                                        className="h-full w-full object-cover"
-                                    />
-                                ) : (
-                                    <Package className="h-8 w-8 text-muted-foreground/60" />
-                                )}
-                            </div>
-
-                            <div className="space-y-1.5 flex-1 min-w-0">
-                                <Label className="text-xs font-semibold">Foto Produk (Opsional)</Label>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        onChange={handleImageChange}
-                                        accept="image/jpeg,image/png,image/webp"
-                                        className="hidden"
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="xs"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="gap-1.5"
-                                    >
-                                        <Upload className="h-3.5 w-3.5" />
-                                        {imagePreview ? 'Ganti Foto' : 'Unggah Foto'}
-                                    </Button>
-
-                                    {data.image && (
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="xs"
-                                            onClick={handleRemoveImage}
-                                            className="text-muted-foreground hover:text-destructive gap-1"
-                                        >
-                                            <X className="h-3.5 w-3.5" />
-                                            Hapus
-                                        </Button>
+                            <div className="flex items-center gap-4 rounded-lg border bg-muted/20 p-3">
+                                <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border bg-muted overflow-hidden">
+                                    {imagePreview ? (
+                                        <img
+                                            src={imagePreview}
+                                            alt="Preview"
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <Package className="h-8 w-8 text-muted-foreground/60" />
                                     )}
                                 </div>
-                                <p className="text-[11px] text-muted-foreground">
-                                    JPG, PNG, atau WEBP. Maks 2MB.
-                                </p>
-                                <FieldError>{errors.image}</FieldError>
-                            </div>
-                        </div>
 
-                        {/* Barcode & Nama Produk */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <Field>
-                                <Label htmlFor="add-barcode" className="flex items-center gap-1.5">
-                                    <Barcode className="h-3.5 w-3.5 text-muted-foreground" />
-                                    Barcode <span className="text-destructive">*</span>
-                                </Label>
-                                <div className="flex gap-2">
+                                <div className="space-y-1.5 flex-1 min-w-0">
+                                    <Label className="text-xs font-semibold">Foto Produk (Opsional)</Label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleImageChange}
+                                            accept="image/jpeg,image/png,image/webp"
+                                            className="hidden"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="xs"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="gap-1.5"
+                                        >
+                                            <Upload className="h-3.5 w-3.5" />
+                                            {imagePreview ? 'Ganti Foto' : 'Unggah Foto'}
+                                        </Button>
+
+                                        {data.image && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="xs"
+                                                onClick={handleRemoveImage}
+                                                className="text-muted-foreground hover:text-destructive gap-1"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                                Hapus
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        JPG, PNG, atau WEBP. Maks 2MB.
+                                    </p>
+                                    <FieldError>{errors.image}</FieldError>
+                                </div>
+                            </div>
+
+                            {/* Barcode & Nama Produk */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field>
+                                    <Label htmlFor="add-barcode" className="flex items-center gap-1.5">
+                                        <Barcode className="h-3.5 w-3.5 text-muted-foreground" />
+                                        Barcode Utama <span className="text-destructive">*</span>
+                                    </Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            id="add-barcode"
+                                            value={data.barcode}
+                                            onChange={(e) => setData('barcode', e.target.value)}
+                                            placeholder="Scan / ketik barcode"
+                                            aria-invalid={!!errors.barcode}
+                                            required
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={generateBarcode}
+                                            title="Generate Barcode Acak"
+                                            className="shrink-0"
+                                        >
+                                            Generate
+                                        </Button>
+                                    </div>
+                                    <FieldError>{errors.barcode}</FieldError>
+                                </Field>
+
+                                <Field>
+                                    <Label htmlFor="add-name">
+                                        Nama Produk <span className="text-destructive">*</span>
+                                    </Label>
                                     <Input
-                                        id="add-barcode"
-                                        value={data.barcode}
-                                        onChange={(e) => setData('barcode', e.target.value)}
-                                        placeholder="Scan / ketik barcode"
-                                        aria-invalid={!!errors.barcode}
+                                        id="add-name"
+                                        value={data.name}
+                                        onChange={(e) => setData('name', e.target.value)}
+                                        placeholder="Contoh: Indomie Goreng 85g"
+                                        aria-invalid={!!errors.name}
                                         required
                                     />
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={generateBarcode}
-                                        title="Generate Barcode Acak"
-                                        className="shrink-0"
-                                    >
-                                        Generate
-                                    </Button>
-                                </div>
-                                <FieldError>{errors.barcode}</FieldError>
-                            </Field>
-
-                            <Field>
-                                <Label htmlFor="add-name">
-                                    Nama Produk <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                    id="add-name"
-                                    value={data.name}
-                                    onChange={(e) => setData('name', e.target.value)}
-                                    placeholder="Contoh: Indomie Goreng 85g"
-                                    aria-invalid={!!errors.name}
-                                    required
-                                />
-                                <FieldError>{errors.name}</FieldError>
-                            </Field>
-                        </div>
-
-                        {/* Kategori Produk (React-Select) */}
-                        <Field>
-                            <Label htmlFor="add-category">
-                                Kategori Produk <span className="text-destructive">*</span>
-                            </Label>
-                            <SelectKategoriProduct
-                                id="add-category"
-                                value={data.category_id ? Number(data.category_id) : null}
-                                defaultOptions={categoryOptions.length > 0 ? categoryOptions : true}
-                                onlyActive={true}
-                                onChange={(val) => setData('category_id', val ? String(val) : '')}
-                                error={errors.category_id}
-                                placeholder="Cari atau pilih kategori produk..."
-                                isClearable
-                            />
-                            <FieldError>{errors.category_id}</FieldError>
-                        </Field>
-
-                        {/* Harga Beli & Jual */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <Field>
-                                <Label htmlFor="add-buy-price" className="flex items-center gap-1.5">
-                                    <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                                    Harga Beli / HPP (Rp) <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                    id="add-buy-price"
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    value={data.buy_price}
-                                    onChange={(e) => setData('buy_price', e.target.value)}
-                                    aria-invalid={!!errors.buy_price}
-                                    required
-                                />
-                                <FieldError>{errors.buy_price}</FieldError>
-                            </Field>
-
-                            <Field>
-                                <Label htmlFor="add-sell-price" className="flex items-center gap-1.5">
-                                    <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                                    Harga Jual (Rp) <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                    id="add-sell-price"
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    value={data.sell_price}
-                                    onChange={(e) => setData('sell_price', e.target.value)}
-                                    aria-invalid={!!errors.sell_price}
-                                    required
-                                />
-                                <FieldError>{errors.sell_price}</FieldError>
-                            </Field>
-                        </div>
-
-                        {/* Estimasi Profit Info */}
-                        <div className="flex items-center justify-between text-xs p-2.5 bg-muted/40 rounded-md border border-border/60">
-                            <span className="text-muted-foreground font-medium">
-                                Estimasi Margin Keuntungan:
-                            </span>
-                            <span
-                                className={`font-semibold ${profit > 0
-                                        ? 'text-green-600 dark:text-green-400'
-                                        : 'text-muted-foreground'
-                                    }`}
-                            >
-                                Rp {profit.toLocaleString('id-ID')} ({marginPercentage}%)
-                            </span>
-                        </div>
-
-                        {/* Stok Awal & Stok Minimum */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <Field>
-                                <Label htmlFor="add-stock">
-                                    Stok Awal <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                    id="add-stock"
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    value={data.stock}
-                                    onChange={(e) => setData('stock', e.target.value)}
-                                    aria-invalid={!!errors.stock}
-                                    required
-                                />
-                                <FieldError>{errors.stock}</FieldError>
-                            </Field>
-
-                            <Field>
-                                <Label htmlFor="add-min-stock">
-                                    Min. Stok Warning <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                    id="add-min-stock"
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    value={data.min_stock}
-                                    onChange={(e) => setData('min_stock', e.target.value)}
-                                    aria-invalid={!!errors.min_stock}
-                                    required
-                                />
-                                <FieldError>{errors.min_stock}</FieldError>
-                            </Field>
-                        </div>
-
-                        {/* Status Etalase */}
-                        <div className="flex items-center justify-between rounded-lg border border-border p-3">
-                            <div className="space-y-0.5">
-                                <Label htmlFor="add-active" className="text-sm font-medium cursor-pointer">
-                                    Status Etalase
-                                </Label>
-                                <p className="text-xs text-muted-foreground">
-                                    {data.active
-                                        ? 'Produk aktif dan langsung dapat dijual di kasir POS'
-                                        : 'Produk disimpan sebagai arsip/nonaktif'}
-                                </p>
+                                    <FieldError>{errors.name}</FieldError>
+                                </Field>
                             </div>
-                            <Switch
-                                id="add-active"
-                                checked={data.active}
-                                onCheckedChange={(checked) => setData('active', checked)}
+
+                            {/* Kategori & Satuan Dasar */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field>
+                                    <Label htmlFor="add-category">
+                                        Kategori Produk <span className="text-destructive">*</span>
+                                    </Label>
+                                    <SelectKategoriProduct
+                                        id="add-category"
+                                        value={data.category_id ? Number(data.category_id) : null}
+                                        defaultOptions={categoryOptions.length > 0 ? categoryOptions : true}
+                                        onlyActive={true}
+                                        onChange={(val) => setData('category_id', val ? String(val) : '')}
+                                        error={errors.category_id}
+                                        placeholder="Cari atau pilih kategori produk..."
+                                        isClearable
+                                    />
+                                    <FieldError>{errors.category_id}</FieldError>
+                                </Field>
+
+                                <Field>
+                                    <Label htmlFor="add-base-unit">
+                                        Satuan Dasar (Jual Kasir & Stok) <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        id="add-base-unit"
+                                        value={data.base_unit}
+                                        onChange={(e) => setData('base_unit', e.target.value)}
+                                        placeholder="pcs, botol, bungkus..."
+                                        aria-invalid={!!errors.base_unit}
+                                        required
+                                    />
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                        {BASE_UNIT_PRESETS.map((preset) => (
+                                            <button
+                                                key={preset}
+                                                type="button"
+                                                onClick={() => setData('base_unit', preset)}
+                                                className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors cursor-pointer ${
+                                                    data.base_unit === preset
+                                                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                        : 'border-border text-muted-foreground hover:text-foreground'
+                                                }`}
+                                            >
+                                                {preset}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <FieldError>{errors.base_unit}</FieldError>
+                                </Field>
+                            </div>
+
+                            {/* Harga Beli & Jual */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field>
+                                    <Label htmlFor="add-buy-price" className="flex items-center gap-1.5">
+                                        <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                                        Harga Beli / HPP per {baseUnitLabel} (Rp) <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        id="add-buy-price"
+                                        type="number"
+                                        min="0"
+                                        placeholder="0"
+                                        value={data.buy_price}
+                                        onChange={(e) => setData('buy_price', e.target.value)}
+                                        aria-invalid={!!errors.buy_price}
+                                        required
+                                    />
+                                    <FieldError>{errors.buy_price}</FieldError>
+                                </Field>
+
+                                <Field>
+                                    <Label htmlFor="add-sell-price" className="flex items-center gap-1.5">
+                                        <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                                        Harga Jual per {baseUnitLabel} (Rp) <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        id="add-sell-price"
+                                        type="number"
+                                        min="0"
+                                        placeholder="0"
+                                        value={data.sell_price}
+                                        onChange={(e) => setData('sell_price', e.target.value)}
+                                        aria-invalid={!!errors.sell_price}
+                                        required
+                                    />
+                                    <FieldError>{errors.sell_price}</FieldError>
+                                </Field>
+                            </div>
+
+                            {/* Estimasi Profit Info */}
+                            <div className="flex items-center justify-between text-xs p-2.5 bg-muted/40 rounded-md border border-border/60">
+                                <span className="text-muted-foreground font-medium">
+                                    Estimasi Margin Keuntungan per {baseUnitLabel}:
+                                </span>
+                                <span
+                                    className={`font-semibold font-mono ${
+                                        profit > 0
+                                            ? 'text-green-600 dark:text-green-400'
+                                            : 'text-muted-foreground'
+                                    }`}
+                                >
+                                    Rp {profit.toLocaleString('id-ID')} ({marginPercentage}%)
+                                </span>
+                            </div>
+
+                            {/* Stok Awal & Stok Minimum */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field>
+                                    <Label htmlFor="add-stock">
+                                        Stok Awal ({baseUnitLabel}) <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        id="add-stock"
+                                        type="number"
+                                        min="0"
+                                        placeholder="0"
+                                        value={data.stock}
+                                        onChange={(e) => setData('stock', e.target.value)}
+                                        aria-invalid={!!errors.stock}
+                                        required
+                                    />
+                                    <FieldError>{errors.stock}</FieldError>
+                                </Field>
+
+                                <Field>
+                                    <Label htmlFor="add-min-stock">
+                                        Min. Stok Warning ({baseUnitLabel}) <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        id="add-min-stock"
+                                        type="number"
+                                        min="0"
+                                        placeholder="0"
+                                        value={data.min_stock}
+                                        onChange={(e) => setData('min_stock', e.target.value)}
+                                        aria-invalid={!!errors.min_stock}
+                                        required
+                                    />
+                                    <FieldError>{errors.min_stock}</FieldError>
+                                </Field>
+                            </div>
+
+                            {/* Konversi Multi-Satuan */}
+                            <ProductUnitsSection
+                                baseUnit={data.base_unit}
+                                baseBuyPrice={buyPrice}
+                                units={data.units}
+                                onChange={(nextUnits) => setData('units', nextUnits)}
+                                errors={errors as Record<string, string | undefined>}
                             />
-                        </div>
+
+                            {/* Status Etalase */}
+                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="add-active" className="text-sm font-medium cursor-pointer">
+                                        Status Etalase
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {data.active
+                                            ? 'Produk aktif dan langsung dapat dijual di kasir POS'
+                                            : 'Produk disimpan sebagai arsip/nonaktif'}
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="add-active"
+                                    checked={data.active}
+                                    onCheckedChange={(checked) => setData('active', checked)}
+                                />
+                            </div>
                         </FieldGroup>
                     </div>
 
