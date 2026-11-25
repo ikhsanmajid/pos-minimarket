@@ -203,7 +203,7 @@ const getColumns = ({
 // Page Component
 // ---------------------------------------------------------------------------
 
-export default function ActivityLogIndex() {
+export default function ActivityLog() {
     const { activities, filters, logNames, subjectTypes, categoryMap } = usePage<ActivityLogPageProps>().props
     const [isLoading, setIsLoading] = useState(false)
     const [selectedActivity, setSelectedActivity] = useState<ActivityRow | null>(null)
@@ -313,6 +313,6 @@ export default function ActivityLogIndex() {
     )
 }
 
-ActivityLogIndex.layout = (page: React.ReactNode) => (
+ActivityLog.layout = (page: React.ReactNode) => (
     <AuthenticatedLayout>{page}</AuthenticatedLayout>
 )

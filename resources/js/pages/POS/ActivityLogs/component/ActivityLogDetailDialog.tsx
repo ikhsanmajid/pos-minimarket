@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { History, ImageIcon, ExternalLink, Package, ArrowRight, ShoppingBag, CheckCircle2, Ban, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ActivityRow } from '../Index'
+import type { ActivityRow } from '../ActivityLog'
 
 const fieldLabels: Record<string, string> = {
     name: 'Nama',
