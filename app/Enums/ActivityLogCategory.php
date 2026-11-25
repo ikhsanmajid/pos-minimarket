@@ -2,9 +2,13 @@
 
 namespace App\Enums;
 
+use App\Models\AccountPayable;
 use App\Models\Category;
+use App\Models\FinancialAccount;
+use App\Models\PayablePayment;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderReceipt;
 use App\Models\Supplier;
 use App\Models\User;
 
@@ -17,6 +21,7 @@ enum ActivityLogCategory: string
     case Transaction = 'transaction';
     case Supplier = 'supplier';
     case PurchaseOrder = 'purchase_order';
+    case Finance = 'finance';
     case Default = 'default';
 
     /**
@@ -32,6 +37,7 @@ enum ActivityLogCategory: string
             self::Transaction => 'Transaksi Penjualan',
             self::Supplier => 'Pemasok / Supplier',
             self::PurchaseOrder => 'Purchase Order (Pengadaan)',
+            self::Finance => 'Keuangan & Hutang Dagang',
             self::Default => 'Master Data (Lainnya)',
         };
     }
@@ -49,6 +55,7 @@ enum ActivityLogCategory: string
             self::Transaction => 'Transaksi',
             self::Supplier => 'Supplier',
             self::PurchaseOrder => 'Purchase Order',
+            self::Finance => 'Keuangan',
             self::Default => 'Master Data',
         };
     }
@@ -64,6 +71,7 @@ enum ActivityLogCategory: string
             self::Category => Category::class,
             self::Supplier => Supplier::class,
             self::PurchaseOrder => PurchaseOrder::class,
+            self::Finance => FinancialAccount::class,
             default => null,
         };
     }
@@ -77,9 +85,23 @@ enum ActivityLogCategory: string
             return null;
         }
 
+        $baseName = class_basename($subjectType);
+
+        if (in_array($baseName, [
+            class_basename(FinancialAccount::class),
+            class_basename(AccountPayable::class),
+            class_basename(PayablePayment::class),
+        ], true)) {
+            return self::Finance;
+        }
+
+        if ($baseName === class_basename(PurchaseOrderReceipt::class)) {
+            return self::PurchaseOrder;
+        }
+
         foreach (self::cases() as $case) {
             $model = $case->modelClass();
-            if ($model && ($subjectType === $model || class_basename($subjectType) === class_basename($model))) {
+            if ($model && ($subjectType === $model || $baseName === class_basename($model))) {
                 return $case;
             }
         }

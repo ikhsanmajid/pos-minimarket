@@ -13,7 +13,10 @@ import {
 } from 'lucide-react'
 import type { PageProps } from '@/types'
 import { DetailTabProduct } from './component/DetailTabProduct'
-import { StokMutasiProduct } from './component/StokMutasiProduct'
+import {
+    StokMutasiProduct,
+    type PaginatedStockMovements,
+} from './component/StokMutasiProduct'
 import {
     RiwayatPerubahanProduct,
     type PaginatedProductActivities,
@@ -28,19 +31,22 @@ export interface DetailProductData extends Product {
 
 type DetailProductProps = PageProps<{
     product: DetailProductData
+    stockMovements?: PaginatedStockMovements
     activities?: PaginatedProductActivities
 }>
 
 const DetailProduct = () => {
-    const { product, activities } = usePage<DetailProductProps>().props
+    const { product, stockMovements, activities } = usePage<DetailProductProps>().props
 
-    // Dapatkan tab dari query param jika ada, default 'detail'
     const queryTab =
         typeof window !== 'undefined'
             ? new URLSearchParams(window.location.search).get('tab')
             : null
-    const [activeTab, setActiveTab] = useState(queryTab === 'history' ? 'history' : 'detail')
+    const [activeTab, setActiveTab] = useState(
+        queryTab === 'history' ? 'history' : queryTab === 'mutation' ? 'mutation' : 'detail'
+    )
     const [isLoadingActivities, setIsLoadingActivities] = useState(false)
+    const [isLoadingMovements, setIsLoadingMovements] = useState(false)
 
     const loadActivities = () => {
         setIsLoadingActivities(true)
@@ -50,16 +56,30 @@ const DetailProduct = () => {
         })
     }
 
+    const loadStockMovements = () => {
+        setIsLoadingMovements(true)
+        router.reload({
+            only: ['stockMovements'],
+            onFinish: () => setIsLoadingMovements(false),
+        })
+    }
+
     const handleTabChange = (val: string) => {
         setActiveTab(val)
         if (val === 'history' && !activities && !isLoadingActivities) {
             loadActivities()
+        }
+        if (val === 'mutation' && !stockMovements && !isLoadingMovements) {
+            loadStockMovements()
         }
     }
 
     useEffect(() => {
         if (activeTab === 'history' && !activities && !isLoadingActivities) {
             loadActivities()
+        }
+        if (activeTab === 'mutation' && !stockMovements && !isLoadingMovements) {
+            loadStockMovements()
         }
     }, [activeTab])
 
@@ -95,6 +115,11 @@ const DetailProduct = () => {
                     <TabsTrigger value="mutation" className="gap-2 pb-2.5">
                         <ArrowLeftRight className="h-4 w-4" />
                         Mutasi Stok
+                        {stockMovements?.total !== undefined && (
+                            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+                                {stockMovements.total}
+                            </Badge>
+                        )}
                     </TabsTrigger>
                     <TabsTrigger value="history" className="gap-2 pb-2.5">
                         <History className="h-4 w-4" />
@@ -112,7 +137,12 @@ const DetailProduct = () => {
                 </TabsContent>
 
                 <TabsContent value="mutation" className="m-0 focus-visible:outline-none">
-                    <StokMutasiProduct product={product} />
+                    <StokMutasiProduct
+                        product={product}
+                        stockMovements={stockMovements}
+                        isLoading={isLoadingMovements}
+                        onRefresh={loadStockMovements}
+                    />
                 </TabsContent>
 
                 <TabsContent value="history" className="m-0 focus-visible:outline-none">

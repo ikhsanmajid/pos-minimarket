@@ -14,10 +14,25 @@ use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
 #[Table('products')]
-#[Fillable(['category_id', 'barcode', 'name', 'buy_price', 'sell_price', 'stock', 'min_stock', 'image', 'active'])]
+#[Fillable([
+    'category_id',
+    'barcode',
+    'name',
+    'base_unit',
+    'buy_price',
+    'sell_price',
+    'stock',
+    'min_stock',
+    'image',
+    'active',
+])]
 class Product extends Model
 {
     use LogsActivity, SoftDeletes;
+
+    protected $attributes = [
+        'base_unit' => 'pcs',
+    ];
 
     protected function casts(): array
     {
@@ -25,6 +40,8 @@ class Product extends Model
             'active' => 'boolean',
             'buy_price' => 'decimal:2',
             'sell_price' => 'decimal:2',
+            'stock' => 'integer',
+            'min_stock' => 'integer',
         ];
     }
 
@@ -39,7 +56,7 @@ class Product extends Model
                 'restored' => "Produk {$this->name} dipulihkan.",
                 default => "Produk {$this->name} ({$eventName}).",
             })
-            ->logOnly(['category_id', 'barcode', 'name', 'buy_price', 'sell_price', 'stock', 'min_stock', 'image', 'active'])
+            ->logOnly(['category_id', 'barcode', 'name', 'base_unit', 'buy_price', 'sell_price', 'stock', 'min_stock', 'image', 'active'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
     }
@@ -56,6 +73,24 @@ class Product extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function units(): HasMany
+    {
+        return $this->hasMany(ProductUnit::class)->orderBy('conversion_factor');
+    }
+
+    public function activeUnits(): HasMany
+    {
+        return $this->hasMany(ProductUnit::class)
+            ->where('is_active', true)
+            ->orderByDesc('is_default_purchase')
+            ->orderBy('conversion_factor');
+    }
+
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class);
     }
 
     public function transactionDetails(): HasMany
