@@ -2,6 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\CashierShiftStatus;
+use App\Enums\UserRoles;
+use App\Models\CashierShift;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -42,6 +45,31 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user() ? $request->user() : null,
             ],
+            'activeShift' => function () use ($request): ?array {
+                $user = $request->user();
+                if (! $user || ! $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor, UserRoles::Cashier])) {
+                    return null;
+                }
+
+                $shift = CashierShift::query()
+                    ->where('user_id', $user->id)
+                    ->where('status', CashierShiftStatus::Open->value)
+                    ->latest('opened_at')
+                    ->first(['id', 'shift_number', 'register_name', 'opened_at', 'starting_cash']);
+
+                if (! $shift) {
+                    return null;
+                }
+
+                return [
+                    'id' => $shift->id,
+                    'shift_number' => $shift->shift_number,
+                    'register_name' => $shift->register_name,
+                    'opened_at' => $shift->opened_at->format('d M Y H:i'),
+                    'opened_at_human' => $shift->opened_at->diffForHumans(),
+                    'starting_cash' => (float) $shift->starting_cash,
+                ];
+            },
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

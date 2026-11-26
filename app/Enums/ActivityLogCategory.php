@@ -3,12 +3,14 @@
 namespace App\Enums;
 
 use App\Models\AccountPayable;
+use App\Models\CashierShift;
 use App\Models\Category;
 use App\Models\FinancialAccount;
 use App\Models\PayablePayment;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderReceipt;
+use App\Models\ShiftCashMovement;
 use App\Models\Supplier;
 use App\Models\User;
 
@@ -19,6 +21,7 @@ enum ActivityLogCategory: string
     case User = 'user';
     case Category = 'category';
     case Transaction = 'transaction';
+    case CashierShift = 'cashier_shift';
     case Supplier = 'supplier';
     case PurchaseOrder = 'purchase_order';
     case Finance = 'finance';
@@ -35,6 +38,7 @@ enum ActivityLogCategory: string
             self::User => 'Pengguna & Akun',
             self::Category => 'Kategori Produk',
             self::Transaction => 'Transaksi Penjualan',
+            self::CashierShift => 'Sesi Shift Kasir',
             self::Supplier => 'Pemasok / Supplier',
             self::PurchaseOrder => 'Purchase Order (Pengadaan)',
             self::Finance => 'Keuangan & Hutang Dagang',
@@ -53,6 +57,7 @@ enum ActivityLogCategory: string
             self::User => 'Pengguna',
             self::Category => 'Kategori',
             self::Transaction => 'Transaksi',
+            self::CashierShift => 'Sesi Shift',
             self::Supplier => 'Supplier',
             self::PurchaseOrder => 'Purchase Order',
             self::Finance => 'Keuangan',
@@ -69,6 +74,7 @@ enum ActivityLogCategory: string
             self::Product => Product::class,
             self::User => User::class,
             self::Category => Category::class,
+            self::CashierShift => CashierShift::class,
             self::Supplier => Supplier::class,
             self::PurchaseOrder => PurchaseOrder::class,
             self::Finance => FinancialAccount::class,
@@ -93,6 +99,13 @@ enum ActivityLogCategory: string
             class_basename(PayablePayment::class),
         ], true)) {
             return self::Finance;
+        }
+
+        if (in_array($baseName, [
+            class_basename(CashierShift::class),
+            class_basename(ShiftCashMovement::class),
+        ], true)) {
+            return self::CashierShift;
         }
 
         if ($baseName === class_basename(PurchaseOrderReceipt::class)) {

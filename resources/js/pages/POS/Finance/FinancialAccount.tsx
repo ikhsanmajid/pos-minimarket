@@ -391,7 +391,7 @@ const FinancialAccountPage = () => {
                         )
                     }}
                 >
-                    <SelectTrigger className="w-full sm:w-[175px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
                         <SelectValue placeholder="Semua Tipe">
                             {(val) => typeItems.find((i) => i.value === val)?.label}
                         </SelectValue>
@@ -419,7 +419,7 @@ const FinancialAccountPage = () => {
                         )
                     }}
                 >
-                    <SelectTrigger className="w-full sm:w-[155px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[155px] h-9">
                         <SelectValue placeholder="Semua Status">
                             {(val) => statusItems.find((i) => i.value === val)?.label}
                         </SelectValue>

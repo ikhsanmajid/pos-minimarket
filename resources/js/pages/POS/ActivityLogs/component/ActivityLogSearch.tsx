@@ -355,7 +355,7 @@ export default function ActivityLogSearch({
                         onValueChange={handleSubjectTypeChange}
                         disabled={isLoading}
                     >
-                        <SelectTrigger className="w-full sm:w-[170px] h-9">
+                        <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] h-9">
                             <SelectValue placeholder="Semua Modul">
                                 {(val) => subjectTypeItems.find((s) => s.value === val)?.label}
                             </SelectValue>
@@ -379,7 +379,7 @@ export default function ActivityLogSearch({
                 >
                     <SelectTrigger
                         className={cn(
-                            'w-full sm:w-[230px] h-9 transition-colors',
+                            'w-full sm:w-auto sm:min-w-[230px] h-9 transition-colors',
                             !isModuleSelected && 'opacity-60 cursor-not-allowed bg-muted/40 text-muted-foreground'
                         )}
                         title={!isModuleSelected ? 'Pilih modul terlebih dahulu untuk memilih kategori log' : undefined}
@@ -441,7 +441,7 @@ export default function ActivityLogSearch({
                     onValueChange={handleSortChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[170px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] h-9">
                         <SelectValue placeholder="Urutan: Default">
                             {(val) => sortOptions.find((s) => s.value === val)?.label}
                         </SelectValue>

@@ -9,10 +9,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Table('transactions')]
-#[Fillable(['invoice_number', 'user_id', 'customer_id', 'total_amount', 'discount', 'grand_total', 'pay_amount', 'change_amount', 'payment_method', 'status'])]
+#[Fillable(['invoice_number', 'user_id', 'cashier_shift_id', 'customer_id', 'total_amount', 'discount', 'grand_total', 'pay_amount', 'change_amount', 'payment_method', 'status'])]
 class Transaction extends Model
 {
-    //
     protected function casts(): array
     {
         return [
@@ -27,6 +26,11 @@ class Transaction extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function cashierShift(): BelongsTo
+    {
+        return $this->belongsTo(CashierShift::class);
     }
 
     public function details(): HasMany

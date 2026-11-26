@@ -339,7 +339,7 @@ const FinancialTransactionPage = () => {
                         )
                     }}
                 >
-                    <SelectTrigger className="w-full sm:w-[190px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[190px] h-9">
                         <SelectValue placeholder="Semua Akun">
                             {(val) => accountItems.find((i) => i.value === val)?.label}
                         </SelectValue>
@@ -367,7 +367,7 @@ const FinancialTransactionPage = () => {
                         )
                     }}
                 >
-                    <SelectTrigger className="w-full sm:w-[195px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[195px] h-9">
                         <SelectValue placeholder="Semua Kategori">
                             {(val) => categoryItems.find((i) => i.value === val)?.label}
                         </SelectValue>
@@ -395,7 +395,7 @@ const FinancialTransactionPage = () => {
                         )
                     }}
                 >
-                    <SelectTrigger className="w-full sm:w-[145px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[145px] h-9">
                         <SelectValue placeholder="Semua Arus">
                             {(val) => typeItems.find((i) => i.value === val)?.label}
                         </SelectValue>
