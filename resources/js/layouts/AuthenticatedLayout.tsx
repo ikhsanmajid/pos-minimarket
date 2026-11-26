@@ -2,6 +2,7 @@ import React from 'react';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/sidebarMenu';
 import { Badge } from '@/components/ui/badge';
+import { ShiftStatusBadge } from '@/components/ShiftStatusBadge';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
@@ -23,7 +24,9 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <ShiftStatusBadge />
+
                     <div className="text-right">
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{user?.name}</p>
                         <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">

@@ -271,7 +271,7 @@ export default function UserTableToolbar({
 
                 {/* Filter Role */}
                 <Select items={roleItems} value={role} onValueChange={handleRoleChange} disabled={isLoading}>
-                    <SelectTrigger className="w-full sm:w-[150px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[150px] h-9">
                         <SelectValue placeholder="Semua Role">
                             {(val) => roleItems.find((r) => r.value === val)?.label}
                         </SelectValue>
@@ -287,7 +287,7 @@ export default function UserTableToolbar({
 
                 {/* Filter Status Aktif */}
                 <Select items={statusItems} value={isActive} onValueChange={handleStatusChange} disabled={isLoading}>
-                    <SelectTrigger className="w-full sm:w-[140px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[140px] h-9">
                         <SelectValue placeholder="Semua Status">
                             {(val) => statusItems.find((s) => s.value === val)?.label}
                         </SelectValue>
@@ -308,7 +308,7 @@ export default function UserTableToolbar({
                     onValueChange={handleSortChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[185px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[185px] h-9">
                         <SelectValue placeholder="Urutan: Default">
                             {(val) => sortOptions.find((s) => s.value === val)?.label}
                         </SelectValue>

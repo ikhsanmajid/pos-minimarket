@@ -21,6 +21,8 @@ import suppliers from "@/routes/pos/suppliers"
 import financeAccounts from "@/routes/pos/finance/accounts"
 import financePayables from "@/routes/pos/finance/payables"
 import financeTransactions from "@/routes/pos/finance/transactions"
+import shifts from "@/routes/pos/shifts"
+import cashier from "@/routes/pos/cashier"
 
 interface NavSubItem {
     title: string
@@ -56,17 +58,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             title: "Kasir POS",
             url: "#",
             icon: <ShoppingCart />,
-            isActive: url.startsWith('/pos/pos') || url.startsWith('/pos/transactions'),
+            isActive: url.startsWith('/pos/cashier') || url.startsWith('/pos/shifts') || url.startsWith('/pos/transactions'),
             roles: ['admin', 'cashier', 'supervisor'],
             items: [
                 {
                     title: "Transaksi Kasir",
-                    url: "#",
-                    roles: ['admin', 'cashier'],
+                    url: cashier.index.url(),
+                    roles: ['admin', 'cashier', 'supervisor'],
                 },
                 {
-                    title: "Riwayat Transaksi",
-                    url: "#",
+                    title: "Shift Aktif",
+                    url: shifts.index.url(),
+                    roles: ['admin', 'cashier', 'supervisor'],
+                },
+                {
+                    title: "Riwayat Shift",
+                    url: shifts.history.url(),
                     roles: ['admin', 'cashier', 'supervisor'],
                 },
             ],
@@ -157,8 +164,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 },
                 {
                     title: "Sesi Shift",
-                    url: "#",
-                    roles: ['admin'],
+                    url: shifts.history.url(),
+                    roles: ['admin', 'supervisor'],
                 },
             ],
         },

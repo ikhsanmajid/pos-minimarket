@@ -133,16 +133,54 @@ Kolom terakhir untuk aksi baris data (Detail, Edit, Hapus):
 
 ---
 
-## 3. Standar Filter & Toolbar Pencarian (`*Search.tsx` / `*Toolbar.tsx`)
+## 3. Standar Filter, Toolbar Pencarian (`*Search.tsx`), & Komponen `Select`
 
-1. **Input Pencarian Utama:**
-   - Berupa text input dengan icon `Search` di sebelah kiri.
-   - Wajib menggunakan debounce (300ms - 400ms) sebelum mengirimkan request ke backend agar tidak membebani server saat mengetik.
-   - Batasi placeholder sesuai cakupan (misal: `"Cari no PO..."`, `"Cari supplier / telepon..."`).
-2. **Filter Relasi (Async Select):**
-   - Untuk filter data relasional (Kategori, Supplier, User/Kasir), gunakan async select (`react-select/async` atau shadcn combobox) dengan endpoint pencarian ringan (`limit: 20`).
-3. **Tombol Reset Filter:**
-   - Tampilkan tombol reset atau icon silang (`RotateCcw` / `X`) ketika ada filter aktif untuk mengembalikan tabel ke kondisi awal dalam satu klik.
+Semua halaman tabel **WAJIB** menggunakan pola toolbar pencarian yang seragam seperti `ProductSearch.tsx`, `PurchaseOrderSearch.tsx`, dan `ShiftHistorySearch.tsx`.
+
+### 3.1 Struktur & Layout Toolbar
+- **Komponen Terpisah:** Letakkan toolbar pada file terpisah di subfolder `component/<Modul>Search.tsx` (bukan ditulis inline di dalam file page utama).
+- **Tanpa Card Pembungkus:** Dilarang membungkus toolbar dengan card (`rounded-xl border bg-card p-4`). Gunakan kontainer inline langsung di atas `DataTable`:
+  ```tsx
+  <div className="mb-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-2.5">
+          {/* Search Input, Select Filter, Date Input, Urutan, Chip Tabel, Reset */}
+      </div>
+  </div>
+  ```
+- **Tinggi Seragam:** Seluruh kontrol di dalam toolbar (input pencarian, `SelectTrigger`, input tanggal, toggle, chip sortir tabel, dan tombol reset) wajib menggunakan tinggi `h-9`.
+
+### 3.2 Input Pencarian Utama
+- Wrapper `relative w-full sm:w-64 lg:w-72` dengan ikon `Search` di sebelah kiri (`pointer-events-none`) dan `<Input className="pl-9 pr-8 h-9 text-sm" />`.
+- Wajib menggunakan **debounce 300ms** sebelum mengirim `router.visit(..., { preserveState: true, preserveScroll: true, replace: true })` dengan `mergeQuery: { ..., page: 1 }`.
+- Wajib menampilkan tombol hapus (`X`) di sisi kanan saat `search && !isLoading`, dan indikator `Loader2` (`animate-spin`) saat `isLoading`.
+- Gunakan placeholder spesifik sesuai cakupan pencarian (misal: `"Cari nama atau barcode…"`).
+
+### 3.3 Ketentuan Komponen `Select` (Anti Label Terpotong)
+> **ATURAN WAJIB:** Dilarang menggunakan lebar tetap `sm:w-[...]` pada `<SelectTrigger>` di toolbar atau halaman mana pun karena akan memotong label opsi yang panjang.
+
+- **`SelectTrigger`:** Wajib menggunakan lebar fleksibel `w-full sm:w-auto sm:min-w-[...]` dengan tinggi `h-9` (misal `w-full sm:w-auto sm:min-w-[155px] h-9`) agar tombol otomatis menyesuaikan panjang label yang sedang dipilih.
+- **`SelectContent`:** Pada komponen bersama `@/components/ui/select.tsx`, `SelectContent` wajib menggunakan `w-auto min-w-(--anchor-width)` (bukan `w-(--anchor-width)`) sehingga popup dropdown ikut melebar mengikuti opsi terpanjang saat dibuka.
+- **Render Label Base UI:** Selalu teruskan prop `items={...}` pada `<Select>` dan render label aktif di dalam `<SelectValue>` menggunakan fungsi render `{(val) => items.find((item) => item.value === val)?.label}` agar label tidak menampilkan raw value.
+- **State Loading:** Selalu teruskan `disabled={isLoading}` pada setiap `Select` dan kontrol filter.
+
+### 3.4 Filter Tambahan (Relasi, Tanggal, & Toggle)
+- **Filter Relasi (Async Select):** Untuk data relasional berjumlah besar (Kategori, Supplier), gunakan async select (`react-select/async`) dengan endpoint pencarian ringan (`limit: 20`).
+- **Filter Rentang Tanggal (`Dari` / `Sampai`):** Tampilkan inline dalam baris toolbar dengan pola:
+  ```tsx
+  <div className="flex items-center gap-1.5">
+      <Label htmlFor="date-from" className="text-xs text-muted-foreground whitespace-nowrap">
+          Dari:
+      </Label>
+      <Input id="date-from" type="date" className="h-9 w-[135px] text-xs" />
+  </div>
+  ```
+- **Filter Toggle Boolean (Switch):** Jika ada filter boolean (misal `Hanya Selisih`), sejajarkan dengan tinggi `h-9` menggunakan container `flex h-9 w-full sm:w-auto items-center justify-between gap-2.5 rounded-md border border-input bg-transparent px-3 shadow-xs dark:bg-input/30`.
+
+### 3.5 Dropdown Urutan, Chip Sortir Tabel, & Tombol Reset
+- **Dropdown Urutan (`Urutan: Default`):** Dukung pemilihan `sort` + `direction` dan otomatis bersihkan `table_sort`/`table_direction` jika kolom yang dipilih sama dengan header tabel yang sedang aktif.
+- **Active Table Sort Chip:** Saat `filters.table_sort` aktif, tampilkan chip `Tabel: <Label> ↑/↓` (`flex h-9 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 text-xs text-primary`) dengan tombol `X` untuk menghapus sortir header.
+- **Tombol Reset Filter:** Tampilkan saat ada minimal 1 filter/sort aktif menggunakan `<Button variant="outline" size="sm" className="h-9 px-3 text-xs gap-1.5 text-muted-foreground hover:text-foreground border-dashed">` dengan ikon `X`, teks `Reset Filter`, dan badge jumlah filter aktif (`rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary`).
+- **Integrasi Paginasi:** `<DataTablePagination>` pada halaman wajib meneruskan `routeUrl` (Wayfinder action) dan `isLoading={isLoading}` agar navigasi halaman tetap mempertahankan query filter.
 
 ---
 
@@ -239,4 +277,7 @@ Struktur standar dialog detail aktivitas:
 - [ ] Apakah setiap model `LogsActivity` sudah mendefinisikan `setDescriptionForEvent(...)` agar keterangan aktivitas deskriptif dan seragam?
 - [ ] Apakah detail log aktivitas mengikuti format seragam tanpa renderer khusus per modul, dan field baru didaftarkan di `activityLogDetailUtils.ts`?
 - [ ] Apakah logika murni (`*Utils.ts`) dan sub-komponen stateful sudah dipisahkan secara proporsional tanpa *over-splitting*?
+- [ ] Apakah toolbar pencarian dipisah di `component/<Modul>Search.tsx` menggunakan layout inline `flex flex-wrap items-center gap-2.5` (tanpa card pembungkus), tinggi seragam `h-9`, chip sortir tabel, dan tombol `Reset Filter` bergaya `border-dashed`?
+- [ ] Apakah semua `<SelectTrigger>` menggunakan `w-full sm:w-auto sm:min-w-[...]` (bukan lebar tetap `sm:w-[...]`) dan `SelectContent` memakai `w-auto min-w-(--anchor-width)` agar label tidak terpotong?
+- [ ] Apakah `<DataTablePagination>` sudah menerima `routeUrl` dan `isLoading`?
 - [ ] Apakah tipe TypeScript lolos verifikasi `npm run types:check` tanpa error?

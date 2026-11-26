@@ -344,7 +344,7 @@ export default function PurchaseOrderSearch({
                     }}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[190px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[190px] h-9">
                         <SelectValue placeholder="Semua Status Dokumen">
                             {(val) => statusItems.find((s) => s.value === val)?.label}
                         </SelectValue>
@@ -369,7 +369,7 @@ export default function PurchaseOrderSearch({
                     }}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[175px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
                         <SelectValue placeholder="Semua Penerimaan">
                             {(val) => receivingStatusItems.find((r) => r.value === val)?.label}
                         </SelectValue>
@@ -394,7 +394,7 @@ export default function PurchaseOrderSearch({
                     }}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[175px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
                         <SelectValue placeholder="Semua Pembayaran">
                             {(val) => paymentStatusItems.find((p) => p.value === val)?.label}
                         </SelectValue>
@@ -451,7 +451,7 @@ export default function PurchaseOrderSearch({
                     onValueChange={handleSortChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[170px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] h-9">
                         <SelectValue placeholder="Urutan: Default">
                             {(val) => sortOptions.find((s) => s.value === val)?.label}
                         </SelectValue>

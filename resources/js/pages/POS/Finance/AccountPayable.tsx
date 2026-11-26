@@ -400,7 +400,7 @@ const AccountPayablePage = () => {
                         )
                     }}
                 >
-                    <SelectTrigger className="w-full sm:w-[175px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
                         <SelectValue placeholder="Semua Status">
                             {(val) => statusItems.find((i) => i.value === val)?.label}
                         </SelectValue>
@@ -428,7 +428,7 @@ const AccountPayablePage = () => {
                         )
                     }}
                 >
-                    <SelectTrigger className="w-full sm:w-[195px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[195px] h-9">
                         <SelectValue placeholder="Semua Jatuh Tempo">
                             {(val) => dueItems.find((i) => i.value === val)?.label}
                         </SelectValue>

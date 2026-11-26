@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
 use App\Enums\ActivityLogCategory;
+use App\Enums\CashierShiftStatus;
 use App\Enums\UserRoles;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Appends;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -91,6 +93,18 @@ class User extends Authenticatable
     public function transaction(): HasMany
     {
         return $this->transactions();
+    }
+
+    public function cashierShifts(): HasMany
+    {
+        return $this->hasMany(CashierShift::class);
+    }
+
+    public function activeShift(): HasOne
+    {
+        return $this->hasOne(CashierShift::class)
+            ->where('status', CashierShiftStatus::Open->value)
+            ->latestOfMany('opened_at');
     }
 
     public function hasRoles(UserRoles|string|array $roles): bool

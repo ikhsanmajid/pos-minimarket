@@ -3,17 +3,21 @@
 namespace App\Services;
 
 use App\Enums\ActivityLogCategory;
+use App\Enums\FinancialAccountType;
 use App\Enums\FinancialCategoryType;
 use App\Enums\FinancialTransactionType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\PurchaseOrderStatus;
+use App\Enums\ShiftCashMovementType;
 use App\Models\AccountPayable;
+use App\Models\CashierShift;
 use App\Models\FinancialAccount;
 use App\Models\FinancialCategory;
 use App\Models\FinancialTransaction;
 use App\Models\PayablePayment;
 use App\Models\PurchaseOrder;
+use App\Models\ShiftCashMovement;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -424,6 +428,344 @@ class FinanceService
         }
 
         $account->delete();
+    }
+
+    /**
+     * Sinkronisasi mutasi kas tengah shift (cash_in, cash_out, cash_drop) ke buku besar keuangan.
+     * Harus dipanggil di dalam DB::transaction() yang sama dengan penyimpanan ShiftCashMovement.
+     */
+    public function syncShiftCashMovement(
+        ShiftCashMovement $movement,
+        CashierShift $shift,
+        User $actor
+    ): ?FinancialTransaction {
+        $amount = round((float) $movement->amount, 2);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        if ($movement->type === ShiftCashMovementType::CashDrop) {
+            $account = $this->resolveLockedCashAccount($movement->financial_account_id, preferSafe: true);
+            if (! $account) {
+                return null;
+            }
+
+            if ($movement->financial_account_id !== $account->id) {
+                $movement->financial_account_id = $account->id;
+                $movement->save();
+            }
+
+            $category = FinancialCategory::firstOrCreate(
+                ['code' => 'INC-SALES'],
+                [
+                    'name' => 'Penjualan Kasir (POS)',
+                    'type' => FinancialCategoryType::Income,
+                    'is_system' => true,
+                    'is_active' => true,
+                    'description' => 'Pemasukan dari transaksi penjualan kasir minimarket.',
+                ]
+            );
+
+            return $this->postFinancialMutation(
+                account: $account,
+                category: $category,
+                type: FinancialTransactionType::In,
+                amount: $amount,
+                referenceType: ShiftCashMovement::class,
+                referenceId: $movement->id,
+                description: sprintf(
+                    'Cash Drop shift %s (%s): %s',
+                    $shift->shift_number,
+                    $shift->register_name,
+                    $movement->reason
+                ),
+                actor: $actor,
+                allowNegativeBalance: false
+            );
+        }
+
+        if ($movement->type === ShiftCashMovementType::CashOut) {
+            $account = $this->resolveLockedCashAccount($movement->financial_account_id, preferSafe: false);
+            if (! $account) {
+                return null;
+            }
+
+            if ($movement->financial_account_id !== $account->id) {
+                $movement->financial_account_id = $account->id;
+                $movement->save();
+            }
+
+            $category = FinancialCategory::firstOrCreate(
+                ['code' => 'EXP-OPEX'],
+                [
+                    'name' => 'Biaya Operasional Toko',
+                    'type' => FinancialCategoryType::Expense,
+                    'is_system' => true,
+                    'is_active' => true,
+                    'description' => 'Kebutuhan operasional rutin toko (plastik, struk, perlengkapan).',
+                ]
+            );
+
+            return $this->postFinancialMutation(
+                account: $account,
+                category: $category,
+                type: FinancialTransactionType::Out,
+                amount: $amount,
+                referenceType: ShiftCashMovement::class,
+                referenceId: $movement->id,
+                description: sprintf(
+                    'Cash Out shift %s (%s): %s',
+                    $shift->shift_number,
+                    $shift->register_name,
+                    $movement->reason
+                ),
+                actor: $actor,
+                allowNegativeBalance: $account->code === 'KAS-001'
+            );
+        }
+
+        // Cash In: jika kasir memilih sumber akun (misal ambil uang receh dari Brankas), catat keluar dari akun sumber.
+        if ($movement->type === ShiftCashMovementType::CashIn && $movement->financial_account_id !== null) {
+            $account = $this->resolveLockedCashAccount($movement->financial_account_id, preferSafe: true);
+            if (! $account) {
+                return null;
+            }
+
+            $category = FinancialCategory::firstOrCreate(
+                ['code' => 'EXP-OTHER'],
+                [
+                    'name' => 'Pengeluaran Lain-lain',
+                    'type' => FinancialCategoryType::Expense,
+                    'is_system' => false,
+                    'is_active' => true,
+                    'description' => 'Pengeluaran lain yang tidak termasuk kategori utama.',
+                ]
+            );
+
+            return $this->postFinancialMutation(
+                account: $account,
+                category: $category,
+                type: FinancialTransactionType::Out,
+                amount: $amount,
+                referenceType: ShiftCashMovement::class,
+                referenceId: $movement->id,
+                description: sprintf(
+                    'Pengambilan kas masuk (Cash In) shift %s (%s): %s',
+                    $shift->shift_number,
+                    $shift->register_name,
+                    $movement->reason
+                ),
+                actor: $actor,
+                allowNegativeBalance: false
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Sinkronisasi setoran akhir tunai dan total non-tunai saat sesi shift ditutup (closed).
+     * Harus dipanggil di dalam DB::transaction() yang sama dengan penutupan CashierShift.
+     *
+     * @return array{cash_transaction_id: int|null, non_cash_transaction_id: int|null, cash_deposited: float, non_cash_deposited: float}
+     */
+    public function syncShiftClosing(
+        CashierShift $shift,
+        float $netCashDeposit,
+        float $nonCashSales,
+        User $actor,
+        ?int $cashDepositAccountId = null,
+        ?int $nonCashDepositAccountId = null
+    ): array {
+        $salesCategory = FinancialCategory::firstOrCreate(
+            ['code' => 'INC-SALES'],
+            [
+                'name' => 'Penjualan Kasir (POS)',
+                'type' => FinancialCategoryType::Income,
+                'is_system' => true,
+                'is_active' => true,
+                'description' => 'Pemasukan dari transaksi penjualan kasir minimarket.',
+            ]
+        );
+
+        $cashTransaction = null;
+        $nonCashTransaction = null;
+        $cashDeposited = 0.0;
+        $nonCashDeposited = 0.0;
+
+        $roundedCash = round(max(0, $netCashDeposit), 2);
+        if ($roundedCash > 0) {
+            $cashAccount = $this->resolveLockedCashAccount($cashDepositAccountId, preferSafe: true);
+            if ($cashAccount) {
+                $cashTransaction = $this->postFinancialMutation(
+                    account: $cashAccount,
+                    category: $salesCategory,
+                    type: FinancialTransactionType::In,
+                    amount: $roundedCash,
+                    referenceType: CashierShift::class,
+                    referenceId: $shift->id,
+                    description: sprintf(
+                        'Setoran penutupan tunai shift %s (%s)',
+                        $shift->shift_number,
+                        $shift->register_name
+                    ),
+                    actor: $actor,
+                    allowNegativeBalance: false
+                );
+                $cashDeposited = $roundedCash;
+            }
+        }
+
+        $roundedNonCash = round(max(0, $nonCashSales), 2);
+        if ($roundedNonCash > 0) {
+            $nonCashAccount = $this->resolveLockedNonCashAccount($nonCashDepositAccountId);
+            if ($nonCashAccount) {
+                $nonCashTransaction = $this->postFinancialMutation(
+                    account: $nonCashAccount,
+                    category: $salesCategory,
+                    type: FinancialTransactionType::In,
+                    amount: $roundedNonCash,
+                    referenceType: CashierShift::class,
+                    referenceId: $shift->id,
+                    description: sprintf(
+                        'Penerimaan penjualan non-tunai shift %s (%s)',
+                        $shift->shift_number,
+                        $shift->register_name
+                    ),
+                    actor: $actor,
+                    allowNegativeBalance: false
+                );
+                $nonCashDeposited = $roundedNonCash;
+            }
+        }
+
+        return [
+            'cash_transaction_id' => $cashTransaction?->id,
+            'non_cash_transaction_id' => $nonCashTransaction?->id,
+            'cash_deposited' => $cashDeposited,
+            'non_cash_deposited' => $nonCashDeposited,
+        ];
+    }
+
+    private function resolveLockedCashAccount(?int $accountId, bool $preferSafe): ?FinancialAccount
+    {
+        if ($accountId !== null) {
+            /** @var FinancialAccount|null $selected */
+            $selected = FinancialAccount::where('id', $accountId)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $selected) {
+                throw ValidationException::withMessages([
+                    'financial_account_id' => 'Akun keuangan yang dipilih tidak ditemukan atau sedang nonaktif.',
+                ]);
+            }
+
+            return $selected;
+        }
+
+        if ($preferSafe) {
+            /** @var FinancialAccount|null $safe */
+            $safe = FinancialAccount::where('is_active', true)
+                ->where('type', FinancialAccountType::Cash->value)
+                ->orderByDesc('is_default')
+                ->orderByRaw("CASE WHEN code = 'KAS-002' THEN 0 ELSE 1 END")
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->first();
+
+            return $safe;
+        }
+
+        /** @var FinancialAccount|null $drawer */
+        $drawer = FinancialAccount::where('is_active', true)
+            ->where('type', FinancialAccountType::Cash->value)
+            ->orderByRaw("CASE WHEN code = 'KAS-001' THEN 0 ELSE 1 END")
+            ->orderByDesc('is_default')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
+
+        return $drawer;
+    }
+
+    private function resolveLockedNonCashAccount(?int $accountId): ?FinancialAccount
+    {
+        if ($accountId !== null) {
+            /** @var FinancialAccount|null $selected */
+            $selected = FinancialAccount::where('id', $accountId)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $selected) {
+                throw ValidationException::withMessages([
+                    'non_cash_deposit_account_id' => 'Akun tujuan non-tunai tidak ditemukan atau sedang nonaktif.',
+                ]);
+            }
+
+            return $selected;
+        }
+
+        /** @var FinancialAccount|null $bankAccount */
+        $bankAccount = FinancialAccount::where('is_active', true)
+            ->whereIn('type', [FinancialAccountType::Bank->value, FinancialAccountType::Ewallet->value])
+            ->orderByDesc('is_default')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
+
+        if ($bankAccount) {
+            return $bankAccount;
+        }
+
+        return $this->resolveLockedCashAccount(null, preferSafe: true);
+    }
+
+    private function postFinancialMutation(
+        FinancialAccount $account,
+        FinancialCategory $category,
+        FinancialTransactionType $type,
+        float $amount,
+        string $referenceType,
+        int $referenceId,
+        string $description,
+        User $actor,
+        bool $allowNegativeBalance
+    ): FinancialTransaction {
+        $balanceBefore = round((float) $account->current_balance, 2);
+
+        if ($type === FinancialTransactionType::Out && ! $allowNegativeBalance && $balanceBefore < $amount) {
+            throw ValidationException::withMessages([
+                'amount' => sprintf(
+                    'Saldo akun %s tidak mencukupi (Saldo tersedia: Rp %s).',
+                    $account->name,
+                    number_format($balanceBefore, 0, ',', '.')
+                ),
+            ]);
+        }
+
+        $balanceAfter = $type === FinancialTransactionType::In
+            ? round($balanceBefore + $amount, 2)
+            : round($balanceBefore - $amount, 2);
+
+        $account->current_balance = $balanceAfter;
+        $account->save();
+
+        return FinancialTransaction::create([
+            'financial_account_id' => $account->id,
+            'financial_category_id' => $category->id,
+            'type' => $type,
+            'amount' => $amount,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $balanceAfter,
+            'transaction_date' => now()->toDateString(),
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'description' => $description,
+            'created_by' => $actor->id,
+        ]);
     }
 
     private function resolvePaymentStatus(float $totalAmount, float $paidAmount): PaymentStatus

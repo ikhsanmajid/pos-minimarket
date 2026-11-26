@@ -243,7 +243,7 @@ export function SupplierTableToolbar({
                     onValueChange={handleStatusChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[140px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[140px] h-9">
                         <SelectValue placeholder="Semua Status">
                             {(val) => statusItems.find((s) => s.value === val)?.label}
                         </SelectValue>
@@ -264,7 +264,7 @@ export function SupplierTableToolbar({
                     onValueChange={handleSortChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[170px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] h-9">
                         <SelectValue placeholder="Urutan: Default">
                             {(val) => sortOptions.find((s) => s.value === val)?.label}
                         </SelectValue>

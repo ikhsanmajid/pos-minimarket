@@ -196,6 +196,8 @@ class ActivityLogController extends Controller
                     'FinancialAccount' => 'Akun Keuangan',
                     'AccountPayable' => 'Hutang Dagang',
                     'PayablePayment' => 'Pembayaran Hutang',
+                    'CashierShift' => 'Sesi Shift Kasir',
+                    'ShiftCashMovement' => 'Mutasi Kas Shift',
                     'Transaction' => 'Transaksi Penjualan',
                     default => class_basename($type),
                 },
@@ -234,6 +236,8 @@ class ActivityLogController extends Controller
             'FinancialAccount' => 'Akun Keuangan',
             'AccountPayable' => 'Hutang Dagang',
             'PayablePayment' => 'Pembayaran Hutang',
+            'CashierShift' => 'Sesi Shift',
+            'ShiftCashMovement' => 'Mutasi Kas Shift',
             'Transaction' => 'Transaksi',
             default => $activity->subject_type ? class_basename($activity->subject_type) : 'Data',
         };

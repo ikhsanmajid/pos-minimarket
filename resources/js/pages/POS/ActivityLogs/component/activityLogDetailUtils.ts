@@ -96,6 +96,26 @@ const fieldLabels: Record<string, string> = {
     new_weighted_buy_price: 'Harga Beli Baru (Weighted)',
     batch_number: 'No. Batch',
     expired_date: 'Tanggal Kedaluwarsa',
+    shift_number: 'No. Shift',
+    register_name: 'Mesin Kasir',
+    starting_cash: 'Modal Awal Laci',
+    expected_cash: 'Ekspektasi Kas Sistem',
+    actual_cash: 'Uang Fisik (Actual)',
+    cash_variance: 'Selisih Kas (Variance)',
+    variance_status: 'Status Rekonsiliasi',
+    total_cash_sales: 'Penjualan Tunai',
+    total_non_cash_sales: 'Penjualan Non-Tunai',
+    total_refunds: 'Total Refund',
+    total_cash_in: 'Total Cash In',
+    total_cash_out: 'Total Cash Out',
+    total_cash_drop: 'Total Cash Drop',
+    total_transactions: 'Jumlah Transaksi',
+    movement_type: 'Jenis Mutasi Shift',
+    closing_notes: 'Catatan Penutupan Shift',
+    verified_by: 'Diverifikasi Oleh',
+    cash_deposited: 'Setoran Tunai ke Kas/Brankas',
+    non_cash_deposited: 'Setoran Non-Tunai ke Bank',
+    financial_transaction_number: 'No. Transaksi Keuangan',
 }
 
 const CURRENCY_FIELDS = new Set([
@@ -116,6 +136,18 @@ const CURRENCY_FIELDS = new Set([
     'opening_balance',
     'old_balance',
     'new_balance',
+    'starting_cash',
+    'expected_cash',
+    'actual_cash',
+    'cash_variance',
+    'total_cash_sales',
+    'total_non_cash_sales',
+    'total_refunds',
+    'total_cash_in',
+    'total_cash_out',
+    'total_cash_drop',
+    'cash_deposited',
+    'non_cash_deposited',
 ])
 
 const STATUS_LABELS: Record<string, string> = {
@@ -134,6 +166,11 @@ const STATUS_LABELS: Record<string, string> = {
     percentage: 'Persentase (%)',
     percent: 'Persentase (%)',
     fixed: 'Nominal Tetap',
+    open: 'Aktif / Berjalan',
+    closed: 'Ditutup',
+    cash_in: 'Kas Masuk (Cash In)',
+    cash_out: 'Kas Keluar (Cash Out)',
+    cash_drop: 'Setor Brankas (Cash Drop)',
 }
 
 export const isPlainObject = (val: unknown): val is Record<string, unknown> =>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountPayableController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CashierShiftController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FinancialAccountController;
 use App\Http\Controllers\FinancialTransactionController;
@@ -31,6 +32,18 @@ Route::middleware('auth')->group(function () {
 
         // Dashboard
         Route::get('/dashboard', [HomeController::class, 'index'])->name('dashboard.index');
+
+        // Kasir POS Terminal (dilengkapi Shift Guard) & Sesi Shift Kasir
+        Route::get('/cashier', [CashierShiftController::class, 'terminal'])->name('cashier.index');
+
+        Route::prefix('/shifts')->name('shifts.')->group(function () {
+            Route::get('/', [CashierShiftController::class, 'index'])->name('index');
+            Route::get('/history', [CashierShiftController::class, 'history'])->name('history');
+            Route::post('/open', [CashierShiftController::class, 'open'])->name('open');
+            Route::get('/{cashierShift}', [CashierShiftController::class, 'show'])->name('show');
+            Route::post('/{cashierShift}/movements', [CashierShiftController::class, 'storeMovement'])->name('movements.store');
+            Route::post('/{cashierShift}/close', [CashierShiftController::class, 'close'])->name('close');
+        });
 
         // Product
         Route::prefix('/products')->name('products.')->group(function () {

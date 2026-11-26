@@ -310,7 +310,7 @@ export default function ProductTableToolbar({
                     onValueChange={handleStatusChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[140px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[140px] h-9">
                         <SelectValue placeholder="Semua Status">
                             {(val) => statusItems.find((s) => s.value === val)?.label}
                         </SelectValue>
@@ -331,7 +331,7 @@ export default function ProductTableToolbar({
                     onValueChange={handleStockStatusChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[145px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[145px] h-9">
                         <SelectValue placeholder="Semua Stok">
                             {(val) => stockStatusItems.find((s) => s.value === val)?.label}
                         </SelectValue>
@@ -352,7 +352,7 @@ export default function ProductTableToolbar({
                     onValueChange={handleSortChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-[170px] h-9">
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] h-9">
                         <SelectValue placeholder="Urutan: Default">
                             {(val) => sortOptions.find((s) => s.value === val)?.label}
                         </SelectValue>
