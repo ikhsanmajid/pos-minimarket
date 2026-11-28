@@ -9,11 +9,13 @@ use App\Enums\PaymentStatus;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\ReceivingStatus;
 use App\Enums\StockMovementType;
+use App\Enums\TransactionStatus;
 use App\Models\AccountPayable;
 use App\Models\CashierShift;
 use App\Models\FinancialAccount;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
+use App\Models\SalesReturn;
 use App\Models\StockMovement;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
@@ -206,19 +208,25 @@ class DashboardService
     {
         $salesByDate = Transaction::query()
             ->whereBetween('created_at', [$period['start'], $period['end']])
-            ->whereIn('status', CashierShiftService::COMPLETED_TRANSACTION_STATUSES)
-            ->selectRaw('DATE(created_at) as tx_date, COUNT(*) as tx_count, COALESCE(SUM(grand_total), 0) as net_sales')
+            ->where('status', '!=', TransactionStatus::Voided->value)
+            ->selectRaw('DATE(created_at) as tx_date, COUNT(*) as tx_count, COALESCE(SUM(grand_total), 0) as gross_sales')
             ->groupBy(DB::raw('DATE(created_at)'))
             ->get()
             ->keyBy('tx_date');
+
+        $refundsByDate = SalesReturn::query()
+            ->whereBetween('created_at', [$period['start'], $period['end']])
+            ->selectRaw('DATE(created_at) as ret_date, COALESCE(SUM(total_refund_amount), 0) as total_refunds')
+            ->groupBy(DB::raw('DATE(created_at)'))
+            ->pluck('total_refunds', 'ret_date');
 
         $cogsByDate = collect();
         if ($includeProfit) {
             $cogsByDate = TransactionDetail::query()
                 ->join('transactions', 'transactions.id', '=', 'transaction_details.transaction_id')
                 ->whereBetween('transactions.created_at', [$period['start'], $period['end']])
-                ->whereIn('transactions.status', CashierShiftService::COMPLETED_TRANSACTION_STATUSES)
-                ->selectRaw("DATE(transactions.created_at) as tx_date, COALESCE(SUM(transaction_details.buy_price * CAST(COALESCE(NULLIF(transaction_details.quantity, ''), '0') AS NUMERIC)), 0) as total_cogs")
+                ->where('transactions.status', '!=', TransactionStatus::Voided->value)
+                ->selectRaw("DATE(transactions.created_at) as tx_date, COALESCE(SUM(COALESCE(NULLIF(transaction_details.cost_price_snapshot, 0), transaction_details.buy_price) * CASE WHEN transaction_details.cost_price_snapshot > 0 THEN transaction_details.base_qty ELSE CAST(COALESCE(NULLIF(transaction_details.quantity, ''), '0') AS NUMERIC) END), 0) as total_cogs")
                 ->groupBy(DB::raw('DATE(transactions.created_at)'))
                 ->pluck('total_cogs', 'tx_date');
         }
@@ -230,7 +238,9 @@ class DashboardService
         while ($cursor->lessThanOrEqualTo($endDay)) {
             $dateKey = $cursor->toDateString();
             $row = $salesByDate->get($dateKey);
-            $netSales = $row ? round((float) $row->net_sales, 2) : 0.0;
+            $grossSales = $row ? round((float) $row->gross_sales, 2) : 0.0;
+            $refunds = round((float) ($refundsByDate[$dateKey] ?? 0), 2);
+            $netSales = round(max(0.0, $grossSales - $refunds), 2);
             $txCount = $row ? (int) $row->tx_count : 0;
             $cogs = $includeProfit ? round((float) ($cogsByDate[$dateKey] ?? 0), 2) : 0.0;
             $grossProfit = $includeProfit ? round(max(0, $netSales - $cogs), 2) : 0.0;
@@ -257,31 +267,83 @@ class DashboardService
      */
     public function getPaymentMethodComposition(array $period): array
     {
-        $rows = Transaction::query()
+        $transactions = Transaction::query()
             ->whereBetween('created_at', [$period['start'], $period['end']])
-            ->whereIn('status', CashierShiftService::COMPLETED_TRANSACTION_STATUSES)
-            ->selectRaw('LOWER(payment_method) as method_key, COUNT(*) as tx_count, COALESCE(SUM(grand_total), 0) as total_amount')
-            ->groupBy(DB::raw('LOWER(payment_method)'))
-            ->orderByDesc('total_amount')
-            ->get();
+            ->where('status', '!=', TransactionStatus::Voided->value)
+            ->with('payments')
+            ->get(['id', 'grand_total', 'change_amount', 'payment_method', 'status']);
 
-        $grandTotal = round((float) $rows->sum('total_amount'), 2);
-        $totalCount = (int) $rows->sum('tx_count');
+        /** @var array<string, array{method: string, label: string, count: int, amount: float}> $map */
+        $map = [];
+        $totalCount = 0;
 
-        $items = $rows->map(function (object $row) use ($grandTotal): array {
-            $methodKey = (string) ($row->method_key ?? 'other');
+        foreach ($transactions as $tx) {
+            if ($tx->payments->isNotEmpty()) {
+                $totalCount++;
+                $remainingChange = round((float) ($tx->change_amount ?? 0), 2);
+                $seenMethods = [];
+
+                foreach ($tx->payments as $payment) {
+                    $methodKey = $payment->payment_method->value;
+                    $netAmount = round((float) $payment->amount, 2);
+
+                    if ($payment->payment_method === PaymentMethod::Cash && $remainingChange > 0) {
+                        $deduct = min($netAmount, $remainingChange);
+                        $netAmount = round($netAmount - $deduct, 2);
+                        $remainingChange = round($remainingChange - $deduct, 2);
+                    }
+
+                    if (! isset($map[$methodKey])) {
+                        $map[$methodKey] = [
+                            'method' => $methodKey,
+                            'label' => $payment->payment_method->label(),
+                            'count' => 0,
+                            'amount' => 0.0,
+                        ];
+                    }
+
+                    if (! isset($seenMethods[$methodKey])) {
+                        $map[$methodKey]['count']++;
+                        $seenMethods[$methodKey] = true;
+                    }
+
+                    $map[$methodKey]['amount'] = round($map[$methodKey]['amount'] + $netAmount, 2);
+                }
+
+                continue;
+            }
+
+            $statusVal = $tx->status instanceof TransactionStatus ? $tx->status->value : strtolower((string) $tx->status);
+            if (! in_array($statusVal, CashierShiftService::COMPLETED_TRANSACTION_STATUSES, true)) {
+                continue;
+            }
+
+            $totalCount++;
+            $methodKey = strtolower((string) $tx->payment_method);
             $enum = PaymentMethod::tryFrom($methodKey);
-            $amount = round((float) ($row->total_amount ?? 0), 2);
-            $pct = $grandTotal > 0 ? round(($amount / $grandTotal) * 100, 1) : 0.0;
+            $normalizedKey = $enum ? $enum->value : 'other';
 
-            return [
-                'method' => $enum ? $enum->value : 'other',
-                'label' => $enum ? $enum->label() : ucfirst($methodKey),
-                'count' => (int) ($row->tx_count ?? 0),
-                'amount' => $amount,
-                'percentage' => $pct,
-            ];
-        })->values()->all();
+            if (! isset($map[$normalizedKey])) {
+                $map[$normalizedKey] = [
+                    'method' => $normalizedKey,
+                    'label' => $enum ? $enum->label() : ucfirst($methodKey),
+                    'count' => 0,
+                    'amount' => 0.0,
+                ];
+            }
+
+            $map[$normalizedKey]['count']++;
+            $map[$normalizedKey]['amount'] = round($map[$normalizedKey]['amount'] + (float) $tx->grand_total, 2);
+        }
+
+        usort($map, fn (array $a, array $b): int => $b['amount'] <=> $a['amount']);
+
+        $grandTotal = round(array_reduce($map, fn (float $carry, array $item): float => $carry + $item['amount'], 0.0), 2);
+
+        $items = array_map(fn (array $item): array => [
+            ...$item,
+            'percentage' => $grandTotal > 0 ? round(($item['amount'] / $grandTotal) * 100, 1) : 0.0,
+        ], $map);
 
         return [
             'total' => $grandTotal,
@@ -396,12 +458,12 @@ class DashboardService
             ->join('transactions', 'transactions.id', '=', 'transaction_details.transaction_id')
             ->join('products', 'products.id', '=', 'transaction_details.product_id')
             ->whereBetween('transactions.created_at', [$period['start'], $period['end']])
-            ->whereIn('transactions.status', CashierShiftService::COMPLETED_TRANSACTION_STATUSES)
+            ->where('transactions.status', '!=', TransactionStatus::Voided->value)
             ->selectRaw("
                 transaction_details.product_id,
                 products.name as product_name,
                 products.base_unit,
-                COALESCE(SUM(CAST(COALESCE(NULLIF(transaction_details.quantity, ''), '0') AS NUMERIC)), 0) as qty_sold,
+                COALESCE(SUM(CASE WHEN transaction_details.cost_price_snapshot > 0 THEN transaction_details.base_qty ELSE CAST(COALESCE(NULLIF(transaction_details.quantity, ''), '0') AS NUMERIC) END), 0) as qty_sold,
                 COALESCE(SUM(transaction_details.subtotal), 0) as revenue
             ")
             ->groupBy('transaction_details.product_id', 'products.name', 'products.base_unit')
@@ -541,6 +603,8 @@ class DashboardService
             StockMovementType::PurchaseIn->value,
             StockMovementType::AdjustmentIn->value,
             StockMovementType::SaleReturnIn->value,
+            StockMovementType::SaleReturn->value,
+            StockMovementType::SaleVoid->value,
         ];
 
         $grouped = [];
@@ -726,11 +790,16 @@ class DashboardService
     {
         $row = Transaction::query()
             ->whereBetween('created_at', [$start, $end])
-            ->whereIn('status', CashierShiftService::COMPLETED_TRANSACTION_STATUSES)
-            ->selectRaw('COUNT(*) as tx_count, COALESCE(SUM(grand_total), 0) as net_sales')
+            ->where('status', '!=', TransactionStatus::Voided->value)
+            ->selectRaw('COUNT(*) as tx_count, COALESCE(SUM(grand_total), 0) as gross_sales')
             ->first();
 
-        $netSales = round((float) ($row->net_sales ?? 0), 2);
+        $totalRefunds = round((float) SalesReturn::query()
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('total_refund_amount'), 2);
+
+        $grossSales = round((float) ($row->gross_sales ?? 0), 2);
+        $netSales = round(max(0.0, $grossSales - $totalRefunds), 2);
         $txCount = (int) ($row->tx_count ?? 0);
         $avgBasket = $txCount > 0 ? round($netSales / $txCount, 2) : 0.0;
 
@@ -749,8 +818,8 @@ class DashboardService
         $cogs = round((float) TransactionDetail::query()
             ->join('transactions', 'transactions.id', '=', 'transaction_details.transaction_id')
             ->whereBetween('transactions.created_at', [$start, $end])
-            ->whereIn('transactions.status', CashierShiftService::COMPLETED_TRANSACTION_STATUSES)
-            ->selectRaw("COALESCE(SUM(transaction_details.buy_price * CAST(COALESCE(NULLIF(transaction_details.quantity, ''), '0') AS NUMERIC)), 0) as total_cogs")
+            ->where('transactions.status', '!=', TransactionStatus::Voided->value)
+            ->selectRaw("COALESCE(SUM(COALESCE(NULLIF(transaction_details.cost_price_snapshot, 0), transaction_details.buy_price) * CASE WHEN transaction_details.cost_price_snapshot > 0 THEN transaction_details.base_qty ELSE CAST(COALESCE(NULLIF(transaction_details.quantity, ''), '0') AS NUMERIC) END), 0) as total_cogs")
             ->value('total_cogs'), 2);
 
         $grossProfit = round($netSales - $cogs, 2);

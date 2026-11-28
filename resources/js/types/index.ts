@@ -3,6 +3,7 @@ import type { StoreSettingsData } from './store-setting';
 
 export type * from './auth';
 export type * from './store-setting';
+export type * from './pos';
 
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> = T & {
     auth: Auth;

@@ -164,32 +164,6 @@ class CashierShiftController extends Controller
     }
 
     /**
-     * Halaman Terminal Kasir POS dengan Shift Guard (memastikan user membuka shift sebelum bertransaksi).
-     */
-    public function terminal(Request $request): Response
-    {
-        Gate::authorize('viewAny', CashierShift::class);
-
-        /** @var User $user */
-        $user = $request->user();
-        $activeShift = $this->shiftService->getActiveShiftForUser($user);
-
-        return Inertia::render('POS/Shifts/CashierTerminal', [
-            'hasActiveShift' => $activeShift !== null,
-            'shiftSummary' => $activeShift ? [
-                'id' => $activeShift->id,
-                'shift_number' => $activeShift->shift_number,
-                'register_name' => $activeShift->register_name,
-                'opened_at' => $activeShift->opened_at->format('d M Y H:i'),
-                'starting_cash' => (float) $activeShift->starting_cash,
-                'transactions_count' => $activeShift->transactions()
-                    ->whereIn('status', CashierShiftService::COMPLETED_TRANSACTION_STATUSES)
-                    ->count(),
-            ] : null,
-        ]);
-    }
-
-    /**
      * Halaman Riwayat Shift (Server-side pagination, filter tanggal, kasir, status, dan hanya yang selisih).
      */
     public function history(Request $request): Response

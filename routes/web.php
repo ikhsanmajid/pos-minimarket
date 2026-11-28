@@ -8,11 +8,14 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FinancialAccountController;
 use App\Http\Controllers\FinancialTransactionController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseOrderController;
+use App\Http\Controllers\SalesReturnController;
 use App\Http\Controllers\StoreSettingController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,8 +37,24 @@ Route::middleware('auth')->group(function () {
         // Dashboard
         Route::get('/dashboard', [HomeController::class, 'index'])->name('dashboard.index');
 
-        // Kasir POS Terminal (dilengkapi Shift Guard) & Sesi Shift Kasir
-        Route::get('/cashier', [CashierShiftController::class, 'terminal'])->name('cashier.index');
+        // Kasir POS Terminal (wajib shift terbuka)
+        Route::prefix('/cashier')->name('cashier.')->middleware('shift.open')->group(function () {
+            Route::get('/', [PosController::class, 'index'])->name('index');
+            Route::get('/lookup', [PosController::class, 'lookup'])->name('lookup');
+            Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
+            Route::post('/hold', [PosController::class, 'hold'])->name('hold');
+            Route::get('/held', [PosController::class, 'heldList'])->name('held.index');
+            Route::delete('/held/{heldTransaction}', [PosController::class, 'deleteHeld'])->name('held.destroy');
+        });
+
+        // Riwayat Transaksi, Void & Retur Penjualan
+        Route::prefix('/transactions')->name('transactions.')->group(function () {
+            Route::get('/', [TransactionController::class, 'index'])->name('index');
+            Route::get('/{transaction}', [TransactionController::class, 'show'])->name('show');
+            Route::get('/{transaction}/receipt', [TransactionController::class, 'receipt'])->name('receipt');
+            Route::post('/{transaction}/void', [TransactionController::class, 'void'])->name('void');
+            Route::post('/{transaction}/returns', [SalesReturnController::class, 'store'])->name('returns.store');
+        });
 
         Route::prefix('/shifts')->name('shifts.')->group(function () {
             Route::get('/', [CashierShiftController::class, 'index'])->name('index');

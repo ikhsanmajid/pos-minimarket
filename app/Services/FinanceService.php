@@ -17,7 +17,10 @@ use App\Models\FinancialCategory;
 use App\Models\FinancialTransaction;
 use App\Models\PayablePayment;
 use App\Models\PurchaseOrder;
+use App\Models\SalesReturn;
 use App\Models\ShiftCashMovement;
+use App\Models\Transaction;
+use App\Models\TransactionPayment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -645,6 +648,173 @@ class FinanceService
             'cash_deposited' => $cashDeposited,
             'non_cash_deposited' => $nonCashDeposited,
         ];
+    }
+
+    /**
+     * Mencatat pemasukan dari pembayaran transaksi POS ke FinancialAccount & buku besar.
+     * Harus dipanggil di dalam DB::transaction() yang sama dengan PosTransactionService::checkout().
+     */
+    public function recordPosSalePayment(
+        Transaction $transaction,
+        TransactionPayment $payment,
+        float $netAmount,
+        User $actor
+    ): ?FinancialTransaction {
+        $amount = round($netAmount, 2);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        /** @var FinancialAccount|null $account */
+        $account = FinancialAccount::query()
+            ->where('id', $payment->financial_account_id)
+            ->where('is_active', true)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $account instanceof FinancialAccount) {
+            throw ValidationException::withMessages([
+                'payments' => 'Akun keuangan tujuan pembayaran tidak ditemukan atau sedang nonaktif.',
+            ]);
+        }
+
+        $salesCategory = FinancialCategory::firstOrCreate(
+            ['code' => 'INC-SALES'],
+            [
+                'name' => 'Penjualan Kasir (POS)',
+                'type' => FinancialCategoryType::Income,
+                'is_system' => true,
+                'is_active' => true,
+                'description' => 'Pemasukan dari transaksi penjualan kasir minimarket.',
+            ]
+        );
+
+        return $this->postFinancialMutation(
+            account: $account,
+            category: $salesCategory,
+            type: FinancialTransactionType::In,
+            amount: $amount,
+            referenceType: Transaction::class,
+            referenceId: $transaction->id,
+            description: sprintf(
+                'Penjualan POS %s via %s%s',
+                $transaction->invoice_number,
+                $payment->payment_method->label(),
+                ! empty($payment->reference_number) ? " (Ref: {$payment->reference_number})" : ''
+            ),
+            actor: $actor,
+            allowNegativeBalance: false
+        );
+    }
+
+    /**
+     * Mencatat pembalikan dana akibat Void transaksi POS.
+     * Harus dipanggil di dalam DB::transaction() yang sama dengan PosTransactionService::void().
+     */
+    public function recordPosVoidReversal(
+        Transaction $transaction,
+        TransactionPayment $payment,
+        float $netAmount,
+        User $actor
+    ): ?FinancialTransaction {
+        $amount = round($netAmount, 2);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        /** @var FinancialAccount|null $account */
+        $account = FinancialAccount::query()
+            ->where('id', $payment->financial_account_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $account instanceof FinancialAccount) {
+            return null;
+        }
+
+        $refundCategory = FinancialCategory::firstOrCreate(
+            ['code' => 'EXP-REFUND'],
+            [
+                'name' => 'Retur & Pembatalan Penjualan (POS)',
+                'type' => FinancialCategoryType::Expense,
+                'is_system' => true,
+                'is_active' => true,
+                'description' => 'Pengembalian dana untuk pembatalan (void) dan retur penjualan POS.',
+            ]
+        );
+
+        return $this->postFinancialMutation(
+            account: $account,
+            category: $refundCategory,
+            type: FinancialTransactionType::Out,
+            amount: $amount,
+            referenceType: Transaction::class,
+            referenceId: $transaction->id,
+            description: sprintf(
+                'Pembalikan dana Void transaksi %s via %s',
+                $transaction->invoice_number,
+                $payment->payment_method->label()
+            ),
+            actor: $actor,
+            allowNegativeBalance: true
+        );
+    }
+
+    /**
+     * Mencatat pengeluaran dana refund dari Retur Penjualan.
+     * Harus dipanggil di dalam DB::transaction() yang sama dengan SalesReturnService::processReturn().
+     */
+    public function recordSalesReturnRefund(
+        SalesReturn $salesReturn,
+        Transaction $transaction,
+        User $actor
+    ): ?FinancialTransaction {
+        $amount = round((float) $salesReturn->total_refund_amount, 2);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        /** @var FinancialAccount|null $account */
+        $account = FinancialAccount::query()
+            ->where('id', $salesReturn->financial_account_id)
+            ->where('is_active', true)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $account instanceof FinancialAccount) {
+            throw ValidationException::withMessages([
+                'financial_account_id' => 'Akun sumber pengembalian dana tidak ditemukan atau sedang nonaktif.',
+            ]);
+        }
+
+        $refundCategory = FinancialCategory::firstOrCreate(
+            ['code' => 'EXP-REFUND'],
+            [
+                'name' => 'Retur & Pembatalan Penjualan (POS)',
+                'type' => FinancialCategoryType::Expense,
+                'is_system' => true,
+                'is_active' => true,
+                'description' => 'Pengembalian dana untuk pembatalan (void) dan retur penjualan POS.',
+            ]
+        );
+
+        return $this->postFinancialMutation(
+            account: $account,
+            category: $refundCategory,
+            type: FinancialTransactionType::Out,
+            amount: $amount,
+            referenceType: SalesReturn::class,
+            referenceId: $salesReturn->id,
+            description: sprintf(
+                'Refund retur %s (%s) via %s: %s',
+                $salesReturn->return_number,
+                $transaction->invoice_number,
+                $salesReturn->refund_method->label(),
+                $salesReturn->reason
+            ),
+            actor: $actor,
+            allowNegativeBalance: $account->code === 'KAS-001' || $account->type === FinancialAccountType::Cash
+        );
     }
 
     private function resolveLockedCashAccount(?int $accountId, bool $preferSafe): ?FinancialAccount
