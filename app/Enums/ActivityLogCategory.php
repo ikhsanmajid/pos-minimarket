@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderReceipt;
 use App\Models\ShiftCashMovement;
+use App\Models\StoreSetting;
 use App\Models\Supplier;
 use App\Models\User;
 
@@ -25,6 +26,7 @@ enum ActivityLogCategory: string
     case Supplier = 'supplier';
     case PurchaseOrder = 'purchase_order';
     case Finance = 'finance';
+    case StoreSetting = 'store_setting';
     case Default = 'default';
 
     /**
@@ -42,6 +44,7 @@ enum ActivityLogCategory: string
             self::Supplier => 'Pemasok / Supplier',
             self::PurchaseOrder => 'Purchase Order (Pengadaan)',
             self::Finance => 'Keuangan & Hutang Dagang',
+            self::StoreSetting => 'Pengaturan Toko',
             self::Default => 'Master Data (Lainnya)',
         };
     }
@@ -61,6 +64,7 @@ enum ActivityLogCategory: string
             self::Supplier => 'Supplier',
             self::PurchaseOrder => 'Purchase Order',
             self::Finance => 'Keuangan',
+            self::StoreSetting => 'Pengaturan Toko',
             self::Default => 'Master Data',
         };
     }
@@ -78,6 +82,7 @@ enum ActivityLogCategory: string
             self::Supplier => Supplier::class,
             self::PurchaseOrder => PurchaseOrder::class,
             self::Finance => FinancialAccount::class,
+            self::StoreSetting => StoreSetting::class,
             default => null,
         };
     }

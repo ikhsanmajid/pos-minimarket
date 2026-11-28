@@ -67,7 +67,15 @@ class CashierShiftService
         'refund',
     ];
 
-    public function __construct(public FinanceService $financeService) {}
+    public function __construct(
+        public FinanceService $financeService,
+        public StoreSettingService $storeSettingService,
+    ) {}
+
+    public function getVarianceTolerance(): float
+    {
+        return (float) $this->storeSettingService->get()->shift_variance_tolerance;
+    }
 
     public function getActiveShiftForUser(User $user): ?CashierShift
     {
@@ -387,7 +395,8 @@ class CashierShiftService
 
             $verifiedBy = null;
             $verifierName = null;
-            $requiresPin = abs($cashVariance) > self::VARIANCE_PIN_THRESHOLD;
+            $varianceTolerance = $this->getVarianceTolerance();
+            $requiresPin = abs($cashVariance) > $varianceTolerance;
 
             if ($requiresPin) {
                 if ($actor->hasRoles([UserRoles::Admin, UserRoles::Supervisor])) {
@@ -398,7 +407,7 @@ class CashierShiftService
                         $data['supervisor_pin'] ?? null,
                         sprintf(
                             'Terdapat selisih kas melebihi batas toleransi Rp %s. Diperlukan PIN Admin/Supervisor untuk menutup shift.',
-                            number_format(self::VARIANCE_PIN_THRESHOLD, 0, ',', '.')
+                            number_format($varianceTolerance, 0, ',', '.')
                         )
                     );
                     $verifiedBy = $supervisor->id;

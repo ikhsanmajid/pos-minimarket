@@ -9,6 +9,10 @@
 /resources/js/routes
 /resources/js/wayfinder
 /storage/*.key
+/storage/*.out
+/storage/*.err
+/storage/*.lock
+/storage/sf_proc_*
 /storage/pail
 /vendor
 .env

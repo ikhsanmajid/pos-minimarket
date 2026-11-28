@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Enums\CashierShiftStatus;
 use App\Enums\UserRoles;
 use App\Models\CashierShift;
+use App\Services\StoreSettingService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -45,6 +46,7 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user() ? $request->user() : null,
             ],
+            'storeSettings' => fn (): array => app(StoreSettingService::class)->getPublicSettings(),
             'activeShift' => function () use ($request): ?array {
                 $user = $request->user();
                 if (! $user || ! $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor, UserRoles::Cashier])) {

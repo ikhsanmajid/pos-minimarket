@@ -156,7 +156,7 @@ class CashierShiftController extends Controller
             'denominations' => CashierShiftService::DENOMINATIONS,
             'policyRules' => [
                 'cash_out_pin_threshold' => CashierShiftService::CASH_OUT_PIN_THRESHOLD,
-                'variance_pin_threshold' => CashierShiftService::VARIANCE_PIN_THRESHOLD,
+                'variance_pin_threshold' => $this->shiftService->getVarianceTolerance(),
                 'is_privileged' => $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]),
                 'can_view_all_history' => $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]),
             ],
@@ -419,7 +419,7 @@ class CashierShiftController extends Controller
             'denominations' => CashierShiftService::DENOMINATIONS,
             'policyRules' => [
                 'cash_out_pin_threshold' => CashierShiftService::CASH_OUT_PIN_THRESHOLD,
-                'variance_pin_threshold' => CashierShiftService::VARIANCE_PIN_THRESHOLD,
+                'variance_pin_threshold' => $this->shiftService->getVarianceTolerance(),
                 'is_privileged' => $isPrivileged,
             ],
         ]);

@@ -1,4 +1,6 @@
 import React from 'react'
+import { usePage } from '@inertiajs/react'
+import type { PageProps } from '@/types'
 import {
     formatRupiah,
     formatSignedRupiah,
@@ -38,13 +40,21 @@ export interface ShiftDetailData {
 }
 
 export function ShiftZReportPrint({ shift }: { shift: ShiftDetailData }) {
+    const { storeSettings } = usePage<PageProps>().props
     const totalSales = (shift.total_cash_sales ?? 0) + (shift.total_non_cash_sales ?? 0)
     const filledDenominations = (shift.denomination_breakdown ?? []).filter((d) => d.qty > 0)
+    const storeName = storeSettings?.store_name || 'POS MINIMARKET'
 
     return (
         <div className="zreport-print-area hidden print:block font-mono text-black">
             <div className="text-center border-b border-dashed border-black pb-3 mb-3">
-                <h1 className="text-base font-bold uppercase tracking-wide">POS MINIMARKET</h1>
+                <h1 className="text-base font-bold uppercase tracking-wide">{storeName}</h1>
+                {storeSettings?.store_address && (
+                    <p className="text-[10px]">{storeSettings.store_address}</p>
+                )}
+                {storeSettings?.store_phone && (
+                    <p className="text-[10px]">Telp: {storeSettings.store_phone}</p>
+                )}
                 <p className="text-xs font-semibold">Z-REPORT / LAPORAN TUTUP SHIFT</p>
                 <p className="text-xs">{shift.shift_number}</p>
             </div>

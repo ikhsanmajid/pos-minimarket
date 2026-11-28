@@ -17,15 +17,7 @@ class AuthController extends Controller
      */
     public function index(): Response
     {
-        //
-
         return Inertia::render('Auth/Login');
-    }
-
-    public function index2(): Response
-    {
-        //
-        return Inertia::render('Auth/Login2');
     }
 
     /**
@@ -55,7 +47,7 @@ class AuthController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(User $user)
+    public function show(User $user): void
     {
         //
     }
@@ -63,7 +55,7 @@ class AuthController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(User $user)
+    public function edit(User $user): void
     {
         //
     }

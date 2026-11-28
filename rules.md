@@ -263,6 +263,9 @@ Struktur standar dialog detail aktivitas:
 - **Komponen Stateful:** Pisahkan sub-komponen yang mengelola state lokal sendiri atau dapat digunakan ulang ke file `.tsx` terpisah (contoh: `ActivityLogImagePreview.tsx`).
 - **Hindari Over-Splitting:** Jangan memecah potongan JSX sederhana yang hanya dipakai satu kali dan tidak memiliki state/logika kompleks ke file terpisah.
 
+### 6.4 Standar Penggunaan Ikon
+> **ATURAN WAJIB:** Setiap ikon pada antarmuka pengguna **WAJIB** menggunakan library **`lucide-react`**. Dilarang membuat SVG ikon kustom secara manual, menggunakan emoji sebagai ikon UI, atau mengimpor library ikon lain.
+
 ---
 
 ## 7. Ringkasan Checklist Setiap Membuat / Mengubah Modul Tabel
