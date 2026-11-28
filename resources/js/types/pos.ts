@@ -45,6 +45,8 @@ export interface PosCartPricingLine {
     product_unit_id: number | null
     qty: number
     base_unit_price: number
+    member_unit_price?: number | null
+    member_discount_amount?: number
     effective_unit_price: number
     line_gross: number
     auto_discount_amount: number
@@ -54,7 +56,7 @@ export interface PosCartPricingLine {
     line_subtotal: number
     line_net_after_header: number
     free_qty: number
-    pricing_source: 'regular' | 'wholesale_tier' | 'promotion' | string
+    pricing_source: 'regular' | 'member_price' | 'wholesale_tier' | 'promotion' | string
     applied_promotion_id: number | null
     applied_promotion_name: string | null
     applied_promotion_type: string | null
@@ -69,8 +71,25 @@ export interface PosCartPricingLine {
     is_donation: boolean
 }
 
+export interface PosCartLoyaltyInfo {
+    customer_id: number | null
+    tier: 'silver' | 'gold' | 'platinum' | string | null
+    tier_label: string | null
+    tier_multiplier: number
+    active_point_balance: number
+    max_redeemable_points: number
+    max_redeemable_amount: number
+    points_redeemed: number
+    points_redeem_amount: number
+    net_payable_after_points: number
+    estimated_points_earned: number
+    is_birthday: boolean
+    is_first_purchase: boolean
+}
+
 export interface PosCartPricingSummary {
     gross_subtotal: number
+    member_discount_total?: number
     auto_discount_total: number
     manual_item_discount_total: number
     item_discount_total: number
@@ -88,6 +107,10 @@ export interface PosCartPricingSummary {
     tax_amount: number
     rounding_amount: number
     grand_total: number
+    points_redeemed?: number
+    points_redeem_amount?: number
+    net_payable_after_points?: number
+    estimated_points_earned?: number
     total_items_qty: number
     has_tax_exempt_items: boolean
 }
@@ -163,6 +186,7 @@ export interface PosCartCalculationResponse {
     evaluated_at: string
     items: PosCartPricingLine[]
     summary: PosCartPricingSummary
+    loyalty?: PosCartLoyaltyInfo
     voucher?: PosAppliedVoucherInfo | null
     vouchers?: PosAppliedVoucherInfo[]
     voucher_line_allocations?: Record<string, number>
@@ -218,11 +242,47 @@ export interface VoucherRow {
     stackable_with_voucher: boolean
     funding: string
     funding_label: string
+    supplier_id?: number | null
+    supplier_name?: string | null
+    store_share_percent?: number
+    supplier_share_percent?: number
     status: string
     status_label: string
     computed_status: 'draft' | 'active' | 'paused' | 'expired' | 'exhausted' | string
     computed_status_label: string
     creator_name: string
+}
+
+export interface CustomerTierOption {
+    value: string
+    label: string
+    multiplier: number
+}
+
+export interface ProductMemberPriceRow {
+    id: number
+    product_id: number
+    product_unit_id: number | null
+    unit_name: string
+    tier: string | null
+    tier_label: string
+    member_price: number
+    is_active: boolean
+}
+
+export interface CustomerPointLedgerRow {
+    id: number
+    type: string
+    type_label: string
+    points: number
+    remaining_points: number
+    expires_at: string | null
+    is_expired: boolean
+    description: string
+    invoice_number: string | null
+    return_number: string | null
+    creator_name: string
+    created_at: string
 }
 
 export interface ProductPriceTierRow {
@@ -246,6 +306,10 @@ export interface PromotionRow {
     scope_label: string
     funding: string
     funding_label: string
+    supplier_id?: number | null
+    supplier_name?: string | null
+    store_share_percent?: number
+    supplier_share_percent?: number
     discount_value: number | null
     max_discount_amount: number | null
     min_purchase_amount: number
@@ -316,6 +380,10 @@ export interface PosCustomerOption {
     name: string
     phone: string | null
     points?: number
+    tier?: string
+    tier_label?: string
+    tier_multiplier?: number
+    birth_date?: string | null
 }
 
 export interface PosHeldItem {
@@ -375,6 +443,12 @@ export interface PosReceiptData {
     register_name: string
     shift_number: string
     customer_name: string | null
+    customer_tier?: string | null
+    customer_tier_label?: string | null
+    customer_points_balance?: number | null
+    points_redeemed?: number
+    points_redeem_amount?: number
+    points_earned?: number
     subtotal: number
     discount_amount: number
     voucher_code?: string | null

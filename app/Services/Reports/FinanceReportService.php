@@ -4,7 +4,10 @@ namespace App\Services\Reports;
 
 use App\Enums\FinancialTransactionType;
 use App\Enums\PaymentStatus;
+use App\Enums\PromotionFunding;
+use App\Enums\TransactionStatus;
 use App\Models\AccountPayable;
+use App\Models\AppliedPromotion;
 use App\Models\FinancialAccount;
 use App\Models\FinancialTransaction;
 use Carbon\CarbonImmutable;
@@ -28,6 +31,7 @@ class FinanceReportService
         $cashflow = $this->getCashflowByCategory($period['start'], $period['end'], $accountId);
         $accounts = $this->getAccountBalances($accountId);
         $aging = $this->getAccountsPayableAging($supplierId, $filters, $paginate);
+        $promoReport = $this->getPromotionReport($period['start'], $period['end'], $supplierId, $filters);
 
         $totalIncome = $cashflow['total_income'];
         $totalExpense = $cashflow['total_expense'];
@@ -55,6 +59,9 @@ class FinanceReportService
             'agingBuckets' => $aging['buckets'],
             'supplierAging' => $aging['suppliers'],
             'overduePayables' => $aging['overdue_payables'],
+            'promoSummary' => $promoReport['summary'],
+            'supplierPromoClaims' => $promoReport['supplier_claims'],
+            'promoHistory' => $promoReport['history'],
         ];
     }
 
@@ -320,5 +327,170 @@ class FinanceReportService
             'path' => request()->url(),
             'query' => request()->query(),
         ]);
+    }
+
+    /**
+     * Detail promo & voucher pada periode laporan keuangan, termasuk pembagian beban Toko vs Supplier
+     * serta pelacakan klaim/penukaran promo supplier & patungan.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{
+     *     summary: array{
+     *         total_discount: float,
+     *         store_burden: float,
+     *         supplier_burden: float,
+     *         supplier_pending_claim: float,
+     *         supplier_claimed_amount: float,
+     *         supplier_paid_amount: float,
+     *         transactions_count: int
+     *     },
+     *     supplier_claims: array<int, array{
+     *         supplier_id: int|null,
+     *         supplier_name: string,
+     *         pending_count: int,
+     *         pending_amount: float,
+     *         claimed_amount: float,
+     *         paid_amount: float,
+     *         total_supplier_burden: float
+     *     }>,
+     *     history: array<int, array<string, mixed>>
+     * }
+     */
+    private function getPromotionReport(
+        CarbonImmutable $start,
+        CarbonImmutable $end,
+        ?int $supplierId,
+        array $filters
+    ): array {
+        $tz = (string) config('pos_promotions.timezone', 'Asia/Jakarta');
+        $claimStatusFilter = isset($filters['claim_status']) && is_string($filters['claim_status']) && $filters['claim_status'] !== '' && $filters['claim_status'] !== 'all'
+            ? $filters['claim_status']
+            : null;
+
+        $rows = AppliedPromotion::query()
+            ->with([
+                'transaction:id,invoice_number,created_at,grand_total,status',
+                'supplier:id,name',
+                'promotion:id,name,code,store_share_percent,supplier_share_percent',
+                'voucher:id,code,name,store_share_percent,supplier_share_percent',
+            ])
+            ->whereHas('transaction', function ($q) use ($start, $end): void {
+                $q->whereBetween('created_at', [$start->startOfDay(), $end->endOfDay()])
+                    ->where('status', '!=', TransactionStatus::Voided->value);
+            })
+            ->when($supplierId !== null, fn ($q) => $q->where('supplier_id', $supplierId))
+            ->when($claimStatusFilter !== null, fn ($q) => $q->where('claim_status', $claimStatusFilter))
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get();
+
+        $totalDiscount = 0.0;
+        $storeBurden = 0.0;
+        $supplierBurden = 0.0;
+        $pendingClaim = 0.0;
+        $claimedAmt = 0.0;
+        $paidAmt = 0.0;
+        $txIds = [];
+        $supplierMap = [];
+        $history = [];
+
+        foreach ($rows as $row) {
+            $discount = round((float) $row->discount_amount, 2);
+            $storeAmt = round((float) $row->store_discount_amount, 2);
+            $supplierAmt = round((float) $row->supplier_discount_amount, 2);
+
+            // Fallback untuk data lama jika kolom split belum terisi
+            if ($storeAmt === 0.0 && $supplierAmt === 0.0 && $discount > 0.0) {
+                $fundingVal = $row->funding instanceof PromotionFunding ? $row->funding->value : (string) $row->funding;
+                if ($fundingVal === PromotionFunding::Supplier->value) {
+                    $supplierAmt = $discount;
+                } elseif ($fundingVal === PromotionFunding::Shared->value) {
+                    $storeAmt = round($discount / 2, 2);
+                    $supplierAmt = round($discount - $storeAmt, 2);
+                } else {
+                    $storeAmt = $discount;
+                }
+            }
+
+            $totalDiscount = round($totalDiscount + $discount, 2);
+            $storeBurden = round($storeBurden + $storeAmt, 2);
+            $supplierBurden = round($supplierBurden + $supplierAmt, 2);
+            $txIds[$row->transaction_id] = true;
+
+            $claimStatus = (string) ($row->claim_status ?: ($supplierAmt > 0 ? 'pending' : 'not_applicable'));
+
+            if ($supplierAmt > 0) {
+                if ($claimStatus === 'pending') {
+                    $pendingClaim = round($pendingClaim + $supplierAmt, 2);
+                } elseif ($claimStatus === 'claimed') {
+                    $claimedAmt = round($claimedAmt + $supplierAmt, 2);
+                } elseif ($claimStatus === 'paid') {
+                    $paidAmt = round($paidAmt + $supplierAmt, 2);
+                }
+
+                $sKey = $row->supplier_id !== null ? (string) $row->supplier_id : 'unassigned';
+                if (! isset($supplierMap[$sKey])) {
+                    $supplierMap[$sKey] = [
+                        'supplier_id' => $row->supplier_id,
+                        'supplier_name' => $row->supplier?->name ?? 'Supplier Belum Ditentukan',
+                        'pending_count' => 0,
+                        'pending_amount' => 0.0,
+                        'claimed_amount' => 0.0,
+                        'paid_amount' => 0.0,
+                        'total_supplier_burden' => 0.0,
+                    ];
+                }
+
+                $supplierMap[$sKey]['total_supplier_burden'] = round($supplierMap[$sKey]['total_supplier_burden'] + $supplierAmt, 2);
+                if ($claimStatus === 'pending') {
+                    $supplierMap[$sKey]['pending_count']++;
+                    $supplierMap[$sKey]['pending_amount'] = round($supplierMap[$sKey]['pending_amount'] + $supplierAmt, 2);
+                } elseif ($claimStatus === 'claimed') {
+                    $supplierMap[$sKey]['claimed_amount'] = round($supplierMap[$sKey]['claimed_amount'] + $supplierAmt, 2);
+                } elseif ($claimStatus === 'paid') {
+                    $supplierMap[$sKey]['paid_amount'] = round($supplierMap[$sKey]['paid_amount'] + $supplierAmt, 2);
+                }
+            }
+
+            $history[] = [
+                'id' => $row->id,
+                'transaction_id' => $row->transaction_id,
+                'invoice_number' => $row->transaction?->invoice_number ?? "#{$row->transaction_id}",
+                'transaction_date' => $row->transaction?->created_at?->copy()->timezone($tz)->format('d M Y H:i') ?? '-',
+                'transaction_grand_total' => round((float) ($row->transaction?->grand_total ?? 0), 2),
+                'description' => $row->description_snapshot,
+                'type' => $row->type,
+                'funding' => $row->funding instanceof PromotionFunding ? $row->funding->value : (string) $row->funding,
+                'funding_label' => $row->funding instanceof PromotionFunding ? $row->funding->label() : (string) $row->funding,
+                'supplier_id' => $row->supplier_id,
+                'supplier_name' => $row->supplier?->name,
+                'discount_amount' => $discount,
+                'store_discount_amount' => $storeAmt,
+                'supplier_discount_amount' => $supplierAmt,
+                'claim_status' => $claimStatus,
+                'settlement_method_label' => $row->settlement_method
+                    ? (\App\Services\SupplierPromoClaimService::SETTLEMENT_METHODS[$row->settlement_method] ?? $row->settlement_method)
+                    : null,
+                'claimed_at' => $row->claimed_at?->copy()->timezone($tz)->format('d M Y H:i'),
+                'claim_reference' => $row->claim_reference,
+                'claim_notes' => $row->claim_notes,
+            ];
+        }
+
+        usort($supplierMap, fn (array $a, array $b): int => $b['total_supplier_burden'] <=> $a['total_supplier_burden']);
+
+        return [
+            'summary' => [
+                'total_discount' => $totalDiscount,
+                'store_burden' => $storeBurden,
+                'supplier_burden' => $supplierBurden,
+                'supplier_pending_claim' => $pendingClaim,
+                'supplier_claimed_amount' => $claimedAmt,
+                'supplier_paid_amount' => $paidAmt,
+                'transactions_count' => count($txIds),
+            ],
+            'supplier_claims' => array_values($supplierMap),
+            'history' => $history,
+        ];
     }
 }

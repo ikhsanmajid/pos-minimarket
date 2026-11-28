@@ -28,6 +28,8 @@ import {
     SelectProductsMultiAsync,
     type PromotionProductOption,
 } from './SelectProductsMultiAsync'
+import { SelectExclusiveGroupAsync } from './SelectExclusiveGroupAsync'
+import { DateTime24hInput, Time24hInput } from '@/components/ui/datetime-24h-input'
 
 interface OptionItem {
     value: string
@@ -60,6 +62,7 @@ interface PromotionFormDialogProps {
     paymentMethodOptions?: OptionItem[]
     products: ProductOption[]
     categories: CategoryOption[]
+    suppliers?: Array<{ id: number; name: string }>
 }
 
 const DAY_BITS: Array<{ bit: number; label: string }> = [
@@ -106,12 +109,17 @@ export function PromotionFormDialog({
     paymentMethodOptions = DEFAULT_PAYMENT_METHODS,
     products,
     categories,
+    suppliers = [],
 }: PromotionFormDialogProps) {
     const [code, setCode] = useState('')
     const [name, setName] = useState('')
     const [type, setType] = useState('percentage_discount')
     const [scope, setScope] = useState('all_products')
     const [funding, setFunding] = useState('store')
+    const [supplierId, setSupplierId] = useState('')
+    const [storeSharePercent, setStoreSharePercent] = useState('50')
+    const [supplierSharePercent, setSupplierSharePercent] = useState('50')
+    const [useHappyHour, setUseHappyHour] = useState(false)
     const [discountValue, setDiscountValue] = useState('')
     const [maxDiscountAmount, setMaxDiscountAmount] = useState('')
     const [minPurchaseAmount, setMinPurchaseAmount] = useState('0')
@@ -167,6 +175,22 @@ export function PromotionFormDialog({
             setType(promotion.type)
             setScope(promotion.scope)
             setFunding(promotion.funding)
+            setSupplierId(promotion.supplier_id ? String(promotion.supplier_id) : '')
+            setStoreSharePercent(
+                promotion.funding === 'shared'
+                    ? String(promotion.store_share_percent ?? 50)
+                    : promotion.funding === 'supplier'
+                      ? '0'
+                      : '100'
+            )
+            setSupplierSharePercent(
+                promotion.funding === 'shared'
+                    ? String(promotion.supplier_share_percent ?? 50)
+                    : promotion.funding === 'supplier'
+                      ? '100'
+                      : '0'
+            )
+            setUseHappyHour(Boolean(promotion.time_start || promotion.time_end))
             setDiscountValue(promotion.discount_value !== null ? String(promotion.discount_value) : '')
             setMaxDiscountAmount(promotion.max_discount_amount !== null ? String(promotion.max_discount_amount) : '')
             setMinPurchaseAmount(String(promotion.min_purchase_amount ?? 0))
@@ -237,6 +261,10 @@ export function PromotionFormDialog({
             setType('percentage_discount')
             setScope('all_products')
             setFunding('store')
+            setSupplierId('')
+            setStoreSharePercent('50')
+            setSupplierSharePercent('50')
+            setUseHappyHour(false)
             setDiscountValue('')
             setMaxDiscountAmount('')
             setMinPurchaseAmount('0')
@@ -335,6 +363,22 @@ export function PromotionFormDialog({
             type,
             scope: usesItemScope ? scope : 'all_products',
             funding,
+            supplier_id:
+                (funding === 'supplier' || funding === 'shared') && supplierId !== ''
+                    ? Number(supplierId)
+                    : null,
+            store_share_percent:
+                funding === 'shared'
+                    ? Number(storeSharePercent) || 0
+                    : funding === 'supplier'
+                      ? 0
+                      : 100,
+            supplier_share_percent:
+                funding === 'shared'
+                    ? Number(supplierSharePercent) || 0
+                    : funding === 'supplier'
+                      ? 100
+                      : 0,
             discount_value: discountValue !== '' ? Number(discountValue) : null,
             max_discount_amount: maxDiscountAmount !== '' ? Number(maxDiscountAmount) : null,
             min_purchase_amount: minPurchaseAmount !== '' ? Number(minPurchaseAmount) : 0,
@@ -356,8 +400,8 @@ export function PromotionFormDialog({
             starts_at: startsAt,
             ends_at: endsAt,
             days_mask: daysMask,
-            time_start: timeStart || null,
-            time_end: timeEnd || null,
+            time_start: useHappyHour && timeStart ? timeStart : null,
+            time_end: useHappyHour && timeEnd ? timeEnd : null,
             quota_total: quotaTotal !== '' ? Number(quotaTotal) : null,
             max_qty_per_transaction: maxQtyPerTx !== '' ? Number(maxQtyPerTx) : null,
             max_qty_per_customer_per_day:
@@ -525,6 +569,88 @@ export function PromotionFormDialog({
                                 </Select>
                             </div>
                         </div>
+
+                        {(funding === 'supplier' || funding === 'shared') && (
+                            <div className="rounded-lg border border-blue-200/80 bg-blue-50/40 dark:border-blue-900/60 dark:bg-blue-950/20 p-4 space-y-3">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                                    Rincian Penanggung Biaya &amp; Pelacakan Klaim Supplier
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="space-y-1.5">
+                                        <Label>
+                                            Supplier Penanggung
+                                            <FieldTooltip content="Pilih supplier yang menanggung biaya promo agar klaim penukaran dapat dilacak di Laporan Keuangan." />
+                                        </Label>
+                                        <Select
+                                            items={suppliers.map((s) => ({ value: String(s.id), label: s.name }))}
+                                            value={supplierId}
+                                            onValueChange={(val) => setSupplierId(val ?? '')}
+                                        >
+                                            <SelectTrigger className="w-full h-9">
+                                                <SelectValue placeholder="Pilih supplier">
+                                                    {(val) =>
+                                                        suppliers.find((s) => String(s.id) === val)?.name ??
+                                                        'Pilih supplier'
+                                                    }
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {suppliers.map((s) => (
+                                                    <SelectItem key={s.id} value={String(s.id)}>
+                                                        {s.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {funding === 'shared' && (
+                                        <>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="promo-store-share">
+                                                    Porsi Toko (%)
+                                                    <FieldTooltip content="Persentase beban diskon yang ditanggung toko (0-100%). Porsi supplier otomatis menyesuaikan sisa hingga 100%." />
+                                                </Label>
+                                                <Input
+                                                    id="promo-store-share"
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    step="0.01"
+                                                    value={storeSharePercent}
+                                                    onChange={(e) => {
+                                                        const raw = Math.min(100, Math.max(0, Number(e.target.value) || 0))
+                                                        setStoreSharePercent(e.target.value)
+                                                        setSupplierSharePercent(String(Math.round((100 - raw) * 100) / 100))
+                                                    }}
+                                                    className="h-9 font-mono"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="promo-supplier-share">
+                                                    Porsi Supplier (%)
+                                                    <FieldTooltip content="Persentase beban diskon yang akan ditagihkan/diklaim ke supplier." />
+                                                </Label>
+                                                <Input
+                                                    id="promo-supplier-share"
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    step="0.01"
+                                                    value={supplierSharePercent}
+                                                    onChange={(e) => {
+                                                        const raw = Math.min(100, Math.max(0, Number(e.target.value) || 0))
+                                                        setSupplierSharePercent(e.target.value)
+                                                        setStoreSharePercent(String(Math.round((100 - raw) * 100) / 100))
+                                                    }}
+                                                    className="h-9 font-mono"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Parameter manfaat sesuai tipe promo */}
                         <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
@@ -958,6 +1084,53 @@ export function PromotionFormDialog({
                                 </div>
                             )}
 
+                            {(type === 'birthday' || type === 'first_purchase') && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="promo-loyalty-min">Min. Belanja Eligible (Rp)</Label>
+                                        <Input
+                                            id="promo-loyalty-min"
+                                            type="number"
+                                            min={0}
+                                            value={minPurchaseAmount}
+                                            onChange={(e) => setMinPurchaseAmount(e.target.value)}
+                                            className="h-9 font-mono"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="promo-loyalty-disc">
+                                            Potongan (% ≤100 / Rp &gt;100) <span className="text-destructive">*</span>
+                                        </Label>
+                                        <Input
+                                            id="promo-loyalty-disc"
+                                            type="number"
+                                            min={1}
+                                            step="any"
+                                            value={discountValue}
+                                            onChange={(e) => setDiscountValue(e.target.value)}
+                                            placeholder="Contoh: 15 atau 10000"
+                                            className="h-9 font-mono"
+                                            required
+                                        />
+                                        {errors.discount_value && (
+                                            <p className="text-xs text-destructive">{errors.discount_value}</p>
+                                        )}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="promo-loyalty-max">Plafon Maks. Diskon (Rp)</Label>
+                                        <Input
+                                            id="promo-loyalty-max"
+                                            type="number"
+                                            min={0}
+                                            value={maxDiscountAmount}
+                                            onChange={(e) => setMaxDiscountAmount(e.target.value)}
+                                            placeholder="Opsional"
+                                            className="h-9 font-mono"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             {type === 'min_spend_discount' && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
@@ -1347,19 +1520,17 @@ export function PromotionFormDialog({
                             </div>
                         )}
 
-                        {/* Periode, Jam & Hari Berlaku (WIB) */}
+                        {/* Periode, Jam & Hari Berlaku (WIB 24 Jam) */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <Label htmlFor="promo-starts">
-                                    Mulai Berlaku (WIB) <span className="text-destructive">*</span>
-                                    <FieldTooltip content="Tanggal dan jam mulai promo otomatis berlaku di kasir (WIB)." />
+                                    Mulai Berlaku (WIB, 24 Jam) <span className="text-destructive">*</span>
+                                    <FieldTooltip content="Tanggal dan jam mulai promo otomatis berlaku di kasir (format 24 jam WIB)." />
                                 </Label>
-                                <Input
+                                <DateTime24hInput
                                     id="promo-starts"
-                                    type="datetime-local"
                                     value={startsAt}
-                                    onChange={(e) => setStartsAt(e.target.value)}
-                                    className="h-9 font-mono text-xs"
+                                    onChange={setStartsAt}
                                     required
                                 />
                                 {errors.starts_at && <p className="text-xs text-destructive">{errors.starts_at}</p>}
@@ -1367,71 +1538,94 @@ export function PromotionFormDialog({
 
                             <div className="space-y-1.5">
                                 <Label htmlFor="promo-ends">
-                                    Berakhir Pada (WIB) <span className="text-destructive">*</span>
-                                    <FieldTooltip content="Tanggal dan jam promo otomatis berhenti berlaku (WIB)." />
+                                    Berakhir Pada (WIB, 24 Jam) <span className="text-destructive">*</span>
+                                    <FieldTooltip content="Tanggal dan jam promo otomatis berhenti berlaku (format 24 jam WIB)." />
                                 </Label>
-                                <Input
+                                <DateTime24hInput
                                     id="promo-ends"
-                                    type="datetime-local"
                                     value={endsAt}
-                                    onChange={(e) => setEndsAt(e.target.value)}
-                                    className="h-9 font-mono text-xs"
+                                    onChange={setEndsAt}
                                     required
                                 />
                                 {errors.ends_at && <p className="text-xs text-destructive">{errors.ends_at}</p>}
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                            <div className="md:col-span-6 space-y-1.5">
-                                <Label>
-                                    Hari Berlaku (WIB)
-                                    <FieldTooltip content="Pilih hari aktif promo dalam seminggu (misal aktifkan Sab-Min saja untuk promo weekend)." />
-                                </Label>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {DAY_BITS.map((day) => {
-                                        const active = (daysMask & day.bit) !== 0
-                                        return (
-                                            <Button
-                                                key={day.bit}
-                                                type="button"
-                                                size="sm"
-                                                variant={active ? 'default' : 'outline'}
-                                                onClick={() => toggleDayBit(day.bit)}
-                                                className="h-9 px-3 text-xs cursor-pointer"
-                                            >
-                                                {day.label}
-                                            </Button>
-                                        )
-                                    })}
+                        <div className="space-y-3">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                                <div className="space-y-1.5">
+                                    <Label>
+                                        Hari Berlaku (WIB)
+                                        <FieldTooltip content="Pilih hari aktif promo dalam seminggu (misal aktifkan Sab-Min saja untuk promo weekend)." />
+                                    </Label>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {DAY_BITS.map((day) => {
+                                            const active = (daysMask & day.bit) !== 0
+                                            return (
+                                                <Button
+                                                    key={day.bit}
+                                                    type="button"
+                                                    size="sm"
+                                                    variant={active ? 'default' : 'outline'}
+                                                    onClick={() => toggleDayBit(day.bit)}
+                                                    className="h-9 px-3 text-xs cursor-pointer"
+                                                >
+                                                    {day.label}
+                                                </Button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2.5 rounded-md border bg-muted/20 px-3 py-2">
+                                    <div>
+                                        <p className="text-xs font-medium flex items-center">
+                                            Jam Khusus Harian (Happy Hour)
+                                            <FieldTooltip content="Aktifkan hanya jika promo berlaku pada jam tertentu setiap harinya (misal hanya pukul 14:00–17:00 selama periode promo). Jika nonaktif, promo berlaku 24 jam penuh." />
+                                        </p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Opsional • Berlaku tiap hari di rentang jam tertentu
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={useHappyHour}
+                                        onCheckedChange={(checked) => {
+                                            setUseHappyHour(checked)
+                                            if (!checked) {
+                                                setTimeStart('')
+                                                setTimeEnd('')
+                                            }
+                                        }}
+                                    />
                                 </div>
                             </div>
-                            <div className="md:col-span-3 space-y-1.5">
-                                <Label htmlFor="promo-time-start">
-                                    Jam Mulai (Opsional)
-                                    <FieldTooltip content="Jam mulai berlaku setiap hari (happy hour). Kosongkan jika berlaku 24 jam." />
-                                </Label>
-                                <Input
-                                    id="promo-time-start"
-                                    type="time"
-                                    value={timeStart}
-                                    onChange={(e) => setTimeStart(e.target.value)}
-                                    className="h-9 font-mono text-xs"
-                                />
-                            </div>
-                            <div className="md:col-span-3 space-y-1.5">
-                                <Label htmlFor="promo-time-end">
-                                    Jam Selesai (Opsional)
-                                    <FieldTooltip content="Jam berakhir berlaku setiap hari. Kosongkan jika berlaku 24 jam." />
-                                </Label>
-                                <Input
-                                    id="promo-time-end"
-                                    type="time"
-                                    value={timeEnd}
-                                    onChange={(e) => setTimeEnd(e.target.value)}
-                                    className="h-9 font-mono text-xs"
-                                />
-                            </div>
+
+                            {useHappyHour && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-md border bg-muted/20 p-3">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="promo-time-start">
+                                            Jam Mulai Harian (24 Jam)
+                                            <FieldTooltip content="Jam mulai berlaku setiap hari (format 24 jam, misal 14:00)." />
+                                        </Label>
+                                        <Time24hInput
+                                            id="promo-time-start"
+                                            value={timeStart}
+                                            onChange={setTimeStart}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="promo-time-end">
+                                            Jam Selesai Harian (24 Jam)
+                                            <FieldTooltip content="Jam berakhir berlaku setiap hari (format 24 jam, misal 17:00)." />
+                                        </Label>
+                                        <Time24hInput
+                                            id="promo-time-end"
+                                            value={timeEnd}
+                                            onChange={setTimeEnd}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Kuota, Batas Harian, Prioritas & Grup */}
@@ -1497,14 +1691,12 @@ export function PromotionFormDialog({
                             <div className="space-y-1.5">
                                 <Label htmlFor="promo-group">
                                     Grup Eksklusif
-                                    <FieldTooltip content="Promo dengan nama grup eksklusif yang sama tidak bisa digabungkan (hanya 1 terbaik yang menang)." />
+                                    <FieldTooltip content="Cari grup yang sudah ada atau ketik nama baru (+ Buat grup) agar promo satu grup tidak saling bertumpuk." />
                                 </Label>
-                                <Input
-                                    id="promo-group"
+                                <SelectExclusiveGroupAsync
                                     value={exclusiveGroup}
-                                    onChange={(e) => setExclusiveGroup(e.target.value)}
-                                    placeholder="Opsional"
-                                    className="h-9 text-xs"
+                                    onChange={setExclusiveGroup}
+                                    disabled={isSubmitting}
                                 />
                             </div>
                         </div>

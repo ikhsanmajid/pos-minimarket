@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\CustomerTier;
 use App\Enums\TransactionStatus;
 use App\Models\Customer;
 use App\Models\Transaction;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 class CustomerService
 {
+    public function __construct(public LoyaltyService $loyaltyService) {}
     /**
      * Normalisasi nomor HP: hapus spasi, strip, titik, dan tanda kurung berlebih.
      */
@@ -76,6 +78,14 @@ class CustomerService
                 ? strtolower(trim((string) $data['email']))
                 : null;
 
+            $initialPoints = max(0, (int) ($data['points'] ?? 0));
+            $tier = isset($data['tier']) && CustomerTier::tryFrom((string) $data['tier']) !== null
+                ? (string) $data['tier']
+                : CustomerTier::Silver->value;
+            $birthDate = isset($data['birth_date']) && trim((string) $data['birth_date']) !== ''
+                ? trim((string) $data['birth_date'])
+                : null;
+
             /** @var Customer $customer */
             $customer = Customer::create([
                 'member_code' => $memberCode,
@@ -85,12 +95,23 @@ class CustomerService
                 'address' => isset($data['address']) && trim((string) $data['address']) !== ''
                     ? trim((string) $data['address'])
                     : null,
-                'points' => max(0, (int) ($data['points'] ?? 0)),
+                'points' => $initialPoints,
+                'tier' => $tier,
+                'birth_date' => $birthDate,
                 'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true,
                 'notes' => isset($data['notes']) && trim((string) $data['notes']) !== ''
                     ? trim((string) $data['notes'])
                     : null,
             ]);
+
+            if ($initialPoints > 0) {
+                $this->loyaltyService->adjustPoints(
+                    $customer,
+                    $initialPoints,
+                    'Saldo poin awal pendaftaran member.',
+                    $actor
+                );
+            }
 
             if (auth()->id() !== $actor->id) {
                 $customer->activities()->latest('id')->first()?->update([
@@ -99,7 +120,7 @@ class CustomerService
                 ]);
             }
 
-            return $customer;
+            return $customer->refresh();
         });
     }
 
@@ -124,15 +145,40 @@ class CustomerService
                     : null,
             ];
 
+            if (isset($data['tier']) && CustomerTier::tryFrom((string) $data['tier']) !== null) {
+                $payload['tier'] = (string) $data['tier'];
+            }
+
+            if (array_key_exists('birth_date', $data)) {
+                $payload['birth_date'] = is_string($data['birth_date']) && trim($data['birth_date']) !== ''
+                    ? trim($data['birth_date'])
+                    : null;
+            }
+
             if (isset($data['member_code']) && trim((string) $data['member_code']) !== '') {
                 $payload['member_code'] = strtoupper(trim((string) $data['member_code']));
             }
 
+            $requestedPoints = null;
             if (array_key_exists('points', $data) && $data['points'] !== null) {
-                $payload['points'] = max(0, (int) $data['points']);
+                $requestedPoints = max(0, (int) $data['points']);
+                $payload['points'] = $requestedPoints;
             }
 
             $customer->update($payload);
+
+            if ($requestedPoints !== null) {
+                $activeLedgerBalance = $this->loyaltyService->getActivePointBalance($customer);
+                $delta = $requestedPoints - $activeLedgerBalance;
+                if ($delta !== 0) {
+                    $this->loyaltyService->adjustPoints(
+                        $customer,
+                        $delta,
+                        'Penyesuaian saldo poin manual oleh admin/petugas.',
+                        $actor
+                    );
+                }
+            }
 
             if (auth()->id() !== $actor->id) {
                 $customer->activities()->latest('id')->first()?->update([
@@ -185,7 +231,7 @@ class CustomerService
             })
             ->orderBy('name')
             ->limit(max(1, min($limit, 30)))
-            ->get(['id', 'member_code', 'name', 'phone', 'points']);
+            ->get(['id', 'member_code', 'name', 'phone', 'points', 'tier', 'birth_date']);
     }
 
     /**

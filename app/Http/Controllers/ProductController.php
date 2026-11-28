@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CustomerTier;
 use App\Enums\StockMovementType;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductMemberPrice;
 use App\Models\ProductPriceTier;
 use App\Models\ProductUnit;
 use App\Models\StockMovement;
@@ -221,11 +223,12 @@ class ProductController extends Controller
         $canViewStock = $request->user()?->can('viewStock', Product::class) ?? false;
         $canManagePriceTiers = $request->user()?->can('update', $product) ?? false;
 
-        $product->load(['category', 'units', 'priceTiers.productUnit']);
+        $product->load(['category', 'units', 'priceTiers.productUnit', 'memberPrices.productUnit']);
 
         return Inertia::render('POS/Product/DetailProduct', [
             'canViewStock' => $canViewStock,
             'canManagePriceTiers' => $canManagePriceTiers,
+            'tierOptions' => CustomerTier::options(),
             'product' => [
                 'id' => $product->id,
                 'category_id' => $product->category_id,
@@ -263,6 +266,16 @@ class ProductController extends Controller
                     'min_qty' => (int) $tier->min_qty,
                     'unit_price' => (float) $tier->unit_price,
                     'is_active' => (bool) $tier->is_active,
+                ])->values()->all(),
+                'member_prices' => $product->memberPrices->map(fn (ProductMemberPrice $mp) => [
+                    'id' => $mp->id,
+                    'product_id' => $mp->product_id,
+                    'product_unit_id' => $mp->product_unit_id,
+                    'unit_name' => $mp->productUnit?->unit_name ?? ($product->base_unit ?: 'pcs'),
+                    'tier' => $mp->tier?->value,
+                    'tier_label' => $mp->tier?->label() ?? 'Semua Member',
+                    'member_price' => (float) $mp->member_price,
+                    'is_active' => (bool) $mp->is_active,
                 ])->values()->all(),
             ],
             'stockMovements' => Inertia::optional(function () use ($request, $product, $canViewStock) {

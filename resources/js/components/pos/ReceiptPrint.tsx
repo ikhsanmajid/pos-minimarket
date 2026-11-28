@@ -74,7 +74,10 @@ export function ReceiptPrint({
                 {receipt.customer_name && (
                     <div className="flex justify-between gap-2">
                         <span>Pelanggan</span>
-                        <span>{receipt.customer_name}</span>
+                        <span>
+                            {receipt.customer_name}
+                            {receipt.customer_tier_label ? ` (${receipt.customer_tier_label})` : ''}
+                        </span>
                     </div>
                 )}
             </div>
@@ -95,11 +98,13 @@ export function ReceiptPrint({
                         {item.discount_amount > 0 && (
                             <div className="flex justify-between gap-2 text-[9px] italic">
                                 <span className="truncate">
-                                    {item.pricing_source === 'wholesale_tier'
-                                        ? 'Harga Grosir'
-                                        : item.pricing_source === 'promotion' && item.applied_promotion_name
-                                          ? `Promo: ${item.applied_promotion_name}`
-                                          : 'Diskon item'}
+                                    {item.pricing_source === 'member_price'
+                                        ? 'Harga Member'
+                                        : item.pricing_source === 'wholesale_tier'
+                                          ? 'Harga Grosir'
+                                          : item.pricing_source === 'promotion' && item.applied_promotion_name
+                                            ? `Promo: ${item.applied_promotion_name}`
+                                            : 'Diskon item'}
                                 </span>
                                 <span className="shrink-0">-{formatRp(item.discount_amount)}</span>
                             </div>
@@ -173,6 +178,12 @@ export function ReceiptPrint({
             </div>
 
             <div className="space-y-0.5 text-[10px] border-b border-dashed border-black pb-2 mb-2">
+                {(receipt.points_redeemed ?? 0) > 0 && (
+                    <div className="flex justify-between gap-2">
+                        <span>Tukar Poin ({receipt.points_redeemed} pt)</span>
+                        <span>{formatRp(receipt.points_redeem_amount ?? 0)}</span>
+                    </div>
+                )}
                 {receipt.payments.map((payment) => (
                     <div key={payment.id} className="flex justify-between gap-2">
                         <span>
@@ -184,13 +195,41 @@ export function ReceiptPrint({
                 ))}
                 <div className="flex justify-between font-semibold">
                     <span>Total Bayar</span>
-                    <span>{formatRp(receipt.paid_amount)}</span>
+                    <span>{formatRp(receipt.paid_amount + (receipt.points_redeem_amount ?? 0))}</span>
                 </div>
                 <div className="flex justify-between font-bold">
                     <span>Kembalian</span>
                     <span>{formatRp(receipt.change_amount)}</span>
                 </div>
             </div>
+
+            {receipt.customer_name &&
+                ((receipt.points_redeemed ?? 0) > 0 ||
+                    (receipt.points_earned ?? 0) > 0 ||
+                    receipt.customer_points_balance !== null && receipt.customer_points_balance !== undefined) && (
+                    <div className="space-y-0.5 text-[10px] border-b border-dashed border-black pb-2 mb-2">
+                        <div className="font-semibold">INFO POIN MEMBER</div>
+                        {(receipt.points_redeemed ?? 0) > 0 && (
+                            <div className="flex justify-between gap-2">
+                                <span>Poin Ditukar</span>
+                                <span>-{receipt.points_redeemed} pt</span>
+                            </div>
+                        )}
+                        {(receipt.points_earned ?? 0) > 0 && (
+                            <div className="flex justify-between gap-2">
+                                <span>Poin Diperoleh</span>
+                                <span>+{receipt.points_earned} pt</span>
+                            </div>
+                        )}
+                        {receipt.customer_points_balance !== null &&
+                            receipt.customer_points_balance !== undefined && (
+                                <div className="flex justify-between gap-2 font-semibold">
+                                    <span>Sisa Saldo Poin</span>
+                                    <span>{receipt.customer_points_balance} pt</span>
+                                </div>
+                            )}
+                    </div>
+                )}
 
             <div className="text-center text-[10px] pt-1 space-y-1">
                 <p className="whitespace-pre-line">

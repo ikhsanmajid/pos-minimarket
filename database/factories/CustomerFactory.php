@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\CustomerTier;
 use App\Models\Customer;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -24,6 +25,8 @@ class CustomerFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'address' => fake()->address(),
             'points' => fake()->numberBetween(0, 500),
+            'tier' => CustomerTier::Silver,
+            'birth_date' => null,
             'is_active' => true,
             'notes' => null,
         ];

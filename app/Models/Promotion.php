@@ -63,6 +63,9 @@ use Spatie\Activitylog\Support\LogOptions;
     'type',
     'scope',
     'funding',
+    'supplier_id',
+    'store_share_percent',
+    'supplier_share_percent',
     'discount_value',
     'max_discount_amount',
     'min_purchase_amount',
@@ -99,6 +102,8 @@ class Promotion extends Model
     protected $attributes = [
         'scope' => 'all_products',
         'funding' => 'store',
+        'store_share_percent' => 100,
+        'supplier_share_percent' => 0,
         'min_purchase_amount' => 0,
         'get_discount_percent' => 100,
         'days_mask' => 127,
@@ -115,6 +120,8 @@ class Promotion extends Model
             'type' => PromotionType::class,
             'scope' => PromotionScope::class,
             'funding' => PromotionFunding::class,
+            'store_share_percent' => 'decimal:2',
+            'supplier_share_percent' => 'decimal:2',
             'discount_value' => 'decimal:2',
             'max_discount_amount' => 'decimal:2',
             'min_purchase_amount' => 'decimal:2',
@@ -291,6 +298,12 @@ class Promotion extends Model
     public function rewardProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'reward_product_id');
+    }
+
+    /** @return BelongsTo<Supplier, $this> */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
     }
 
     /** @return BelongsTo<User, $this> */

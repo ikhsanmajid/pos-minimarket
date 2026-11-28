@@ -28,6 +28,7 @@ class SalesReturnService
         public CashierShiftService $cashierShiftService,
         public FinanceService $financeService,
         public SupervisorPinService $supervisorPinService,
+        public LoyaltyService $loyaltyService,
     ) {}
 
     /**
@@ -291,6 +292,15 @@ class SalesReturnService
             $newStatus = $allFullyReturned ? TransactionStatus::Refunded : TransactionStatus::PartiallyRefunded;
             $lockedTx->update(['status' => $newStatus]);
 
+            // Tarik kembali poin perolehan secara proporsional terhadap nilai item eligible yang diretur
+            $pointsReversed = $this->loyaltyService->reverseForSalesReturn(
+                $lockedTx,
+                $salesReturn,
+                $resolvedItems,
+                $allFullyReturned,
+                $actor
+            );
+
             // Catat Activity Log pada transaksi terkait
             activity(ActivityLogCategory::Transaction->value)
                 ->event('returned')
@@ -305,6 +315,7 @@ class SalesReturnService
                     'total_refund_amount' => $totalRefundAmount,
                     'voucher_clawback_amount' => $voucherClawbackAmount,
                     'promo_clawback_amount' => $promoClawbackAmount,
+                    'points_reversed' => $pointsReversed,
                     'reason' => $reason,
                     'approved_by' => $approver->name,
                     'returned_items' => $logItems,

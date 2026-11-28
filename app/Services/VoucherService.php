@@ -981,7 +981,21 @@ class VoucherService
                 : null,
             'stackable_with_promo' => (bool) ($data['stackable_with_promo'] ?? true),
             'stackable_with_voucher' => (bool) ($data['stackable_with_voucher'] ?? false),
-            'funding' => (string) ($data['funding'] ?? PromotionFunding::Store->value),
+            'funding' => ($fundingVal = (string) ($data['funding'] ?? PromotionFunding::Store->value)),
+            'supplier_id' => in_array($fundingVal, [PromotionFunding::Supplier->value, PromotionFunding::Shared->value], true)
+                && isset($data['supplier_id']) && $data['supplier_id'] !== '' && $data['supplier_id'] !== null
+                ? (int) $data['supplier_id']
+                : null,
+            'store_share_percent' => $fundingVal === PromotionFunding::Supplier->value
+                ? 0.0
+                : ($fundingVal === PromotionFunding::Shared->value
+                    ? ($storeShareVal = round(min(100, max(0, (float) ($data['store_share_percent'] ?? 50))), 2))
+                    : 100.0),
+            'supplier_share_percent' => $fundingVal === PromotionFunding::Supplier->value
+                ? 100.0
+                : ($fundingVal === PromotionFunding::Shared->value
+                    ? round(100.0 - ($storeShareVal ?? 50.0), 2)
+                    : 0.0),
             'status' => (string) ($data['status'] ?? VoucherStatus::Draft->value),
         ];
     }

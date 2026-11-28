@@ -28,6 +28,7 @@ class CalculatePosCartRequest extends FormRequest
             'vouchers.*.code' => ['required_with:vouchers', 'string', 'max:64'],
             'vouchers.*.reservation_token' => ['nullable', 'string', 'max:64'],
             'selected_tebus_murah_promotion_id' => ['nullable', 'integer', 'exists:promotions,id'],
+            'redeem_points' => ['nullable', 'integer', 'min:0'],
             'evaluated_at' => ['nullable', 'date'],
             'items' => ['present', 'array'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],

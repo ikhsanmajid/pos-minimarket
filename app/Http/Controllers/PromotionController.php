@@ -12,8 +12,10 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\Promotion;
 use App\Models\PromotionBundleItem;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Services\PromotionService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +63,7 @@ class PromotionController extends Controller
                 'categories:id,name',
                 'bundleItems.product:id,name,barcode,sell_price',
                 'rewardProduct:id,name,barcode,sell_price',
+                'supplier:id,name',
                 'creator:id,name',
             ])
             ->when($request->search, function ($query, $search) use ($likeOperator): void {
@@ -128,6 +131,10 @@ class PromotionController extends Controller
                     'scope_label' => $promo->scope->label(),
                     'funding' => $promo->funding->value,
                     'funding_label' => $promo->funding->label(),
+                    'supplier_id' => $promo->supplier_id,
+                    'supplier_name' => $promo->supplier?->name,
+                    'store_share_percent' => (float) ($promo->store_share_percent ?? 100),
+                    'supplier_share_percent' => (float) ($promo->supplier_share_percent ?? 0),
                     'discount_value' => $promo->discount_value !== null ? (float) $promo->discount_value : null,
                     'max_discount_amount' => $promo->max_discount_amount !== null ? (float) $promo->max_discount_amount : null,
                     'min_purchase_amount' => (float) $promo->min_purchase_amount,
@@ -222,6 +229,17 @@ class PromotionController extends Controller
             ]
         );
 
+        $supplierOptions = Supplier::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Supplier $s): array => [
+                'id' => $s->id,
+                'name' => $s->name,
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('POS/Promotions/Promotion', [
             'promotions' => $promotions,
             'filters' => $filters,
@@ -232,7 +250,33 @@ class PromotionController extends Controller
             'paymentMethodOptions' => $paymentMethodOptions,
             'products' => $productOptions,
             'categories' => $categoryOptions,
+            'suppliers' => $supplierOptions,
         ]);
+    }
+
+    public function searchExclusiveGroups(Request $request): JsonResponse
+    {
+        Gate::authorize('viewAny', Promotion::class);
+
+        $search = trim((string) $request->query('search', ''));
+        $likeOperator = DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
+
+        $groups = Promotion::query()
+            ->whereNotNull('exclusive_group')
+            ->where('exclusive_group', '!=', '')
+            ->when($search !== '', fn ($q) => $q->where('exclusive_group', $likeOperator, "%{$search}%"))
+            ->distinct()
+            ->orderBy('exclusive_group')
+            ->limit(30)
+            ->pluck('exclusive_group')
+            ->map(fn (string $group): array => [
+                'value' => $group,
+                'label' => $group,
+            ])
+            ->values()
+            ->all();
+
+        return response()->json($groups);
     }
 
     public function store(StorePromotionRequest $request): RedirectResponse

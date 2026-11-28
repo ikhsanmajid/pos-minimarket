@@ -7,14 +7,21 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import ProductController from '@/actions/App/Http/Controllers/ProductController'
 import {
     ArrowLeft,
+    Crown,
     Package,
     ArrowLeftRight,
     History,
     Tag,
 } from 'lucide-react'
-import type { PageProps, ProductPriceTierRow } from '@/types'
+import type {
+    CustomerTierOption,
+    PageProps,
+    ProductMemberPriceRow,
+    ProductPriceTierRow,
+} from '@/types'
 import { DetailTabProduct } from './component/DetailTabProduct'
 import { ProductPriceTiersTab } from './component/ProductPriceTiersTab'
+import { ProductMemberPricesTab } from './component/ProductMemberPricesTab'
 import {
     StokMutasiProduct,
     type PaginatedStockMovements,
@@ -30,6 +37,7 @@ export interface DetailProductData extends Product {
     created_at?: string
     updated_at?: string
     price_tiers?: ProductPriceTierRow[]
+    member_prices?: ProductMemberPriceRow[]
 }
 
 type DetailProductProps = PageProps<{
@@ -38,6 +46,7 @@ type DetailProductProps = PageProps<{
     activities?: PaginatedProductActivities
     canViewStock?: boolean
     canManagePriceTiers?: boolean
+    tierOptions?: CustomerTierOption[]
 }>
 
 const DetailProduct = () => {
@@ -47,6 +56,7 @@ const DetailProduct = () => {
         activities,
         canViewStock = true,
         canManagePriceTiers = false,
+        tierOptions = [],
     } = usePage<DetailProductProps>().props
 
     const queryTab =
@@ -58,9 +68,11 @@ const DetailProduct = () => {
             ? 'history'
             : queryTab === 'tiers'
                 ? 'tiers'
-                : queryTab === 'mutation' && canViewStock
-                    ? 'mutation'
-                    : 'detail'
+                : queryTab === 'member-prices'
+                    ? 'member-prices'
+                    : queryTab === 'mutation' && canViewStock
+                        ? 'mutation'
+                        : 'detail'
     )
     const [isLoadingActivities, setIsLoadingActivities] = useState(false)
     const [isLoadingMovements, setIsLoadingMovements] = useState(false)
@@ -138,6 +150,15 @@ const DetailProduct = () => {
                             </Badge>
                         )}
                     </TabsTrigger>
+                    <TabsTrigger value="member-prices" className="gap-2 pb-2.5">
+                        <Crown className="h-4 w-4" />
+                        Harga Member
+                        {(product.member_prices?.length ?? 0) > 0 && (
+                            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+                                {product.member_prices?.length}
+                            </Badge>
+                        )}
+                    </TabsTrigger>
                     {canViewStock && (
                         <TabsTrigger value="mutation" className="gap-2 pb-2.5">
                             <ArrowLeftRight className="h-4 w-4" />
@@ -166,6 +187,14 @@ const DetailProduct = () => {
 
                 <TabsContent value="tiers" className="m-0 focus-visible:outline-none">
                     <ProductPriceTiersTab product={product} canManage={canManagePriceTiers} />
+                </TabsContent>
+
+                <TabsContent value="member-prices" className="m-0 focus-visible:outline-none">
+                    <ProductMemberPricesTab
+                        product={product}
+                        canManage={canManagePriceTiers}
+                        tierOptions={tierOptions}
+                    />
                 </TabsContent>
 
                 {canViewStock && (

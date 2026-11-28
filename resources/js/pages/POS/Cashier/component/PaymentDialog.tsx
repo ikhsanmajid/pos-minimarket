@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Banknote, CreditCard, Heart, Plus, Sparkles, Split, Trash2 } from 'lucide-react'
+import { Award, Banknote, CreditCard, Crown, Heart, Plus, Sparkles, Split, Trash2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import type {
     PosAppliedPaymentPromotion,
+    PosCartLoyaltyInfo,
     PosDonationProduct,
     PosFinancialAccount,
     PosPaymentMethodOption,
@@ -52,13 +53,18 @@ interface PaymentRowState {
 
 export interface PaymentPromoPreviewResult {
     grandTotal: number
+    netPayableAfterPoints?: number
     paymentPromotion: PosAppliedPaymentPromotion | null
+    loyalty?: PosCartLoyaltyInfo | null
 }
 
 interface PaymentDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     grandTotal: number
+    loyaltyInfo?: PosCartLoyaltyInfo | null
+    redeemPoints?: number
+    onRedeemPointsChange?: (points: number) => void
     paymentMethods: PosPaymentMethodOption[]
     financialAccounts: PosFinancialAccount[]
     donationProducts?: PosDonationProduct[]
@@ -82,6 +88,9 @@ export function PaymentDialog({
     open,
     onOpenChange,
     grandTotal,
+    loyaltyInfo = null,
+    redeemPoints = 0,
+    onRedeemPointsChange,
     paymentMethods,
     financialAccounts,
     donationProducts = [],
@@ -98,7 +107,9 @@ export function PaymentDialog({
     const [singleReference, setSingleReference] = useState('')
     const [splitRows, setSplitRows] = useState<PaymentRowState[]>([])
     const [previewGrandTotal, setPreviewGrandTotal] = useState<number | null>(null)
+    const [previewNetPayable, setPreviewNetPayable] = useState<number | null>(null)
     const [previewPaymentPromo, setPreviewPaymentPromo] = useState<PosAppliedPaymentPromotion | null>(null)
+    const [previewLoyalty, setPreviewLoyalty] = useState<PosCartLoyaltyInfo | null>(null)
     const [donateChange, setDonateChange] = useState(false)
     const [selectedDonationId, setSelectedDonationId] = useState('')
     const [donationAmountInput, setDonationAmountInput] = useState('')
@@ -131,21 +142,24 @@ export function PaymentDialog({
         if (!open) return
         const defaultCashAcc = getDefaultAccountIdForMethod('cash', financialAccounts)
         const defaultQrisAcc = getDefaultAccountIdForMethod('qris', financialAccounts)
+        const initialPayable = loyaltyInfo?.net_payable_after_points ?? grandTotal
 
         setMode('single')
         setSingleMethod('cash')
         setSingleAccountId(defaultCashAcc ? String(defaultCashAcc) : '')
-        setSingleAmount(String(grandTotal))
+        setSingleAmount(String(initialPayable))
         setSingleCardBin('')
         setSingleReference('')
         setPreviewGrandTotal(null)
+        setPreviewNetPayable(null)
         setPreviewPaymentPromo(null)
+        setPreviewLoyalty(null)
         setSplitRows([
             {
                 id: 'row-1',
                 payment_method: 'cash',
                 financial_account_id: defaultCashAcc ? String(defaultCashAcc) : '',
-                amount: String(Math.floor(grandTotal / 2)),
+                amount: String(Math.floor(initialPayable / 2)),
                 card_bin: '',
                 reference_number: '',
             },
@@ -153,7 +167,7 @@ export function PaymentDialog({
                 id: 'row-2',
                 payment_method: 'qris',
                 financial_account_id: defaultQrisAcc ? String(defaultQrisAcc) : '',
-                amount: String(grandTotal - Math.floor(grandTotal / 2)),
+                amount: String(initialPayable - Math.floor(initialPayable / 2)),
                 card_bin: '',
                 reference_number: '',
             },
@@ -235,9 +249,11 @@ export function PaymentDialog({
             const res = await onPreviewPaymentPromo(payload)
             if (!cancelled && res) {
                 setPreviewGrandTotal(res.grandTotal)
+                setPreviewNetPayable(res.netPayableAfterPoints ?? res.grandTotal)
                 setPreviewPaymentPromo(res.paymentPromotion)
+                setPreviewLoyalty(res.loyalty ?? null)
                 if (mode === 'single' && singleMethod !== 'cash') {
-                    setSingleAmount(String(res.grandTotal))
+                    setSingleAmount(String(res.netPayableAfterPoints ?? res.grandTotal))
                 }
             }
         }, 150)
@@ -246,9 +262,15 @@ export function PaymentDialog({
             cancelled = true
             window.clearTimeout(timer)
         }
-    }, [open, mode, singleMethod, singleAmount, singleCardBin, singleReference, splitRows, onPreviewPaymentPromo])
+    }, [open, mode, singleMethod, singleAmount, singleCardBin, singleReference, splitRows, redeemPoints, onPreviewPaymentPromo])
 
-    const effectiveBillTotal = previewGrandTotal !== null ? previewGrandTotal : grandTotal
+    const activeLoyalty = previewLoyalty ?? loyaltyInfo
+    const effectiveGrossBill = previewGrandTotal !== null ? previewGrandTotal : grandTotal
+    const pointsRedeemAmount = activeLoyalty?.points_redeem_amount ?? 0
+    const effectiveBillTotal =
+        previewNetPayable !== null
+            ? previewNetPayable
+            : Math.max(0, effectiveGrossBill - pointsRedeemAmount)
 
     const remaining = Math.max(0, Math.round((effectiveBillTotal - totalPaid) * 100) / 100)
     const rawChange = Math.max(0, Math.round((totalPaid - effectiveBillTotal) * 100) / 100)
@@ -478,6 +500,104 @@ export function PaymentDialog({
                                 )}
                             </div>
                         </div>
+
+                        {/* Banner Loyalitas & Penukaran Poin */}
+                        {activeLoyalty && activeLoyalty.customer_id !== null && (
+                            <div className="rounded-xl border border-violet-300/80 bg-violet-50/60 dark:border-violet-800 dark:bg-violet-950/30 p-4 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <Crown className="h-4 w-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                                        <span className="text-xs font-semibold text-violet-900 dark:text-violet-200">
+                                            Member {activeLoyalty.tier_label ?? 'Silver'} ({activeLoyalty.tier_multiplier}x Poin)
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="font-mono text-[11px] gap-1 bg-background">
+                                            <Award className="h-3 w-3 text-amber-500" />
+                                            Saldo: {activeLoyalty.active_point_balance} poin
+                                        </Badge>
+                                        <Badge variant="secondary" className="font-mono text-[11px]">
+                                            Est. +{activeLoyalty.estimated_points_earned} poin
+                                        </Badge>
+                                    </div>
+                                </div>
+
+                                {onRedeemPointsChange && activeLoyalty.max_redeemable_points > 0 && (
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-violet-200/70 dark:border-violet-800/60">
+                                        <div className="flex-1 min-w-0">
+                                            <Label htmlFor="payment-redeem-points" className="text-xs">
+                                                Bayar Sebagian Pakai Poin (1 pt = Rp 100, Maks. {activeLoyalty.max_redeemable_points} pt / 50%)
+                                            </Label>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <Input
+                                                id="payment-redeem-points"
+                                                type="number"
+                                                min={0}
+                                                max={activeLoyalty.max_redeemable_points}
+                                                step={1}
+                                                value={redeemPoints || ''}
+                                                placeholder="0"
+                                                disabled={isSubmitting}
+                                                onChange={(e) => {
+                                                    const raw = Math.max(0, Math.floor(Number(e.target.value) || 0))
+                                                    const clamped = Math.min(raw, activeLoyalty.max_redeemable_points)
+                                                    onRedeemPointsChange(clamped)
+                                                    if (mode === 'single') {
+                                                        setSingleAmount(
+                                                            String(Math.max(0, effectiveGrossBill - clamped * 100))
+                                                        )
+                                                    }
+                                                }}
+                                                className="h-8 w-24 font-mono text-xs bg-background"
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={isSubmitting}
+                                                onClick={() => {
+                                                    const maxPts = activeLoyalty.max_redeemable_points
+                                                    onRedeemPointsChange(maxPts)
+                                                    if (mode === 'single') {
+                                                        setSingleAmount(
+                                                            String(Math.max(0, effectiveGrossBill - maxPts * 100))
+                                                        )
+                                                    }
+                                                }}
+                                                className="h-8 px-2.5 text-xs cursor-pointer"
+                                            >
+                                                Maks ({formatRupiah(activeLoyalty.max_redeemable_amount)})
+                                            </Button>
+                                            {redeemPoints > 0 && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    disabled={isSubmitting}
+                                                    onClick={() => {
+                                                        onRedeemPointsChange(0)
+                                                        if (mode === 'single') {
+                                                            setSingleAmount(String(effectiveGrossBill))
+                                                        }
+                                                    }}
+                                                    className="h-8 w-8 text-muted-foreground hover:text-destructive cursor-pointer"
+                                                    title="Hapus redeem poin"
+                                                >
+                                                    <X className="h-3.5 w-3.5" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {pointsRedeemAmount > 0 && (
+                                    <p className="text-[11px] font-mono text-violet-800 dark:text-violet-300">
+                                        Tagihan {formatRupiah(effectiveGrossBill)} − Poin {formatRupiah(pointsRedeemAmount)} = Sisa Bayar Kasir {formatRupiah(effectiveBillTotal)}
+                                    </p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Preview Promo Metode Bayar */}
                         {previewPaymentPromo && previewPaymentPromo.discount_amount > 0 && (

@@ -22,6 +22,7 @@ import suppliers from "@/routes/pos/suppliers"
 import financeAccounts from "@/routes/pos/finance/accounts"
 import financeCategories from "@/routes/pos/finance/categories"
 import financePayables from "@/routes/pos/finance/payables"
+import financeSupplierClaims from "@/routes/pos/finance/supplier-claims"
 import financeTransactions from "@/routes/pos/finance/transactions"
 import shifts from "@/routes/pos/shifts"
 import cashRegisters from "@/routes/pos/cash-registers"
@@ -197,6 +198,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {
                     title: "Hutang Dagang",
                     url: financePayables.index.url(),
+                    roles: ['admin'],
+                },
+                {
+                    title: "Klaim Promo Supplier",
+                    url: financeSupplierClaims.index.url(),
                     roles: ['admin'],
                 },
                 {

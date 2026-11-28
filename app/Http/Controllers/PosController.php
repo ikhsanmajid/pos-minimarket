@@ -82,13 +82,17 @@ class PosController extends Controller
             ->active()
             ->orderBy('name')
             ->limit(50)
-            ->get(['id', 'member_code', 'name', 'phone', 'points'])
+            ->get(['id', 'member_code', 'name', 'phone', 'points', 'tier', 'birth_date'])
             ->map(fn (Customer $c): array => [
                 'id' => $c->id,
                 'member_code' => $c->member_code,
                 'name' => $c->name,
                 'phone' => $c->phone,
                 'points' => (int) $c->points,
+                'tier' => $c->effectiveTier()->value,
+                'tier_label' => $c->effectiveTier()->label(),
+                'tier_multiplier' => $c->effectiveTier()->multiplier(),
+                'birth_date' => $c->birth_date?->format('Y-m-d'),
             ])
             ->values()
             ->all();
@@ -281,6 +285,7 @@ class PosController extends Controller
             : null;
         $payments = is_array($validated['payments'] ?? null) ? $validated['payments'] : [];
         $vouchers = is_array($validated['vouchers'] ?? null) ? $validated['vouchers'] : [];
+        $redeemPoints = max(0, (int) ($validated['redeem_points'] ?? 0));
 
         $result = $this->posPricingService->evaluateCart(
             $validated['items'],
@@ -294,7 +299,8 @@ class PosController extends Controller
             'pos',
             $payments,
             $selectedTebusMurahId,
-            $vouchers
+            $vouchers,
+            $redeemPoints
         );
 
         // Jika perubahan keranjang membuat voucher tidak lagi valid, lepas reservasi otomatis
@@ -577,7 +583,7 @@ class PosController extends Controller
         $transaction->loadMissing([
             'user:id,name',
             'cashierShift:id,shift_number,register_name',
-            'customer:id,name,phone',
+            'customer:id,member_code,name,phone,tier,points',
             'details.product:id,name,barcode,base_unit',
             'payments.financialAccount:id,code,name,type',
             'appliedPromotions',
@@ -600,6 +606,8 @@ class PosController extends Controller
                 PromotionType::MinSpendPercent->value,
                 PromotionType::TebusMurah->value,
                 PromotionType::GiftWithPurchase->value,
+                PromotionType::Birthday->value,
+                PromotionType::FirstPurchase->value,
             ], true))
             ->map(fn (AppliedPromotion $ap): array => [
                 'type' => $ap->type,
@@ -633,6 +641,12 @@ class PosController extends Controller
             'register_name' => $transaction->cashierShift?->register_name ?? 'Kasir',
             'shift_number' => $transaction->cashierShift?->shift_number ?? '-',
             'customer_name' => $transaction->customer?->name,
+            'customer_tier' => $transaction->customer?->tier?->value,
+            'customer_tier_label' => $transaction->customer?->tier?->label(),
+            'customer_points_balance' => $transaction->customer !== null ? (int) $transaction->customer->points : null,
+            'points_redeemed' => (int) ($transaction->points_redeemed ?? 0),
+            'points_redeem_amount' => (float) ($transaction->points_redeem_amount ?? 0),
+            'points_earned' => (int) ($transaction->points_earned ?? 0),
             'subtotal' => (float) $transaction->subtotal,
             'discount_amount' => (float) $transaction->discount_amount,
             'voucher_code' => ! empty($allVoucherCodes) ? implode(', ', $allVoucherCodes) : null,

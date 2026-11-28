@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\CustomerTier;
 use App\Models\Customer;
 use App\Services\CustomerService;
 use Illuminate\Foundation\Http\FormRequest;
@@ -62,6 +63,8 @@ class UpdateCustomerRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:150'],
             'address' => ['nullable', 'string', 'max:1000'],
             'points' => ['nullable', 'integer', 'min:0'],
+            'tier' => ['nullable', 'string', Rule::in(array_column(CustomerTier::cases(), 'value'))],
+            'birth_date' => ['nullable', 'date', 'before_or_equal:today'],
             'is_active' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];

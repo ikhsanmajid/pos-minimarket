@@ -13,9 +13,22 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 import { Field, FieldError } from '@/components/ui/field'
 import { Pencil } from 'lucide-react'
 import type { CustomerRow } from '../Customer'
+
+const TIER_ITEMS = [
+    { value: 'silver', label: 'Silver (1x Poin)' },
+    { value: 'gold', label: 'Gold (1.5x Poin)' },
+    { value: 'platinum', label: 'Platinum (2x Poin)' },
+]
 
 interface DialogEditCustomerProps {
     customer: CustomerRow
@@ -37,6 +50,8 @@ export function DialogEditCustomer({
         email: customer.email ?? '',
         address: customer.address ?? '',
         points: String(customer.points ?? 0),
+        tier: customer.tier ?? 'silver',
+        birth_date: customer.birth_date ?? '',
         is_active: customer.is_active ?? true,
         notes: customer.notes ?? '',
     })
@@ -51,6 +66,8 @@ export function DialogEditCustomer({
                 email: customer.email ?? '',
                 address: customer.address ?? '',
                 points: String(customer.points ?? 0),
+                tier: customer.tier ?? 'silver',
+                birth_date: customer.birth_date ?? '',
                 is_active: customer.is_active ?? true,
                 notes: customer.notes ?? '',
             })
@@ -151,6 +168,47 @@ export function DialogEditCustomer({
                                     className="font-mono text-xs mt-1"
                                 />
                                 <FieldError>{errors.points}</FieldError>
+                            </Field>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <Field>
+                                <Label className="text-xs">Tier Member</Label>
+                                <div className="mt-1">
+                                    <Select
+                                        items={TIER_ITEMS}
+                                        value={data.tier}
+                                        onValueChange={(val) => val && setData('tier', val)}
+                                    >
+                                        <SelectTrigger className="w-full h-9 text-xs">
+                                            <SelectValue>
+                                                {(val) => TIER_ITEMS.find((t) => t.value === val)?.label}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {TIER_ITEMS.map((item) => (
+                                                <SelectItem key={item.value} value={item.value}>
+                                                    {item.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <FieldError>{errors.tier}</FieldError>
+                            </Field>
+
+                            <Field>
+                                <Label htmlFor="edit-cust-birth-date" className="text-xs">
+                                    Tanggal Lahir (Opsional)
+                                </Label>
+                                <Input
+                                    id="edit-cust-birth-date"
+                                    type="date"
+                                    value={data.birth_date}
+                                    onChange={(e) => setData('birth_date', e.target.value)}
+                                    className="font-mono text-xs mt-1 h-9"
+                                />
+                                <FieldError>{errors.birth_date}</FieldError>
                             </Field>
                         </div>
 

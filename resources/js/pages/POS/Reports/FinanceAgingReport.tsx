@@ -13,6 +13,12 @@ import reports from '@/routes/pos/reports'
 import { ReportHeaderTabs } from './component/ReportHeaderTabs'
 import FinanceAgingReportSearch from './component/FinanceAgingReportSearch'
 import {
+    FinancePromoClaimsSection,
+    type PromoFinanceSummary,
+    type PromoHistoryRow,
+    type SupplierPromoClaimRow,
+} from './component/FinancePromoClaimsSection'
+import {
     FinanceCashflowChart,
     PayablesAgingChart,
     type AgingBucketRow,
@@ -78,6 +84,9 @@ type FinanceAgingPageProps = PageProps<{
     agingBuckets: AgingBucketRow[]
     supplierAging: SupplierAgingRow[]
     overduePayables: PaginationMeta & { data: OverduePayableRow[] }
+    promoSummary?: PromoFinanceSummary
+    supplierPromoClaims?: SupplierPromoClaimRow[]
+    promoHistory?: PromoHistoryRow[]
     filters: ReportFilters
     options: {
         accounts: { id: number; code: string; name: string }[]
@@ -94,6 +103,17 @@ export default function FinanceAgingReport() {
         agingBuckets,
         supplierAging,
         overduePayables,
+        promoSummary = {
+            total_discount: 0,
+            store_burden: 0,
+            supplier_burden: 0,
+            supplier_pending_claim: 0,
+            supplier_claimed_amount: 0,
+            supplier_paid_amount: 0,
+            transactions_count: 0,
+        },
+        supplierPromoClaims = [],
+        promoHistory = [],
         filters,
         options,
     } = usePage<FinanceAgingPageProps>().props
@@ -380,6 +400,12 @@ export default function FinanceAgingReport() {
                         />
                     </CardContent>
                 </Card>
+
+                <FinancePromoClaimsSection
+                    promoSummary={promoSummary}
+                    supplierPromoClaims={supplierPromoClaims}
+                    promoHistory={promoHistory}
+                />
             </div>
         </AuthenticatedLayout>
     )

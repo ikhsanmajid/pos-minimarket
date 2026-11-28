@@ -28,6 +28,7 @@ class CheckoutPosRequest extends FormRequest
             'vouchers.*.code' => ['required_with:vouchers', 'string', 'max:64'],
             'vouchers.*.reservation_token' => ['nullable', 'string', 'max:64'],
             'selected_tebus_murah_promotion_id' => ['nullable', 'integer', 'exists:promotions,id'],
+            'redeem_points' => ['nullable', 'integer', 'min:0'],
             'donation_product_id' => ['nullable', 'integer', 'exists:products,id'],
             'donation_amount' => ['nullable', 'numeric', 'min:0'],
             'supervisor_pin' => ['nullable', 'string', 'max:20'],

@@ -10,6 +10,7 @@ use App\Http\Requests\StoreVoucherRequest;
 use App\Http\Requests\UpdateVoucherRequest;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Services\VoucherService;
@@ -56,7 +57,7 @@ class VoucherController extends Controller
         $tz = (string) config('pos_promotions.timezone', 'Asia/Jakarta');
 
         $query = Voucher::query()
-            ->with(['freeProduct:id,name,barcode', 'creator:id,name'])
+            ->with(['freeProduct:id,name,barcode', 'supplier:id,name', 'creator:id,name'])
             ->when($request->search, function ($query, $search) use ($likeOperator): void {
                 $term = trim((string) $search);
                 $query->where(function ($q) use ($term, $likeOperator): void {
@@ -188,6 +189,10 @@ class VoucherController extends Controller
                     'stackable_with_voucher' => (bool) $voucher->stackable_with_voucher,
                     'funding' => $voucher->funding->value,
                     'funding_label' => $voucher->funding->label(),
+                    'supplier_id' => $voucher->supplier_id,
+                    'supplier_name' => $voucher->supplier?->name,
+                    'store_share_percent' => (float) ($voucher->store_share_percent ?? 100),
+                    'supplier_share_percent' => (float) ($voucher->supplier_share_percent ?? 0),
                     'status' => $voucher->status->value,
                     'status_label' => $voucher->status->label(),
                     'computed_status' => $computedStatus->value,
@@ -207,6 +212,17 @@ class VoucherController extends Controller
             ->values()
             ->all();
 
+        $supplierOptions = Supplier::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Supplier $s): array => [
+                'id' => $s->id,
+                'name' => $s->name,
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('POS/Vouchers/Voucher', [
             'vouchers' => $vouchers,
             'filters' => $filters,
@@ -216,6 +232,7 @@ class VoucherController extends Controller
             'fundingOptions' => PromotionFunding::options(),
             'products' => $productOptions,
             'categories' => $categoryOptions,
+            'suppliers' => $supplierOptions,
         ]);
     }
 

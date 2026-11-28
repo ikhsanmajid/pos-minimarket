@@ -531,8 +531,9 @@ class SixMonthSimulationSeeder extends Seeder
         ];
 
         $customers = [];
-        foreach ($names as [$name, $phone, $address, $email]) {
+        foreach ($names as $idx => [$name, $phone, $address, $email]) {
             $customers[] = Customer::create([
+                'member_code' => sprintf('MBR-%04d', $idx + 1),
                 'name' => $name,
                 'phone' => $phone,
                 'address' => $address,

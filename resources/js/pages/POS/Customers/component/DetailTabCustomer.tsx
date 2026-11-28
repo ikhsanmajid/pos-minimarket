@@ -5,8 +5,10 @@ import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
 import { formatNumber, formatRupiah } from '@/lib/utils'
 import {
     Award,
+    Cake,
     Calendar,
     Clock,
+    Crown,
     Mail,
     MapPin,
     Phone,
@@ -86,12 +88,23 @@ export function DetailTabCustomer({ customer, stats }: DetailTabCustomerProps) {
                             </div>
                             <div>
                                 <dt className="text-xs text-muted-foreground">Status Keanggotaan</dt>
-                                <dd className="mt-1">
+                                <dd className="mt-1 flex flex-wrap items-center gap-1.5">
                                     {customer.is_active ? (
                                         <Badge variant="success">Aktif</Badge>
                                     ) : (
                                         <Badge variant="secondary">Nonaktif</Badge>
                                     )}
+                                    <Badge variant="outline" className="gap-1">
+                                        <Crown className="h-3 w-3 text-violet-500" />
+                                        {customer.tier_label ?? 'Silver'} ({customer.tier_multiplier ?? 1}x)
+                                    </Badge>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs text-muted-foreground">Tanggal Lahir</dt>
+                                <dd className="mt-1 flex items-center gap-1.5 text-foreground">
+                                    <Cake className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                    <span>{customer.birth_date_display || '-'}</span>
                                 </dd>
                             </div>
                             <div>

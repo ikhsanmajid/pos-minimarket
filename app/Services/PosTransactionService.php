@@ -11,6 +11,7 @@ use App\Enums\TransactionStatus;
 use App\Enums\UserRoles;
 use App\Models\AppliedPromotion;
 use App\Models\CashierShift;
+use App\Models\Customer;
 use App\Models\HeldTransaction;
 use App\Models\Product;
 use App\Models\ProductUnit;
@@ -41,6 +42,7 @@ class PosTransactionService
         public SupervisorPinService $supervisorPinService,
         public PosPricingService $posPricingService,
         public VoucherService $voucherService,
+        public LoyaltyService $loyaltyService,
     ) {}
 
     /**
@@ -312,6 +314,7 @@ class PosTransactionService
             $selectedTebusMurahPromoId = isset($data['selected_tebus_murah_promotion_id']) && $data['selected_tebus_murah_promotion_id'] !== null
                 ? (int) $data['selected_tebus_murah_promotion_id']
                 : null;
+            $requestedRedeemPoints = max(0, (int) ($data['redeem_points'] ?? 0));
 
             $pricingPayments = array_map(fn (array $pRow): array => [
                 'payment_method' => (string) $pRow['payment_method'],
@@ -320,7 +323,7 @@ class PosTransactionService
                 'reference_number' => isset($pRow['reference_number']) ? (string) $pRow['reference_number'] : null,
             ], $data['payments']);
 
-            // 4. Evaluasi harga grosir, promo otomatis, promo transaksi, voucher, promo bayar, PPN & pembulatan via PosPricingService
+            // 4. Evaluasi harga member, grosir, promo otomatis, promo transaksi, voucher, promo bayar, redeem poin, PPN & pembulatan via PosPricingService
             $pricing = $this->posPricingService->evaluateCart(
                 $pricingInputItems,
                 $customerId,
@@ -333,8 +336,28 @@ class PosTransactionService
                 'pos',
                 $pricingPayments,
                 $selectedTebusMurahPromoId,
-                $vouchersInput
+                $vouchersInput,
+                $requestedRedeemPoints
             );
+
+            $loyaltyInfo = is_array($pricing['loyalty'] ?? null) ? $pricing['loyalty'] : [];
+            if ($requestedRedeemPoints > 0) {
+                if ($customerId === null || empty($loyaltyInfo['customer_id'])) {
+                    throw ValidationException::withMessages([
+                        'redeem_points' => 'Penukaran poin hanya berlaku untuk pelanggan member aktif.',
+                    ]);
+                }
+
+                $maxRedeemablePoints = (int) ($loyaltyInfo['max_redeemable_points'] ?? 0);
+                if ($requestedRedeemPoints > $maxRedeemablePoints) {
+                    throw ValidationException::withMessages([
+                        'redeem_points' => sprintf(
+                            'Maksimal poin yang dapat ditukar adalah %d poin (maks. 50%% tagihan & sesuai saldo aktif).',
+                            $maxRedeemablePoints
+                        ),
+                    ]);
+                }
+            }
 
             $evaluatedVouchers = is_array($pricing['vouchers'] ?? null) ? $pricing['vouchers'] : [];
             if (! empty($vouchersInput)) {
@@ -420,6 +443,10 @@ class PosTransactionService
             $taxAmount = (float) $summary['tax_amount'];
             $roundingAmount = (float) $summary['rounding_amount'];
             $grandTotal = (float) $summary['grand_total'];
+            $pointsRedeemed = (int) ($summary['points_redeemed'] ?? 0);
+            $pointsRedeemAmount = (float) ($summary['points_redeem_amount'] ?? 0);
+            $pointsEarned = (int) ($summary['estimated_points_earned'] ?? 0);
+            $netPayableAfterPoints = round(max(0.0, $grandTotal - $pointsRedeemAmount), 2);
 
             $subtotalAfterItemDiscounts = max(0, $summary['gross_subtotal'] - $summary['item_discount_total']);
             if ($requestedTxDiscount > $subtotalAfterItemDiscounts) {
@@ -496,7 +523,7 @@ class PosTransactionService
                 }
             }
 
-            // 6. Validasi pembayaran (single & split payment)
+            // 6. Validasi pembayaran (single & split payment + redeem poin sebagai alat pembayaran)
             $paidAmount = 0.0;
             $nonCashAmount = 0.0;
             $normalizedPayments = [];
@@ -504,7 +531,7 @@ class PosTransactionService
             foreach ($data['payments'] as $pIndex => $paymentRow) {
                 $method = PaymentMethod::from((string) $paymentRow['payment_method']);
                 $amount = round((float) $paymentRow['amount'], 2);
-                if ($grandTotal > 0 && $amount <= 0) {
+                if ($netPayableAfterPoints > 0 && $amount <= 0) {
                     throw ValidationException::withMessages([
                         "payments.{$pIndex}.amount" => 'Nominal pembayaran harus lebih besar dari 0.',
                     ]);
@@ -530,23 +557,23 @@ class PosTransactionService
                 ];
             }
 
-            if ($paidAmount < $grandTotal) {
+            if ($paidAmount < $netPayableAfterPoints) {
                 throw ValidationException::withMessages([
                     'payments' => sprintf(
-                        'Total pembayaran (Rp %s) kurang dari total tagihan (Rp %s).',
+                        'Total pembayaran (Rp %s) kurang dari sisa tagihan (Rp %s).',
                         number_format($paidAmount, 0, ',', '.'),
-                        number_format($grandTotal, 0, ',', '.')
+                        number_format($netPayableAfterPoints, 0, ',', '.')
                     ),
                 ]);
             }
 
-            if ($nonCashAmount > $grandTotal) {
+            if ($nonCashAmount > $netPayableAfterPoints) {
                 throw ValidationException::withMessages([
-                    'payments' => 'Pembayaran non-tunai tidak boleh melebihi total tagihan (kembalian hanya berlaku untuk pembayaran tunai).',
+                    'payments' => 'Pembayaran non-tunai tidak boleh melebihi sisa tagihan (kembalian hanya berlaku untuk pembayaran tunai).',
                 ]);
             }
 
-            $rawChangeAmount = round(max(0.0, $paidAmount - $grandTotal), 2);
+            $rawChangeAmount = round(max(0.0, $paidAmount - $netPayableAfterPoints), 2);
             $changeDonationAmount = round(max(0.0, (float) ($data['donation_amount'] ?? 0)), 2);
 
             if ($changeDonationAmount > 0.0) {
@@ -603,10 +630,11 @@ class PosTransactionService
                 ];
 
                 $grandTotal = round($grandTotal + $changeDonationAmount, 2);
+                $netPayableAfterPoints = round($netPayableAfterPoints + $changeDonationAmount, 2);
             }
 
             $totalDonationAmount = round($cartDonationTotal + $changeDonationAmount, 2);
-            $changeAmount = round(max(0.0, $paidAmount - $grandTotal), 2);
+            $changeAmount = round(max(0.0, $paidAmount - $netPayableAfterPoints), 2);
 
             $uniqueMethods = array_values(array_unique(array_map(
                 fn (array $p): string => $p['payment_method']->value,
@@ -634,6 +662,9 @@ class PosTransactionService
                 'paid_amount' => $paidAmount,
                 'pay_amount' => $paidAmount,
                 'change_amount' => $changeAmount,
+                'points_redeemed' => $pointsRedeemed,
+                'points_redeem_amount' => $pointsRedeemAmount,
+                'points_earned' => $pointsEarned,
                 'payment_method' => $legacyPaymentMethod,
                 'status' => TransactionStatus::Completed,
                 'discount_approved_by' => $discountApprovedBy,
@@ -1027,6 +1058,37 @@ class PosTransactionService
                 }
             }
 
+            // 10B. Proses mutasi poin loyalitas FIFO (Redeem dahulu, lalu Earn setelah pembayaran sukses)
+            if ($customerId !== null && ($pointsRedeemed > 0 || $pointsEarned > 0)) {
+                /** @var Customer|null $loyaltyCustomer */
+                $loyaltyCustomer = Customer::query()
+                    ->where('id', $customerId)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($loyaltyCustomer instanceof Customer) {
+                    if ($pointsRedeemed > 0) {
+                        $this->loyaltyService->redeemPointsFifo(
+                            $loyaltyCustomer,
+                            $pointsRedeemed,
+                            $transaction,
+                            $actor,
+                            $referenceAt
+                        );
+                    }
+
+                    if ($pointsEarned > 0) {
+                        $this->loyaltyService->earnPoints(
+                            $loyaltyCustomer,
+                            $pointsEarned,
+                            $transaction,
+                            $actor,
+                            $referenceAt
+                        );
+                    }
+                }
+            }
+
             // 11. Hapus HeldTransaction jika checkout berasal dari hold bill
             if (! empty($data['held_transaction_id'])) {
                 HeldTransaction::query()
@@ -1054,6 +1116,9 @@ class PosTransactionService
                     'grand_total' => $grandTotal,
                     'paid_amount' => $paidAmount,
                     'change_amount' => $changeAmount,
+                    'points_redeemed' => $pointsRedeemed,
+                    'points_redeem_amount' => $pointsRedeemAmount,
+                    'points_earned' => $pointsEarned,
                     'payment_method' => $legacyPaymentMethod,
                     'discount_approved_by' => $discountApprovedBy,
                     'voucher_code' => implode(', ', array_filter(array_map(
@@ -1075,7 +1140,7 @@ class PosTransactionService
             return $transaction->load([
                 'user:id,name,role',
                 'cashierShift:id,shift_number,register_name',
-                'customer:id,name,phone',
+                'customer:id,member_code,name,phone,tier,points',
                 'details.product:id,name,barcode,base_unit',
                 'payments.financialAccount:id,code,name,type',
                 'appliedPromotions',
@@ -1153,6 +1218,7 @@ class PosTransactionService
             }
 
             $this->voucherService->refundForTransaction($lockedTx);
+            $this->loyaltyService->reverseForVoid($lockedTx, $actor);
 
             // 1. Kunci produk secara terurut & kembalikan stok
             $productIds = $lockedTx->details->pluck('product_id')->unique()->sort()->values()->all();

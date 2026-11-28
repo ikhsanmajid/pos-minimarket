@@ -80,6 +80,9 @@ use Spatie\Activitylog\Support\LogOptions;
     'stackable_with_promo',
     'stackable_with_voucher',
     'funding',
+    'supplier_id',
+    'store_share_percent',
+    'supplier_share_percent',
     'status',
     'created_by',
 ])]
@@ -97,6 +100,8 @@ class Voucher extends Model
         'stackable_with_promo' => true,
         'stackable_with_voucher' => false,
         'funding' => 'store',
+        'store_share_percent' => 100,
+        'supplier_share_percent' => 0,
         'status' => 'draft',
     ];
 
@@ -105,6 +110,8 @@ class Voucher extends Model
         return [
             'type' => VoucherType::class,
             'funding' => PromotionFunding::class,
+            'store_share_percent' => 'decimal:2',
+            'supplier_share_percent' => 'decimal:2',
             'status' => VoucherStatus::class,
             'value' => 'decimal:2',
             'max_discount' => 'decimal:2',
@@ -278,6 +285,12 @@ class Voucher extends Model
     public function freeProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'free_product_id');
+    }
+
+    /** @return BelongsTo<Supplier, $this> */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
     }
 
     /** @return BelongsTo<User, $this> */

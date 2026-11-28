@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ActivityLogCategory;
+use App\Enums\CustomerTier;
 use Database\Factories\CustomerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
@@ -23,6 +24,8 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property string|null $email
  * @property string|null $address
  * @property int $points
+ * @property CustomerTier $tier
+ * @property Carbon|null $birth_date
  * @property bool $is_active
  * @property string|null $notes
  * @property Carbon|null $created_at
@@ -37,6 +40,8 @@ use Spatie\Activitylog\Support\LogOptions;
     'email',
     'address',
     'points',
+    'tier',
+    'birth_date',
     'is_active',
     'notes',
 ])]
@@ -45,10 +50,18 @@ class Customer extends Model
     /** @use HasFactory<CustomerFactory> */
     use HasFactory, LogsActivity, SoftDeletes;
 
+    protected $attributes = [
+        'points' => 0,
+        'tier' => 'silver',
+        'is_active' => true,
+    ];
+
     protected function casts(): array
     {
         return [
             'points' => 'integer',
+            'tier' => CustomerTier::class,
+            'birth_date' => 'date',
             'is_active' => 'boolean',
         ];
     }
@@ -71,6 +84,8 @@ class Customer extends Model
                 'email',
                 'address',
                 'points',
+                'tier',
+                'birth_date',
                 'is_active',
                 'notes',
             ])
@@ -91,5 +106,18 @@ class Customer extends Model
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    /** @return HasMany<CustomerPointLedger, $this> */
+    public function pointLedgers(): HasMany
+    {
+        return $this->hasMany(CustomerPointLedger::class);
+    }
+
+    public function effectiveTier(): CustomerTier
+    {
+        return $this->tier instanceof CustomerTier
+            ? $this->tier
+            : CustomerTier::Silver;
     }
 }

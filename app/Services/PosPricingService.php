@@ -24,6 +24,7 @@ class PosPricingService
     public function __construct(
         public StoreSettingService $storeSettingService,
         public VoucherService $voucherService,
+        public LoyaltyService $loyaltyService,
     ) {}
 
     /**
@@ -62,7 +63,8 @@ class PosPricingService
         string $channel = 'pos',
         array $payments = [],
         ?int $selectedTebusMurahPromotionId = null,
-        array $vouchers = []
+        array $vouchers = [],
+        int $redeemPoints = 0
     ): array {
         $referenceAt = ($at ?? now())->copy();
         $tz = (string) config('pos_promotions.timezone', 'Asia/Jakarta');
@@ -113,11 +115,20 @@ class PosPricingService
             ], $voucherEntries);
             $emptyVoucher = $emptyVouchers[0] ?? null;
 
+            /** @var Customer|null $emptyCustomer */
+            $emptyCustomer = $customerId !== null
+                ? Customer::query()->where('id', $customerId)->where('is_active', true)->first()
+                : null;
+            $emptyBalance = $emptyCustomer instanceof Customer
+                ? $this->loyaltyService->getActivePointBalance($emptyCustomer, $referenceAt)
+                : 0;
+
             return [
                 'evaluated_at' => $referenceAt->toIso8601String(),
                 'items' => [],
                 'summary' => [
                     'gross_subtotal' => 0,
+                    'member_discount_total' => 0,
                     'auto_discount_total' => 0,
                     'manual_item_discount_total' => 0,
                     'item_discount_total' => 0,
@@ -135,8 +146,27 @@ class PosPricingService
                     'tax_amount' => 0,
                     'rounding_amount' => 0,
                     'grand_total' => 0,
+                    'points_redeemed' => 0,
+                    'points_redeem_amount' => 0,
+                    'net_payable_after_points' => 0,
+                    'estimated_points_earned' => 0,
                     'total_items_qty' => 0,
                     'has_tax_exempt_items' => false,
+                ],
+                'loyalty' => [
+                    'customer_id' => $emptyCustomer?->id,
+                    'tier' => $emptyCustomer?->tier?->value,
+                    'tier_label' => $emptyCustomer?->tier?->label(),
+                    'tier_multiplier' => $emptyCustomer?->tier?->multiplier() ?? 1.0,
+                    'active_point_balance' => $emptyBalance,
+                    'max_redeemable_points' => 0,
+                    'max_redeemable_amount' => 0,
+                    'points_redeemed' => 0,
+                    'points_redeem_amount' => 0,
+                    'net_payable_after_points' => 0,
+                    'estimated_points_earned' => 0,
+                    'is_birthday' => $this->loyaltyService->isCustomerBirthday($emptyCustomer, $referenceAt),
+                    'is_first_purchase' => $this->loyaltyService->isCustomerFirstPurchase($emptyCustomer),
                 ],
                 'voucher' => $emptyVoucher,
                 'vouchers' => $emptyVouchers,
@@ -178,6 +208,7 @@ class PosPricingService
             ->with([
                 'category:id,name,slug,is_promo_excluded',
                 'activePriceTiers',
+                'activeMemberPrices',
             ])
             ->get()
             ->keyBy('id');
@@ -203,10 +234,13 @@ class PosPricingService
             ->map(fn (mixed $v): string => (string) $v)
             ->all();
 
-        $isValidMember = $customerId !== null && Customer::query()
-            ->where('id', $customerId)
-            ->where('is_active', true)
-            ->exists();
+        /** @var Customer|null $activeCustomer */
+        $activeCustomer = $customerId !== null
+            ? Customer::query()->where('id', $customerId)->where('is_active', true)->first()
+            : null;
+        $isValidMember = $activeCustomer instanceof Customer;
+        $isCustomerBirthday = $this->loyaltyService->isCustomerBirthday($activeCustomer, $referenceAt);
+        $isCustomerFirstPurchase = $this->loyaltyService->isCustomerFirstPurchase($activeCustomer);
 
         // Muat seluruh promo aktif (item-level, transaction-level, payment-level) dalam 1 query
         /** @var EloquentCollection<int, Promotion> $allActivePromotions */
@@ -221,8 +255,16 @@ class PosPricingService
             ->orderByDesc('priority')
             ->orderBy('id')
             ->get()
-            ->filter(function (Promotion $promo) use ($referenceAt, $isValidMember): bool {
+            ->filter(function (Promotion $promo) use ($referenceAt, $isValidMember, $isCustomerBirthday, $isCustomerFirstPurchase): bool {
                 if ($promo->member_only && ! $isValidMember) {
+                    return false;
+                }
+
+                if ($promo->type === PromotionType::Birthday && ! $isCustomerBirthday) {
+                    return false;
+                }
+
+                if ($promo->type === PromotionType::FirstPurchase && ! $isCustomerFirstPurchase) {
                     return false;
                 }
 
@@ -319,6 +361,14 @@ class PosPricingService
                 }
             }
 
+            // Langkah 2: Harga Member (product_member_prices) sesuai tier pelanggan sebelum grosir/promo
+            $memberPriceInfo = ! $isPromoExcluded
+                ? $this->loyaltyService->resolveMemberPrice($product, $productUnitId, $activeCustomer, $baseUnitPrice)
+                : null;
+            $workingUnitPrice = $memberPriceInfo !== null ? $memberPriceInfo['member_price'] : $baseUnitPrice;
+            $workingLineGross = PricingMath::floorRupiah($workingUnitPrice * $qty);
+            $memberDiscountAmount = max(0, $lineGross - $workingLineGross);
+
             $preparedLines[$index] = [
                 'index' => $index,
                 'product' => $product,
@@ -326,8 +376,12 @@ class PosPricingService
                 'product_unit_id' => $productUnitId,
                 'qty' => $qty,
                 'is_integral_qty' => is_int($qty) || floor((float) $qty) === (float) $qty,
-                'base_unit_price' => $baseUnitPrice,
-                'line_gross' => $lineGross,
+                'catalog_unit_price' => $baseUnitPrice,
+                'catalog_line_gross' => $lineGross,
+                'base_unit_price' => $workingUnitPrice,
+                'line_gross' => $workingLineGross,
+                'member_discount_amount' => $memberDiscountAmount,
+                'member_price_tier_label' => $memberPriceInfo['tier_label'] ?? null,
                 'manual_discount_requested' => PricingMath::floorRupiah($rawItem['discount_amount'] ?? 0),
                 'is_promo_excluded' => $isPromoExcluded,
                 'days_until_expiry' => $daysUntilExpiry,
@@ -400,8 +454,9 @@ class PosPricingService
             $bundlePromotions = $multiResult['applied_multi_promos'];
         }
 
-        // Langkah 4: Terapkan diskon manual item & hitung ringkasan setelah promo item
+        // Langkah 4: Terapkan diskon manual item & hitung ringkasan setelah harga member & promo item
         $grossSubtotal = 0;
+        $memberDiscountTotal = 0;
         $autoDiscountTotal = 0;
         $manualItemDiscountTotal = 0;
         $finalEligibleSubtotal = 0;
@@ -429,15 +484,27 @@ class PosPricingService
 
         foreach ($preparedLines as $index => $line) {
             $winner = $finalItemWinners[$index];
-            $autoDiscount = min($winner['auto_discount_amount'], $line['line_gross']);
-            $remainingLineAfterAuto = max(0, $line['line_gross'] - $autoDiscount);
+            $catalogLineGross = (int) $line['catalog_line_gross'];
+            $memberDiscount = (int) $line['member_discount_amount'];
+            $step3AutoDiscount = min($winner['auto_discount_amount'], $line['line_gross']);
+            $autoDiscount = min($memberDiscount + $step3AutoDiscount, $catalogLineGross);
+            $remainingLineAfterAuto = max(0, $catalogLineGross - $autoDiscount);
             $manualItemDiscount = min($line['manual_discount_requested'], $remainingLineAfterAuto);
             $totalLineDiscount = $autoDiscount + $manualItemDiscount;
-            $lineSubtotal = max(0, $line['line_gross'] - $totalLineDiscount);
+            $lineSubtotal = max(0, $catalogLineGross - $totalLineDiscount);
 
             $effectiveUnitPrice = $line['qty'] > 0
-                ? round(($line['line_gross'] - $autoDiscount) / (float) $line['qty'], 2)
-                : (float) $line['base_unit_price'];
+                ? round(($catalogLineGross - $autoDiscount) / (float) $line['qty'], 2)
+                : (float) $line['catalog_unit_price'];
+
+            $pricingSource = $winner['pricing_source'];
+            $badgeLabel = $winner['badge_label'];
+            if ($memberDiscount > 0 && $step3AutoDiscount === 0) {
+                $pricingSource = 'member_price';
+                $badgeLabel = $line['member_price_tier_label'] !== null
+                    ? "Harga Member ({$line['member_price_tier_label']})"
+                    : 'Harga Member';
+            }
 
             if ($winner['applied_promotion_id'] !== null && $winner['quota_consumed'] > 0 && ! in_array($winner['applied_promotion_id'], $multiLinePromoIds, true)) {
                 $pid = (int) $winner['applied_promotion_id'];
@@ -458,7 +525,8 @@ class PosPricingService
                 }
             }
 
-            $grossSubtotal += $line['line_gross'];
+            $grossSubtotal += $catalogLineGross;
+            $memberDiscountTotal += $memberDiscount;
             $autoDiscountTotal += $autoDiscount;
             $manualItemDiscountTotal += $manualItemDiscount;
             $totalItemsQty += $line['qty'];
@@ -478,9 +546,11 @@ class PosPricingService
                 'product_id' => $line['product_id'],
                 'product_unit_id' => $line['product_unit_id'],
                 'qty' => $line['qty'],
-                'base_unit_price' => $line['base_unit_price'],
+                'base_unit_price' => $line['catalog_unit_price'],
+                'member_unit_price' => $memberDiscount > 0 ? $line['base_unit_price'] : null,
+                'member_discount_amount' => $memberDiscount,
                 'effective_unit_price' => $effectiveUnitPrice,
-                'line_gross' => $line['line_gross'],
+                'line_gross' => $catalogLineGross,
                 'auto_discount_amount' => $autoDiscount,
                 'manual_discount_amount' => $manualItemDiscount,
                 'discount_amount' => $totalLineDiscount,
@@ -488,14 +558,14 @@ class PosPricingService
                 'line_subtotal' => $lineSubtotal,
                 'line_net_after_header' => $lineSubtotal,
                 'free_qty' => $winner['free_qty'],
-                'pricing_source' => $winner['pricing_source'],
+                'pricing_source' => $pricingSource,
                 'applied_promotion_id' => $winner['applied_promotion_id'],
                 'applied_promotion_name' => $winner['applied_promotion_name'],
                 'applied_promotion_type' => $winner['applied_promotion_type'],
                 'applied_promotion_funding' => $winner['applied_promotion_funding'],
                 'applied_tier_min_qty' => $winner['applied_tier_min_qty'],
                 'quota_consumed' => $winner['quota_consumed'],
-                'badge_label' => $winner['badge_label'],
+                'badge_label' => $badgeLabel,
                 'is_near_expiry_promo' => $winner['applied_promotion_type'] === PromotionType::NearExpiry->value,
                 'is_promo_excluded' => $line['is_promo_excluded'],
                 'tax_mode' => $line['tax_mode']->value,
@@ -516,7 +586,7 @@ class PosPricingService
         $cashbackPromotions = [];
         $cashbackTotal = 0;
 
-        // 5A. Min-Spend Discount & Min-Spend Percent
+        // 5A. Min-Spend Discount, Min-Spend Percent, Birthday, & First Purchase
         $eligibleLinesForTxPromo = [];
         foreach ($evaluatedItems as $index => $evalLine) {
             if (! $evalLine['is_promo_excluded'] && $evalLine['line_subtotal'] > 0) {
@@ -529,7 +599,12 @@ class PosPricingService
         $bestTxDiscount = 0;
 
         foreach ($candidateTxPromotions as $promo) {
-            if (! in_array($promo->type, [PromotionType::MinSpendDiscount, PromotionType::MinSpendPercent], true)) {
+            if (! in_array($promo->type, [
+                PromotionType::MinSpendDiscount,
+                PromotionType::MinSpendPercent,
+                PromotionType::Birthday,
+                PromotionType::FirstPurchase,
+            ], true)) {
                 continue;
             }
 
@@ -547,13 +622,25 @@ class PosPricingService
                 continue;
             }
 
-            $disc = $promo->type === PromotionType::MinSpendPercent
-                ? PricingMath::percentageDiscount(
+            $rawDiscVal = (float) ($promo->discount_value ?? 0);
+            if ($promo->type === PromotionType::MinSpendPercent) {
+                $disc = PricingMath::percentageDiscount(
                     $finalEligibleSubtotal,
-                    (float) ($promo->discount_value ?? 0),
+                    $rawDiscVal,
                     $promo->max_discount_amount !== null ? PricingMath::toRupiah($promo->max_discount_amount) : null
-                )
-                : PricingMath::toRupiah($promo->discount_value);
+                );
+            } elseif ($promo->type === PromotionType::MinSpendDiscount) {
+                $disc = PricingMath::toRupiah($rawDiscVal);
+            } else {
+                // Birthday & FirstPurchase: <= 100 dianggap persentase, > 100 dianggap nominal Rupiah
+                $disc = $rawDiscVal <= 100.0
+                    ? PricingMath::percentageDiscount(
+                        $finalEligibleSubtotal,
+                        $rawDiscVal,
+                        $promo->max_discount_amount !== null ? PricingMath::toRupiah($promo->max_discount_amount) : null
+                    )
+                    : PricingMath::toRupiah($rawDiscVal);
+            }
 
             $disc = min($disc, $eligibleRemainingForTxPromo);
             if ($disc <= 0) {
@@ -1196,12 +1283,29 @@ class PosPricingService
             $storeSetting->rounding_mode,
             $hasCashPayment
         );
+        $grandTotal = $roundingResult['rounded'];
+
+        // Langkah 9: Pratinjau Redeem Poin sebagai alat pembayaran (tidak mengurangi DPP PPN, maks 50% tagihan)
+        $redeemPreview = $this->loyaltyService->calculateRedeemPreview(
+            $activeCustomer,
+            max(0, $redeemPoints),
+            $grandTotal,
+            $referenceAt
+        );
+
+        // Langkah 12: Estimasi perolehan poin dari nilai bayar bersih non-excluded tanpa porsi redeem poin
+        $estimatedPointsEarned = $this->loyaltyService->calculateEarnedPoints(
+            $activeCustomer,
+            $evaluatedItems,
+            $redeemPreview['points_redeem_amount']
+        );
 
         return [
             'evaluated_at' => $referenceAt->toIso8601String(),
             'items' => array_values($evaluatedItems),
             'summary' => [
                 'gross_subtotal' => $grossSubtotal,
+                'member_discount_total' => $memberDiscountTotal,
                 'auto_discount_total' => $autoDiscountTotal,
                 'manual_item_discount_total' => $manualItemDiscountTotal,
                 'item_discount_total' => $itemDiscountTotal,
@@ -1218,9 +1322,28 @@ class PosPricingService
                 'tax_exempt_amount' => $taxExemptAmount,
                 'tax_amount' => $taxAmount,
                 'rounding_amount' => $roundingResult['rounding_amount'],
-                'grand_total' => $roundingResult['rounded'],
+                'grand_total' => $grandTotal,
+                'points_redeemed' => $redeemPreview['points_redeemed'],
+                'points_redeem_amount' => $redeemPreview['points_redeem_amount'],
+                'net_payable_after_points' => $redeemPreview['net_payable_after_redeem'],
+                'estimated_points_earned' => $estimatedPointsEarned,
                 'total_items_qty' => $totalItemsQty,
                 'has_tax_exempt_items' => $hasTaxExemptItems,
+            ],
+            'loyalty' => [
+                'customer_id' => $activeCustomer?->id,
+                'tier' => $activeCustomer?->tier?->value,
+                'tier_label' => $activeCustomer?->tier?->label(),
+                'tier_multiplier' => $activeCustomer?->tier?->multiplier() ?? 1.0,
+                'active_point_balance' => $redeemPreview['active_balance'],
+                'max_redeemable_points' => $redeemPreview['max_redeemable_points'],
+                'max_redeemable_amount' => $redeemPreview['max_redeemable_amount'],
+                'points_redeemed' => $redeemPreview['points_redeemed'],
+                'points_redeem_amount' => $redeemPreview['points_redeem_amount'],
+                'net_payable_after_points' => $redeemPreview['net_payable_after_redeem'],
+                'estimated_points_earned' => $estimatedPointsEarned,
+                'is_birthday' => $isCustomerBirthday,
+                'is_first_purchase' => $isCustomerFirstPurchase,
             ],
             'voucher' => $voucherPayload,
             'vouchers' => $vouchersPayload,
@@ -1906,15 +2029,20 @@ class PosPricingService
         $baseUnitPrice = (int) $line['base_unit_price'];
 
         // Terapkan batas kuota / max_qty_per_transaction / max_qty_per_customer_per_day
+        $capQuota = null;
+        foreach ([$remainingQuota, $remainingTxQty, $remainingDailyQty] as $limit) {
+            if ($limit !== null) {
+                $capQuota = $capQuota === null ? $limit : min($capQuota, $limit);
+            }
+        }
+
+        if ($capQuota !== null && $capQuota <= 0) {
+            return ['discount' => 0, 'free_qty' => 0, 'quota_consumed' => 0];
+        }
+
         $eligibleQty = (float) $qty;
-        if ($remainingQuota !== null) {
-            $eligibleQty = min($eligibleQty, (float) $remainingQuota);
-        }
-        if ($remainingTxQty !== null) {
-            $eligibleQty = min($eligibleQty, (float) $remainingTxQty);
-        }
-        if ($remainingDailyQty !== null) {
-            $eligibleQty = min($eligibleQty, (float) $remainingDailyQty);
+        if ($capQuota !== null) {
+            $eligibleQty = min($eligibleQty, (float) $capQuota);
         }
 
         if ($eligibleQty <= 0.0) {
@@ -1923,6 +2051,7 @@ class PosPricingService
 
         $eligibleGross = PricingMath::floorRupiah($baseUnitPrice * $eligibleQty);
         $quotaUnits = (int) floor($eligibleQty + 1e-9);
+        $totalCartUnits = (int) floor((float) $qty + 1e-9);
 
         return match ($promo->type) {
             PromotionType::PercentageDiscount => [
@@ -1944,7 +2073,7 @@ class PosPricingService
                 'quota_consumed' => max(1, $quotaUnits),
             ],
 
-            PromotionType::BuyXGetY => (function () use ($promo, $isIntegralQty, $quotaUnits, $baseUnitPrice): array {
+            PromotionType::BuyXGetY => (function () use ($promo, $isIntegralQty, $totalCartUnits, $capQuota, $baseUnitPrice): array {
                 if (! $isIntegralQty) {
                     return ['discount' => 0, 'free_qty' => 0, 'quota_consumed' => 0];
                 }
@@ -1956,19 +2085,27 @@ class PosPricingService
                 }
 
                 $bundleSize = $buyQty + $getQty;
-                $sets = intdiv($quotaUnits, $bundleSize);
+                $sets = intdiv($totalCartUnits, $bundleSize);
                 if ($sets < 1) {
                     return ['discount' => 0, 'free_qty' => 0, 'quota_consumed' => 0];
                 }
 
+                // Kuota dihitung hanya dari jumlah item bonus/gratis yang didiskon, bukan seluruh item di struk
                 $bonusUnits = $sets * $getQty;
+                if ($capQuota !== null) {
+                    $bonusUnits = min($bonusUnits, $capQuota);
+                }
+                if ($bonusUnits < 1) {
+                    return ['discount' => 0, 'free_qty' => 0, 'quota_consumed' => 0];
+                }
+
                 $discountPercent = (float) ($promo->get_discount_percent ?? 100.0);
                 $discount = PricingMath::percentageDiscount($bonusUnits * $baseUnitPrice, $discountPercent);
 
                 return [
                     'discount' => $discount,
                     'free_qty' => $discountPercent >= 100.0 ? $bonusUnits : 0,
-                    'quota_consumed' => $sets * $bundleSize,
+                    'quota_consumed' => $bonusUnits,
                 ];
             })(),
 
@@ -1999,7 +2136,7 @@ class PosPricingService
                 ];
             })(),
 
-            PromotionType::NthItemDiscount => (function () use ($promo, $isIntegralQty, $quotaUnits, $baseUnitPrice): array {
+            PromotionType::NthItemDiscount => (function () use ($promo, $isIntegralQty, $totalCartUnits, $capQuota, $baseUnitPrice): array {
                 if (! $isIntegralQty) {
                     return ['discount' => 0, 'free_qty' => 0, 'quota_consumed' => 0];
                 }
@@ -2009,7 +2146,11 @@ class PosPricingService
                     return ['discount' => 0, 'free_qty' => 0, 'quota_consumed' => 0];
                 }
 
-                $discountedUnits = intdiv($quotaUnits, $nth);
+                // Kuota dihitung hanya dari item ke-N yang mendapat diskon, bukan seluruh item di struk
+                $discountedUnits = intdiv($totalCartUnits, $nth);
+                if ($capQuota !== null) {
+                    $discountedUnits = min($discountedUnits, $capQuota);
+                }
                 if ($discountedUnits < 1) {
                     return ['discount' => 0, 'free_qty' => 0, 'quota_consumed' => 0];
                 }
@@ -2032,7 +2173,7 @@ class PosPricingService
                 return [
                     'discount' => max(0, $discount),
                     'free_qty' => $perUnitDiscount >= $baseUnitPrice ? $discountedUnits : 0,
-                    'quota_consumed' => $discountedUnits * $nth,
+                    'quota_consumed' => $discountedUnits,
                 ];
             })(),
 

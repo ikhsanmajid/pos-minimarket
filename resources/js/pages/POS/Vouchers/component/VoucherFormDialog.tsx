@@ -28,6 +28,7 @@ import {
     SelectProductsMultiAsync,
     type PromotionProductOption,
 } from '@/pages/POS/Promotions/component/SelectProductsMultiAsync'
+import { DateTime24hInput, Time24hInput } from '@/components/ui/datetime-24h-input'
 
 interface OptionItem {
     value: string
@@ -54,6 +55,7 @@ interface VoucherFormDialogProps {
     fundingOptions: OptionItem[]
     products: ProductOption[]
     categories: CategoryOption[]
+    suppliers?: Array<{ id: number; name: string }>
 }
 
 const DAY_BITS: Array<{ bit: number; label: string }> = [
@@ -82,6 +84,7 @@ export function VoucherFormDialog({
     fundingOptions,
     products,
     categories,
+    suppliers = [],
 }: VoucherFormDialogProps) {
     const [code, setCode] = useState('')
     const [name, setName] = useState('')
@@ -92,6 +95,7 @@ export function VoucherFormDialog({
     const [validFrom, setValidFrom] = useState(defaultDateTimeLocal(0))
     const [validUntil, setValidUntil] = useState(defaultDateTimeLocal(14))
     const [allowedDays, setAllowedDays] = useState(127)
+    const [useHappyHour, setUseHappyHour] = useState(false)
     const [allowedHoursStart, setAllowedHoursStart] = useState('')
     const [allowedHoursEnd, setAllowedHoursEnd] = useState('')
     const [totalQuota, setTotalQuota] = useState('')
@@ -101,6 +105,9 @@ export function VoucherFormDialog({
     const [stackableWithPromo, setStackableWithPromo] = useState(true)
     const [stackableWithVoucher, setStackableWithVoucher] = useState(false)
     const [funding, setFunding] = useState('store')
+    const [supplierId, setSupplierId] = useState('')
+    const [storeSharePercent, setStoreSharePercent] = useState('50')
+    const [supplierSharePercent, setSupplierSharePercent] = useState('50')
     const [status, setStatus] = useState('active')
     const [freeProductId, setFreeProductId] = useState<string>('')
     const [selectedProducts, setSelectedProducts] = useState<PromotionProductOption[]>([])
@@ -125,6 +132,7 @@ export function VoucherFormDialog({
             setValidFrom(voucher.valid_from)
             setValidUntil(voucher.valid_until)
             setAllowedDays(voucher.allowed_days ?? 127)
+            setUseHappyHour(Boolean(voucher.allowed_hours_start || voucher.allowed_hours_end))
             setAllowedHoursStart(voucher.allowed_hours_start ?? '')
             setAllowedHoursEnd(voucher.allowed_hours_end ?? '')
             setTotalQuota(voucher.total_quota !== null ? String(voucher.total_quota) : '')
@@ -134,6 +142,21 @@ export function VoucherFormDialog({
             setStackableWithPromo(voucher.stackable_with_promo)
             setStackableWithVoucher(voucher.stackable_with_voucher)
             setFunding(voucher.funding)
+            setSupplierId(voucher.supplier_id ? String(voucher.supplier_id) : '')
+            setStoreSharePercent(
+                voucher.funding === 'shared'
+                    ? String(voucher.store_share_percent ?? 50)
+                    : voucher.funding === 'supplier'
+                      ? '0'
+                      : '100'
+            )
+            setSupplierSharePercent(
+                voucher.funding === 'shared'
+                    ? String(voucher.supplier_share_percent ?? 50)
+                    : voucher.funding === 'supplier'
+                      ? '100'
+                      : '0'
+            )
             setStatus(voucher.status)
             setFreeProductId(voucher.free_product_id ? String(voucher.free_product_id) : '')
             setSelectedProducts(
@@ -156,6 +179,7 @@ export function VoucherFormDialog({
             setValidFrom(defaultDateTimeLocal(0))
             setValidUntil(defaultDateTimeLocal(14))
             setAllowedDays(127)
+            setUseHappyHour(false)
             setAllowedHoursStart('')
             setAllowedHoursEnd('')
             setTotalQuota('')
@@ -165,6 +189,9 @@ export function VoucherFormDialog({
             setStackableWithPromo(true)
             setStackableWithVoucher(false)
             setFunding('store')
+            setSupplierId('')
+            setStoreSharePercent('50')
+            setSupplierSharePercent('50')
             setStatus('active')
             setFreeProductId('')
             setSelectedProducts([])
@@ -232,8 +259,8 @@ export function VoucherFormDialog({
             valid_from: validFrom,
             valid_until: validUntil,
             allowed_days: allowedDays,
-            allowed_hours_start: allowedHoursStart || null,
-            allowed_hours_end: allowedHoursEnd || null,
+            allowed_hours_start: useHappyHour && allowedHoursStart ? allowedHoursStart : null,
+            allowed_hours_end: useHappyHour && allowedHoursEnd ? allowedHoursEnd : null,
             total_quota: totalQuota !== '' ? Number(totalQuota) : null,
             per_customer_limit: perCustomerLimit !== '' ? Number(perCustomerLimit) : null,
             per_day_limit: perDayLimit !== '' ? Number(perDayLimit) : null,
@@ -244,6 +271,22 @@ export function VoucherFormDialog({
             stackable_with_promo: stackableWithPromo,
             stackable_with_voucher: stackableWithVoucher,
             funding,
+            supplier_id:
+                (funding === 'supplier' || funding === 'shared') && supplierId !== ''
+                    ? Number(supplierId)
+                    : null,
+            store_share_percent:
+                funding === 'shared'
+                    ? Number(storeSharePercent) || 0
+                    : funding === 'supplier'
+                      ? 0
+                      : 100,
+            supplier_share_percent:
+                funding === 'shared'
+                    ? Number(supplierSharePercent) || 0
+                    : funding === 'supplier'
+                      ? 100
+                      : 0,
             status,
         }
 
@@ -398,6 +441,88 @@ export function VoucherFormDialog({
                                 </Select>
                             </div>
                         </div>
+
+                        {(funding === 'supplier' || funding === 'shared') && (
+                            <div className="rounded-lg border border-blue-200/80 bg-blue-50/40 dark:border-blue-900/60 dark:bg-blue-950/20 p-4 space-y-3">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                                    Rincian Penanggung Biaya &amp; Pelacakan Klaim Supplier
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="space-y-1.5">
+                                        <Label>
+                                            Supplier Penanggung
+                                            <FieldTooltip content="Pilih supplier yang menanggung biaya voucher agar klaim penukaran dapat dilacak di Laporan Keuangan." />
+                                        </Label>
+                                        <Select
+                                            items={suppliers.map((s) => ({ value: String(s.id), label: s.name }))}
+                                            value={supplierId}
+                                            onValueChange={(val) => setSupplierId(val ?? '')}
+                                        >
+                                            <SelectTrigger className="w-full h-9">
+                                                <SelectValue placeholder="Pilih supplier">
+                                                    {(val) =>
+                                                        suppliers.find((s) => String(s.id) === val)?.name ??
+                                                        'Pilih supplier'
+                                                    }
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {suppliers.map((s) => (
+                                                    <SelectItem key={s.id} value={String(s.id)}>
+                                                        {s.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {funding === 'shared' && (
+                                        <>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="voucher-store-share">
+                                                    Porsi Toko (%)
+                                                    <FieldTooltip content="Persentase beban diskon voucher yang ditanggung toko (0-100%)." />
+                                                </Label>
+                                                <Input
+                                                    id="voucher-store-share"
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    step="0.01"
+                                                    value={storeSharePercent}
+                                                    onChange={(e) => {
+                                                        const raw = Math.min(100, Math.max(0, Number(e.target.value) || 0))
+                                                        setStoreSharePercent(e.target.value)
+                                                        setSupplierSharePercent(String(Math.round((100 - raw) * 100) / 100))
+                                                    }}
+                                                    className="h-9 font-mono"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="voucher-supplier-share">
+                                                    Porsi Supplier (%)
+                                                    <FieldTooltip content="Persentase beban diskon voucher yang akan diklaim ke supplier." />
+                                                </Label>
+                                                <Input
+                                                    id="voucher-supplier-share"
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    step="0.01"
+                                                    value={supplierSharePercent}
+                                                    onChange={(e) => {
+                                                        const raw = Math.min(100, Math.max(0, Number(e.target.value) || 0))
+                                                        setSupplierSharePercent(e.target.value)
+                                                        setStoreSharePercent(String(Math.round((100 - raw) * 100) / 100))
+                                                    }}
+                                                    className="h-9 font-mono"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Parameter Potongan */}
                         <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
@@ -562,90 +687,111 @@ export function VoucherFormDialog({
                             </div>
                         </div>
 
-                        {/* Periode, Hari & Jam Berlaku (WIB) */}
+                        {/* Periode, Hari & Jam Berlaku (WIB 24 Jam) */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <Label htmlFor="voucher-valid-from">
-                                    Mulai Berlaku (WIB) <span className="text-destructive">*</span>
-                                    <FieldTooltip content="Tanggal dan jam mulai voucher dapat digunakan di kasir (zona waktu WIB)." />
+                                    Mulai Berlaku (WIB, 24 Jam) <span className="text-destructive">*</span>
+                                    <FieldTooltip content="Tanggal dan jam mulai voucher dapat digunakan di kasir (format 24 jam WIB)." />
                                 </Label>
-                                <Input
+                                <DateTime24hInput
                                     id="voucher-valid-from"
-                                    type="datetime-local"
                                     value={validFrom}
-                                    onChange={(e) => setValidFrom(e.target.value)}
-                                    className="h-9 font-mono text-xs"
+                                    onChange={setValidFrom}
                                     required
                                 />
                                 {errors.valid_from && <p className="text-xs text-destructive">{errors.valid_from}</p>}
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="voucher-valid-until">
-                                    Berakhir Pada (WIB) <span className="text-destructive">*</span>
-                                    <FieldTooltip content="Tanggal dan jam kedaluwarsa voucher. Setelah lewat waktu ini, voucher otomatis ditolak." />
+                                    Berakhir Pada (WIB, 24 Jam) <span className="text-destructive">*</span>
+                                    <FieldTooltip content="Tanggal dan jam kedaluwarsa voucher (format 24 jam WIB)." />
                                 </Label>
-                                <Input
+                                <DateTime24hInput
                                     id="voucher-valid-until"
-                                    type="datetime-local"
                                     value={validUntil}
-                                    onChange={(e) => setValidUntil(e.target.value)}
-                                    className="h-9 font-mono text-xs"
+                                    onChange={setValidUntil}
                                     required
                                 />
                                 {errors.valid_until && <p className="text-xs text-destructive">{errors.valid_until}</p>}
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                            <div className="md:col-span-6 space-y-1.5">
-                                <Label>
-                                    Hari Berlaku (WIB)
-                                    <FieldTooltip content="Pilih hari-hari tertentu saat voucher aktif (misal khusus akhir pekan Sab-Min)." />
-                                </Label>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {DAY_BITS.map((day) => {
-                                        const active = (allowedDays & day.bit) !== 0
-                                        return (
-                                            <Button
-                                                key={day.bit}
-                                                type="button"
-                                                size="sm"
-                                                variant={active ? 'default' : 'outline'}
-                                                onClick={() => toggleDayBit(day.bit)}
-                                                className="h-9 px-3 text-xs cursor-pointer"
-                                            >
-                                                {day.label}
-                                            </Button>
-                                        )
-                                    })}
+                        <div className="space-y-3">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                                <div className="space-y-1.5">
+                                    <Label>
+                                        Hari Berlaku (WIB)
+                                        <FieldTooltip content="Pilih hari-hari tertentu saat voucher aktif (misal khusus akhir pekan Sab-Min)." />
+                                    </Label>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {DAY_BITS.map((day) => {
+                                            const active = (allowedDays & day.bit) !== 0
+                                            return (
+                                                <Button
+                                                    key={day.bit}
+                                                    type="button"
+                                                    size="sm"
+                                                    variant={active ? 'default' : 'outline'}
+                                                    onClick={() => toggleDayBit(day.bit)}
+                                                    className="h-9 px-3 text-xs cursor-pointer"
+                                                >
+                                                    {day.label}
+                                                </Button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2.5 rounded-md border bg-muted/20 px-3 py-2">
+                                    <div>
+                                        <p className="text-xs font-medium flex items-center">
+                                            Jam Khusus Harian (Happy Hour)
+                                            <FieldTooltip content="Aktifkan hanya jika voucher berlaku di jam tertentu setiap harinya. Jika nonaktif, voucher berlaku 24 jam penuh." />
+                                        </p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Opsional • Format 24 jam
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={useHappyHour}
+                                        onCheckedChange={(checked) => {
+                                            setUseHappyHour(checked)
+                                            if (!checked) {
+                                                setAllowedHoursStart('')
+                                                setAllowedHoursEnd('')
+                                            }
+                                        }}
+                                    />
                                 </div>
                             </div>
-                            <div className="md:col-span-3 space-y-1.5">
-                                <Label htmlFor="voucher-hours-start">
-                                    Jam Mulai (Opsional)
-                                    <FieldTooltip content="Jam mulai berlaku setiap hari (happy hour). Kosongkan jika berlaku seharian." />
-                                </Label>
-                                <Input
-                                    id="voucher-hours-start"
-                                    type="time"
-                                    value={allowedHoursStart}
-                                    onChange={(e) => setAllowedHoursStart(e.target.value)}
-                                    className="h-9 font-mono text-xs"
-                                />
-                            </div>
-                            <div className="md:col-span-3 space-y-1.5">
-                                <Label htmlFor="voucher-hours-end">
-                                    Jam Selesai (Opsional)
-                                    <FieldTooltip content="Jam berakhir berlaku setiap hari. Kosongkan jika berlaku seharian." />
-                                </Label>
-                                <Input
-                                    id="voucher-hours-end"
-                                    type="time"
-                                    value={allowedHoursEnd}
-                                    onChange={(e) => setAllowedHoursEnd(e.target.value)}
-                                    className="h-9 font-mono text-xs"
-                                />
-                            </div>
+
+                            {useHappyHour && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-md border bg-muted/20 p-3">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="voucher-hours-start">
+                                            Jam Mulai Harian (24 Jam)
+                                            <FieldTooltip content="Jam mulai berlaku setiap hari (format 24 jam, misal 14:00)." />
+                                        </Label>
+                                        <Time24hInput
+                                            id="voucher-hours-start"
+                                            value={allowedHoursStart}
+                                            onChange={setAllowedHoursStart}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="voucher-hours-end">
+                                            Jam Selesai Harian (24 Jam)
+                                            <FieldTooltip content="Jam berakhir berlaku setiap hari (format 24 jam, misal 17:00)." />
+                                        </Label>
+                                        <Time24hInput
+                                            id="voucher-hours-end"
+                                            value={allowedHoursEnd}
+                                            onChange={setAllowedHoursEnd}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Batas Kuota */}

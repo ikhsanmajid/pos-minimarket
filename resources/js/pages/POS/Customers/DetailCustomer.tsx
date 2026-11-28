@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import CustomerController from '@/actions/App/Http/Controllers/CustomerController'
-import { ArrowLeft, History, Pencil, ReceiptText, Trash2, User } from 'lucide-react'
+import { ArrowLeft, Award, History, Pencil, ReceiptText, Trash2, User } from 'lucide-react'
 import { toast } from 'react-toastify'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
@@ -14,6 +14,10 @@ import {
     RiwayatTransaksiCustomer,
     type PaginatedCustomerTransactions,
 } from './component/RiwayatTransaksiCustomer'
+import {
+    RiwayatPoinCustomer,
+    type PaginatedCustomerPointLedgers,
+} from './component/RiwayatPoinCustomer'
 import {
     RiwayatPerubahanCustomer,
     type PaginatedCustomerActivities,
@@ -26,11 +30,13 @@ type DetailCustomerProps = PageProps<{
     customer: CustomerRow
     stats: CustomerDetailStats
     transactions?: PaginatedCustomerTransactions
+    pointLedgers?: PaginatedCustomerPointLedgers
     activities?: PaginatedCustomerActivities
 }>
 
 const DetailCustomer = () => {
-    const { customer, stats, transactions, activities } = usePage<DetailCustomerProps>().props
+    const { customer, stats, transactions, pointLedgers, activities } =
+        usePage<DetailCustomerProps>().props
     const { user, flash } = useAuth()
 
     const userRole = (user?.role as string) || ''
@@ -45,10 +51,13 @@ const DetailCustomer = () => {
             ? new URLSearchParams(window.location.search).get('tab')
             : null
     const initialTab =
-        queryTab === 'history' || queryTab === 'transactions' ? queryTab : 'detail'
+        queryTab === 'history' || queryTab === 'transactions' || queryTab === 'points'
+            ? queryTab
+            : 'detail'
 
     const [activeTab, setActiveTab] = useState(initialTab)
     const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
+    const [isLoadingPointLedgers, setIsLoadingPointLedgers] = useState(false)
     const [isLoadingActivities, setIsLoadingActivities] = useState(false)
 
     useEffect(() => {
@@ -61,6 +70,14 @@ const DetailCustomer = () => {
         router.reload({
             only: ['transactions'],
             onFinish: () => setIsLoadingTransactions(false),
+        })
+    }
+
+    const loadPointLedgers = () => {
+        setIsLoadingPointLedgers(true)
+        router.reload({
+            only: ['pointLedgers'],
+            onFinish: () => setIsLoadingPointLedgers(false),
         })
     }
 
@@ -77,6 +94,9 @@ const DetailCustomer = () => {
         if (val === 'transactions' && !transactions && !isLoadingTransactions) {
             loadTransactions()
         }
+        if (val === 'points' && !pointLedgers && !isLoadingPointLedgers) {
+            loadPointLedgers()
+        }
         if (val === 'history' && !activities && !isLoadingActivities) {
             loadActivities()
         }
@@ -85,6 +105,9 @@ const DetailCustomer = () => {
     useEffect(() => {
         if (activeTab === 'transactions' && !transactions && !isLoadingTransactions) {
             loadTransactions()
+        }
+        if (activeTab === 'points' && !pointLedgers && !isLoadingPointLedgers) {
+            loadPointLedgers()
         }
         if (activeTab === 'history' && !activities && !isLoadingActivities) {
             loadActivities()
@@ -163,6 +186,13 @@ const DetailCustomer = () => {
                             {stats.total_transactions}
                         </Badge>
                     </TabsTrigger>
+                    <TabsTrigger value="points" className="gap-2 pb-2.5">
+                        <Award className="h-4 w-4" />
+                        Riwayat Poin FIFO
+                        <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+                            {customer.points} pt
+                        </Badge>
+                    </TabsTrigger>
                     <TabsTrigger value="history" className="gap-2 pb-2.5">
                         <History className="h-4 w-4" />
                         Riwayat Perubahan
@@ -184,6 +214,15 @@ const DetailCustomer = () => {
                         transactions={transactions}
                         isLoading={isLoadingTransactions}
                         onRefresh={loadTransactions}
+                    />
+                </TabsContent>
+
+                <TabsContent value="points" className="m-0 focus-visible:outline-none">
+                    <RiwayatPoinCustomer
+                        customer={customer}
+                        pointLedgers={pointLedgers}
+                        isLoading={isLoadingPointLedgers}
+                        onRefresh={loadPointLedgers}
                     />
                 </TabsContent>
 

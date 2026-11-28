@@ -140,12 +140,36 @@ class PromotionService
             ? preg_replace('/\D+/', '', trim((string) $data['payment_bin_prefix']))
             : null;
 
+        $funding = (string) ($data['funding'] ?? 'store');
+        if ($funding === 'supplier') {
+            $storeShare = 0.0;
+            $supplierShare = 100.0;
+            $supplierId = isset($data['supplier_id']) && $data['supplier_id'] !== '' && $data['supplier_id'] !== null
+                ? (int) $data['supplier_id']
+                : null;
+        } elseif ($funding === 'shared') {
+            $storeShare = isset($data['store_share_percent']) && $data['store_share_percent'] !== '' && $data['store_share_percent'] !== null
+                ? round(min(100, max(0, (float) $data['store_share_percent'])), 2)
+                : 50.0;
+            $supplierShare = round(100.0 - $storeShare, 2);
+            $supplierId = isset($data['supplier_id']) && $data['supplier_id'] !== '' && $data['supplier_id'] !== null
+                ? (int) $data['supplier_id']
+                : null;
+        } else {
+            $storeShare = 100.0;
+            $supplierShare = 0.0;
+            $supplierId = null;
+        }
+
         return [
             'code' => $code,
             'name' => trim((string) $data['name']),
             'type' => $type,
             'scope' => (string) ($data['scope'] ?? PromotionScope::AllProducts->value),
-            'funding' => (string) ($data['funding'] ?? 'store'),
+            'funding' => $funding,
+            'supplier_id' => $supplierId,
+            'store_share_percent' => $storeShare,
+            'supplier_share_percent' => $supplierShare,
             'discount_value' => $discountValue,
             'max_discount_amount' => isset($data['max_discount_amount']) && $data['max_discount_amount'] !== '' && $data['max_discount_amount'] !== null
                 ? PricingMath::toRupiah($data['max_discount_amount'])

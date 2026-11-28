@@ -24,6 +24,11 @@ export type CustomerRow = {
     email: string | null
     address: string | null
     points: number
+    tier?: 'silver' | 'gold' | 'platinum' | string
+    tier_label?: string
+    tier_multiplier?: number
+    birth_date?: string | null
+    birth_date_display?: string | null
     is_active: boolean
     notes: string | null
     transactions_count: number
@@ -162,7 +167,7 @@ function getColumns({
             accessorKey: 'points',
             header: () => (
                 <DataTableSortHeader
-                    label="Poin"
+                    label="Tier & Poin"
                     field="points"
                     tableSort={filters.table_sort}
                     tableDirection={filters.table_direction}
@@ -172,15 +177,29 @@ function getColumns({
                 />
             ),
             cell: ({ row }) => (
-                <Badge
-                    variant="outline"
-                    className="font-mono text-xs gap-1 bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
-                >
-                    <Award className="h-3 w-3" />
-                    {formatNumber(row.original.points)}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-1">
+                    <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 ${
+                            row.original.tier === 'platinum'
+                                ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300'
+                                : row.original.tier === 'gold'
+                                  ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                  : 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                        }`}
+                    >
+                        {row.original.tier_label ?? 'Silver'}
+                    </Badge>
+                    <Badge
+                        variant="outline"
+                        className="font-mono text-xs gap-1 bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
+                    >
+                        <Award className="h-3 w-3" />
+                        {formatNumber(row.original.points)}
+                    </Badge>
+                </div>
             ),
-            size: 115,
+            size: 160,
         },
         {
             id: 'transactions_count',

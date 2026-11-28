@@ -7,11 +7,13 @@ use App\Models\CashRegister;
 use App\Models\CashierShift;
 use App\Models\Category;
 use App\Models\Customer;
+use App\Models\CustomerPointLedger;
 use App\Models\FinancialAccount;
 use App\Models\FinancialCategory;
 use App\Models\FinancialTransaction;
 use App\Models\PayablePayment;
 use App\Models\Product;
+use App\Models\ProductMemberPrice;
 use App\Models\ProductPriceTier;
 use App\Models\Promotion;
 use App\Models\PurchaseOrder;
@@ -163,8 +165,16 @@ enum ActivityLogCategory: string
         }
 
         if (in_array($baseName, [
+            class_basename(Customer::class),
+            class_basename(CustomerPointLedger::class),
+        ], true)) {
+            return self::Customer;
+        }
+
+        if (in_array($baseName, [
             class_basename(Promotion::class),
             class_basename(ProductPriceTier::class),
+            class_basename(ProductMemberPrice::class),
             class_basename(Voucher::class),
             class_basename(VoucherRedemption::class),
         ], true)) {

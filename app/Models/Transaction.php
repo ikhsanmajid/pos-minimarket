@@ -30,6 +30,9 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property string $paid_amount
  * @property string $pay_amount
  * @property string|null $change_amount
+ * @property int $points_redeemed
+ * @property string $points_redeem_amount
+ * @property int $points_earned
  * @property string $payment_method
  * @property TransactionStatus $status
  * @property int|null $voided_by
@@ -56,6 +59,9 @@ use Spatie\Activitylog\Support\LogOptions;
     'paid_amount',
     'pay_amount',
     'change_amount',
+    'points_redeemed',
+    'points_redeem_amount',
+    'points_earned',
     'payment_method',
     'status',
     'voided_by',
@@ -76,6 +82,9 @@ class Transaction extends Model
 
     protected $attributes = [
         'status' => 'completed',
+        'points_redeemed' => 0,
+        'points_redeem_amount' => 0,
+        'points_earned' => 0,
     ];
 
     protected function casts(): array
@@ -92,6 +101,9 @@ class Transaction extends Model
             'paid_amount' => 'decimal:2',
             'pay_amount' => 'decimal:2',
             'change_amount' => 'decimal:2',
+            'points_redeemed' => 'integer',
+            'points_redeem_amount' => 'decimal:2',
+            'points_earned' => 'integer',
             'status' => TransactionStatus::class,
             'voided_at' => 'datetime',
         ];
@@ -185,5 +197,11 @@ class Transaction extends Model
     public function voucherRedemptions(): HasMany
     {
         return $this->hasMany(VoucherRedemption::class);
+    }
+
+    /** @return HasMany<CustomerPointLedger, $this> */
+    public function pointLedgers(): HasMany
+    {
+        return $this->hasMany(CustomerPointLedger::class);
     }
 }

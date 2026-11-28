@@ -25,9 +25,12 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import {
+    Award,
     Barcode,
+    Cake,
     Clock,
     CreditCard,
+    Crown,
     FolderClock,
     Gift,
     Heart,
@@ -139,6 +142,7 @@ const Terminal = () => {
     const [voucherError, setVoucherError] = useState<string | null>(null)
     const [isApplyingVoucher, setIsApplyingVoucher] = useState(false)
     const [selectedTebusMurahPromoId, setSelectedTebusMurahPromoId] = useState<number | null>(null)
+    const [redeemPoints, setRedeemPoints] = useState<number>(0)
 
     // Receipt & success state
     const [lastReceipt, setLastReceipt] = useState<PosReceiptData | null>(null)
@@ -226,6 +230,7 @@ const Terminal = () => {
                             reservation_token: v.reservation_token,
                         })),
                         selected_tebus_murah_promotion_id: selectedTebusMurahPromoId,
+                        redeem_points: selectedCustomerId !== 'guest' ? redeemPoints : 0,
                         items: cart.map((l) => ({
                             product_id: l.product.id,
                             product_unit_id: l.product_unit_id,
@@ -267,6 +272,7 @@ const Terminal = () => {
         transactionDiscount,
         appliedVouchers,
         selectedTebusMurahPromoId,
+        redeemPoints,
     ])
 
     const localSummary = useMemo(
@@ -300,6 +306,10 @@ const Terminal = () => {
                 taxAmount: s.tax_amount,
                 roundingAmount: s.rounding_amount,
                 grandTotal: s.grand_total,
+                pointsRedeemed: s.points_redeemed ?? 0,
+                pointsRedeemAmount: s.points_redeem_amount ?? 0,
+                netPayableAfterPoints: s.net_payable_after_points ?? s.grand_total,
+                estimatedPointsEarned: s.estimated_points_earned ?? 0,
                 totalItemsQty: s.total_items_qty,
                 hasTaxExemptItems: s.has_tax_exempt_items,
             }
@@ -313,6 +323,10 @@ const Terminal = () => {
             paymentPromoDiscountTotal: 0,
             cashbackTotal: 0,
             manualDiscountTotal: localSummary.totalDiscount,
+            pointsRedeemed: 0,
+            pointsRedeemAmount: 0,
+            netPayableAfterPoints: localSummary.grandTotal,
+            estimatedPointsEarned: 0,
         }
     }, [serverPricing, cart.length, localSummary])
 
@@ -583,6 +597,7 @@ const Terminal = () => {
         setAppliedVouchers([])
         setVoucherError(null)
         setSelectedTebusMurahPromoId(null)
+        setRedeemPoints(0)
     }, [])
 
     const handleRedeemTebusMurah = async (offer: PosTebusMurahOffer) => {
@@ -644,6 +659,7 @@ const Terminal = () => {
                             reservation_token: v.reservation_token,
                         })),
                         selected_tebus_murah_promotion_id: selectedTebusMurahPromoId,
+                        redeem_points: selectedCustomerId !== 'guest' ? redeemPoints : 0,
                         items: cart.map((l) => ({
                             product_id: l.product.id,
                             product_unit_id: l.product_unit_id,
@@ -658,7 +674,9 @@ const Terminal = () => {
                 const data = (await res.json()) as PosCartCalculationResponse
                 return {
                     grandTotal: data.summary.grand_total,
+                    netPayableAfterPoints: data.summary.net_payable_after_points ?? data.summary.grand_total,
                     paymentPromotion: data.payment_promotion ?? null,
+                    loyalty: data.loyalty ?? null,
                 }
             } catch {
                 return null
@@ -670,6 +688,7 @@ const Terminal = () => {
             transactionDiscount,
             appliedVouchers,
             selectedTebusMurahPromoId,
+            redeemPoints,
         ]
     )
 
@@ -699,6 +718,7 @@ const Terminal = () => {
                         reservation_token: v.reservation_token,
                     })),
                     selected_tebus_murah_promotion_id: selectedTebusMurahPromoId,
+                    redeem_points: selectedCustomerId !== 'guest' ? summary.pointsRedeemed : 0,
                     donation_product_id: donation?.donation_product_id ?? null,
                     donation_amount: donation?.donation_amount ?? 0,
                     supervisor_pin: supervisorPin ?? null,
@@ -1088,7 +1108,8 @@ const Terminal = () => {
                                                 const autoDiscount = pricingLine?.auto_discount_amount ?? 0
                                                 const hasAutoPricing =
                                                     autoDiscount > 0 &&
-                                                    (pricingLine?.pricing_source === 'wholesale_tier' ||
+                                                    (pricingLine?.pricing_source === 'member_price' ||
+                                                        pricingLine?.pricing_source === 'wholesale_tier' ||
                                                         pricingLine?.pricing_source === 'promotion')
                                                 const lineTotal = pricingLine
                                                     ? pricingLine.line_subtotal
@@ -1161,12 +1182,16 @@ const Terminal = () => {
                                                                     <Badge
                                                                         variant="outline"
                                                                         className={
-                                                                            pricingLine.pricing_source === 'wholesale_tier'
-                                                                                ? 'h-4 px-1.5 py-0 text-[10px] gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                                                                : 'h-4 px-1.5 py-0 text-[10px] gap-1 border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                                                            pricingLine.pricing_source === 'member_price'
+                                                                                ? 'h-4 px-1.5 py-0 text-[10px] gap-1 border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300'
+                                                                                : pricingLine.pricing_source === 'wholesale_tier'
+                                                                                  ? 'h-4 px-1.5 py-0 text-[10px] gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                                                  : 'h-4 px-1.5 py-0 text-[10px] gap-1 border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
                                                                         }
                                                                     >
-                                                                        {pricingLine.pricing_source === 'wholesale_tier' ? (
+                                                                        {pricingLine.pricing_source === 'member_price' ? (
+                                                                            <Crown className="h-2.5 w-2.5" />
+                                                                        ) : pricingLine.pricing_source === 'wholesale_tier' ? (
                                                                             <Tag className="h-2.5 w-2.5" />
                                                                         ) : (
                                                                             <Sparkles className="h-2.5 w-2.5" />
@@ -1296,9 +1321,120 @@ const Terminal = () => {
                                 <CustomerPicker
                                     initialCustomers={customers}
                                     selectedCustomerId={selectedCustomerId}
-                                    onSelectCustomer={setSelectedCustomerId}
+                                    onSelectCustomer={(id) => {
+                                        setSelectedCustomerId(id)
+                                        setRedeemPoints(0)
+                                    }}
                                     onModalToggle={setCustomerModalOpen}
                                 />
+
+                                {/* Panel Loyalitas & Redeem Poin FIFO */}
+                                {selectedCustomerId !== 'guest' && serverPricing?.loyalty && (
+                                    <div className="rounded-lg border border-violet-300/80 bg-violet-50/50 dark:border-violet-800 dark:bg-violet-950/30 p-3 space-y-2.5">
+                                        <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                            <div className="flex items-center gap-1.5">
+                                                <Crown className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                                                <span className="text-xs font-semibold text-violet-900 dark:text-violet-200">
+                                                    Member {serverPricing.loyalty.tier_label ?? 'Silver'} (
+                                                    {serverPricing.loyalty.tier_multiplier}x)
+                                                </span>
+                                            </div>
+                                            <Badge
+                                                variant="outline"
+                                                className="font-mono text-[10px] h-5 px-1.5 gap-1 bg-background"
+                                            >
+                                                <Award className="h-3 w-3 text-amber-500" />
+                                                {serverPricing.loyalty.active_point_balance} poin aktif
+                                            </Badge>
+                                        </div>
+
+                                        {(serverPricing.loyalty.is_birthday ||
+                                            serverPricing.loyalty.is_first_purchase) && (
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {serverPricing.loyalty.is_birthday && (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="h-5 px-1.5 text-[10px] gap-1 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/50 dark:text-pink-300"
+                                                    >
+                                                        <Cake className="h-2.5 w-2.5" />
+                                                        Ulang Tahun Hari Ini
+                                                    </Badge>
+                                                )}
+                                                {serverPricing.loyalty.is_first_purchase && (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="h-5 px-1.5 text-[10px] gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                                    >
+                                                        <Sparkles className="h-2.5 w-2.5" />
+                                                        Pembelian Pertama
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {serverPricing.loyalty.max_redeemable_points > 0 && (
+                                            <div className="space-y-1.5 pt-1 border-t border-violet-200/70 dark:border-violet-800/60">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <Label htmlFor="terminal-redeem-points" className="text-[11px]">
+                                                        Tukar Poin (1 pt = Rp 100)
+                                                    </Label>
+                                                    <span className="font-mono text-[10px] text-muted-foreground">
+                                                        Maks. {serverPricing.loyalty.max_redeemable_points} pt
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-1.5">
+                                                    <Input
+                                                        id="terminal-redeem-points"
+                                                        type="number"
+                                                        min={0}
+                                                        max={serverPricing.loyalty.max_redeemable_points}
+                                                        step={1}
+                                                        value={redeemPoints || ''}
+                                                        placeholder="0"
+                                                        onChange={(e) => {
+                                                            const raw = Math.max(0, Math.floor(Number(e.target.value) || 0))
+                                                            const maxPts = serverPricing.loyalty?.max_redeemable_points ?? 0
+                                                            setRedeemPoints(Math.min(raw, maxPts))
+                                                        }}
+                                                        className="h-8 font-mono text-xs bg-background"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            setRedeemPoints(
+                                                                serverPricing.loyalty?.max_redeemable_points ?? 0
+                                                            )
+                                                        }
+                                                        className="h-8 px-2 text-[11px] shrink-0 cursor-pointer"
+                                                    >
+                                                        Maks
+                                                    </Button>
+                                                    {redeemPoints > 0 && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => setRedeemPoints(0)}
+                                                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive cursor-pointer"
+                                                            title="Batal tukar poin"
+                                                        >
+                                                            <X className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                                            <span>Estimasi Poin Diperoleh</span>
+                                            <span className="font-mono font-semibold">
+                                                +{serverPricing.loyalty.estimated_points_earned} poin
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Penawaran Tebus Murah (Maks. 1 per struk) */}
                                 {(serverPricing?.tebus_murah_offers?.length ?? 0) > 0 && (
@@ -1535,6 +1671,22 @@ const Terminal = () => {
                                             {formatRupiah(summary.grandTotal)}
                                         </span>
                                     </div>
+                                    {summary.pointsRedeemed > 0 && (
+                                        <>
+                                            <div className="flex justify-between text-xs text-violet-600 dark:text-violet-400">
+                                                <span>Bayar Pakai Poin ({summary.pointsRedeemed} pt)</span>
+                                                <span className="font-mono font-semibold">
+                                                    -{formatRupiah(summary.pointsRedeemAmount)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-sm font-semibold text-foreground">
+                                                <span>Sisa Bayar Kasir</span>
+                                                <span className="font-mono">
+                                                    {formatRupiah(summary.netPayableAfterPoints)}
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-2 pt-2">
@@ -1626,6 +1778,9 @@ const Terminal = () => {
                 open={paymentOpen}
                 onOpenChange={setPaymentOpen}
                 grandTotal={summary.grandTotal}
+                loyaltyInfo={serverPricing?.loyalty ?? null}
+                redeemPoints={redeemPoints}
+                onRedeemPointsChange={setRedeemPoints}
                 paymentMethods={paymentMethods}
                 financialAccounts={financialAccounts}
                 donationProducts={donationProducts}

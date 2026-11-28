@@ -34,6 +34,7 @@ type VoucherPageProps = PageProps<{
     fundingOptions: Array<{ value: string; label: string }>
     products: Array<{ id: number; name: string; barcode: string }>
     categories: Array<{ id: number; name: string }>
+    suppliers?: Array<{ id: number; name: string }>
 }>
 
 export function Voucher() {
@@ -46,6 +47,7 @@ export function Voucher() {
         fundingOptions,
         products,
         categories,
+        suppliers = [],
     } = usePage<VoucherPageProps>().props
     const { flash } = useAuth()
 
@@ -251,6 +253,7 @@ export function Voucher() {
                 fundingOptions={fundingOptions}
                 products={products}
                 categories={categories}
+                suppliers={suppliers}
             />
 
             <VoucherBulkDialog

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CustomerTier;
 use App\Enums\TransactionStatus;
 use App\Http\Requests\StoreCustomerRequest;
 use App\Http\Requests\UpdateCustomerRequest;
 use App\Models\Customer;
+use App\Models\CustomerPointLedger;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\CustomerService;
@@ -36,7 +38,7 @@ class CustomerController extends Controller
         ]);
         $perPage = $request->integer('per_page', 10);
 
-        $allowedSorts = ['member_code', 'name', 'phone', 'points', 'transactions_count', 'is_active', 'created_at'];
+        $allowedSorts = ['member_code', 'name', 'phone', 'tier', 'points', 'transactions_count', 'is_active', 'created_at'];
 
         $tableSort = $request->input('table_sort');
         $tableDirection = strtolower((string) $request->input('table_direction')) === 'desc' ? 'desc' : 'asc';
@@ -100,6 +102,11 @@ class CustomerController extends Controller
                 'email' => $c->email,
                 'address' => $c->address,
                 'points' => (int) $c->points,
+                'tier' => $c->effectiveTier()->value,
+                'tier_label' => $c->effectiveTier()->label(),
+                'tier_multiplier' => $c->effectiveTier()->multiplier(),
+                'birth_date' => $c->birth_date?->format('Y-m-d'),
+                'birth_date_display' => $c->birth_date?->format('d M Y'),
                 'is_active' => (bool) $c->is_active,
                 'notes' => $c->notes,
                 'transactions_count' => (int) ($c->transactions_count ?? 0),
@@ -110,6 +117,7 @@ class CustomerController extends Controller
             'customers' => $customers,
             'filters' => $filters,
             'summary' => $this->customerService->getSummary(),
+            'tierOptions' => CustomerTier::options(),
         ]);
     }
 
@@ -128,6 +136,11 @@ class CustomerController extends Controller
                 'email' => $customer->email,
                 'address' => $customer->address,
                 'points' => (int) $customer->points,
+                'tier' => $customer->effectiveTier()->value,
+                'tier_label' => $customer->effectiveTier()->label(),
+                'tier_multiplier' => $customer->effectiveTier()->multiplier(),
+                'birth_date' => $customer->birth_date?->format('Y-m-d'),
+                'birth_date_display' => $customer->birth_date?->format('d M Y'),
                 'is_active' => (bool) $customer->is_active,
                 'notes' => $customer->notes,
                 'transactions_count' => $stats['total_transactions'],
@@ -135,6 +148,45 @@ class CustomerController extends Controller
                 'updated_at' => $customer->updated_at?->format('d M Y H:i'),
             ],
             'stats' => $stats,
+            'tierOptions' => CustomerTier::options(),
+            'pointLedgers' => Inertia::optional(function () use ($request, $customer): array {
+                $perPage = $request->integer('per_page', 15);
+                $now = now();
+
+                $paginated = CustomerPointLedger::query()
+                    ->where('customer_id', $customer->id)
+                    ->with([
+                        'transaction:id,invoice_number',
+                        'salesReturn:id,return_number',
+                        'creator:id,name',
+                    ])
+                    ->latest('id')
+                    ->paginate($perPage)
+                    ->withQueryString();
+
+                return [
+                    'data' => collect($paginated->items())->map(fn (CustomerPointLedger $row): array => [
+                        'id' => $row->id,
+                        'type' => $row->type->value,
+                        'type_label' => $row->type->label(),
+                        'points' => (int) $row->points,
+                        'remaining_points' => (int) $row->remaining_points,
+                        'expires_at' => $row->expires_at?->format('d M Y H:i'),
+                        'is_expired' => $row->expires_at !== null && $row->expires_at->lte($now),
+                        'description' => $row->description,
+                        'invoice_number' => $row->transaction?->invoice_number,
+                        'return_number' => $row->salesReturn?->return_number,
+                        'creator_name' => $row->creator?->name ?? 'Sistem',
+                        'created_at' => $row->created_at?->format('d M Y H:i:s') ?? '-',
+                    ])->all(),
+                    'current_page' => $paginated->currentPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'per_page' => $paginated->perPage(),
+                    'total' => $paginated->total(),
+                    'from' => $paginated->firstItem(),
+                    'to' => $paginated->lastItem(),
+                ];
+            }),
             'transactions' => Inertia::optional(function () use ($request, $customer): array {
                 $perPage = $request->integer('per_page', 10);
 
@@ -216,6 +268,10 @@ class CustomerController extends Controller
                 'name' => $c->name,
                 'phone' => $c->phone,
                 'points' => (int) $c->points,
+                'tier' => $c->effectiveTier()->value,
+                'tier_label' => $c->effectiveTier()->label(),
+                'tier_multiplier' => $c->effectiveTier()->multiplier(),
+                'birth_date' => $c->birth_date?->format('Y-m-d'),
             ])
             ->values();
 
@@ -239,6 +295,10 @@ class CustomerController extends Controller
                     'name' => $customer->name,
                     'phone' => $customer->phone,
                     'points' => (int) $customer->points,
+                    'tier' => $customer->effectiveTier()->value,
+                    'tier_label' => $customer->effectiveTier()->label(),
+                    'tier_multiplier' => $customer->effectiveTier()->multiplier(),
+                    'birth_date' => $customer->birth_date?->format('Y-m-d'),
                 ],
             ], 201);
         }

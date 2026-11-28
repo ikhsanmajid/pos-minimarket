@@ -34,6 +34,7 @@ type PromotionPageProps = PageProps<{
     paymentMethodOptions?: Array<{ value: string; label: string }>
     products: Array<{ id: number; name: string; barcode: string }>
     categories: Array<{ id: number; name: string }>
+    suppliers?: Array<{ id: number; name: string }>
 }>
 
 export function Promotion() {
@@ -47,6 +48,7 @@ export function Promotion() {
         paymentMethodOptions = [],
         products,
         categories,
+        suppliers = [],
     } = usePage<PromotionPageProps>().props
     const { flash } = useAuth()
 
@@ -243,6 +245,7 @@ export function Promotion() {
                 paymentMethodOptions={paymentMethodOptions}
                 products={products}
                 categories={categories}
+                suppliers={suppliers}
             />
         </div>
     )

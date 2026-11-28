@@ -87,6 +87,9 @@ class UpdateVoucherRequest extends FormRequest
             'stackable_with_promo' => ['nullable', 'boolean'],
             'stackable_with_voucher' => ['nullable', 'boolean'],
             'funding' => ['nullable', 'string', Rule::in(array_column(PromotionFunding::cases(), 'value'))],
+            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            'store_share_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'supplier_share_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'status' => ['nullable', 'string', Rule::in(array_column(VoucherStatus::cases(), 'value'))],
         ];
     }

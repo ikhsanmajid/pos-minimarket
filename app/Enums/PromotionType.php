@@ -18,6 +18,8 @@ enum PromotionType: string
     case GiftWithPurchase = 'gift_with_purchase';
     case PaymentPromo = 'payment_promo';
     case Cashback = 'cashback';
+    case Birthday = 'birthday';
+    case FirstPurchase = 'first_purchase';
 
     public function label(): string
     {
@@ -36,6 +38,8 @@ enum PromotionType: string
             self::GiftWithPurchase => 'Hadiah Pembelian (GWP)',
             self::PaymentPromo => 'Promo Metode Bayar',
             self::Cashback => 'Cashback',
+            self::Birthday => 'Promo Ulang Tahun Member',
+            self::FirstPurchase => 'Promo Pembelian Pertama',
         };
     }
 
@@ -56,6 +60,8 @@ enum PromotionType: string
             self::GiftWithPurchase => 'GWP',
             self::PaymentPromo => 'Promo Bayar',
             self::Cashback => 'Cashback',
+            self::Birthday => 'Ulang Tahun',
+            self::FirstPurchase => 'Pembelian Pertama',
         };
     }
 
@@ -66,7 +72,7 @@ enum PromotionType: string
             self::FixedDiscount, self::MinSpendDiscount => 'emerald',
             self::BuyXGetY, self::MultibuyPrice, self::Bundle, self::MixMatch => 'amber',
             self::NearExpiry, self::NthItemDiscount => 'rose',
-            self::TebusMurah, self::GiftWithPurchase, self::PaymentPromo, self::Cashback => 'violet',
+            self::TebusMurah, self::GiftWithPurchase, self::PaymentPromo, self::Cashback, self::Birthday, self::FirstPurchase => 'violet',
         };
     }
 
@@ -92,6 +98,8 @@ enum PromotionType: string
             self::TebusMurah,
             self::GiftWithPurchase,
             self::Cashback,
+            self::Birthday,
+            self::FirstPurchase,
         ], true);
     }
 

@@ -191,6 +191,20 @@ export function CustomerPicker({
                             <span className="text-xs font-semibold text-foreground truncate">
                                 {selectedCustomer.name}
                             </span>
+                            {selectedCustomer.tier_label && (
+                                <Badge
+                                    variant="outline"
+                                    className={`h-4 px-1.5 py-0 text-[10px] shrink-0 ${
+                                        selectedCustomer.tier === 'platinum'
+                                            ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300'
+                                            : selectedCustomer.tier === 'gold'
+                                              ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                              : 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                                    }`}
+                                >
+                                    {selectedCustomer.tier_label}
+                                </Badge>
+                            )}
                         </div>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground font-mono">
                             {selectedCustomer.member_code && <span>{selectedCustomer.member_code}</span>}
@@ -279,9 +293,16 @@ export function CustomerPicker({
                                         className="w-full px-3 py-2 text-left hover:bg-muted/60 flex items-center justify-between gap-2 cursor-pointer border-b last:border-b-0"
                                     >
                                         <div className="min-w-0">
-                                            <p className="text-xs font-medium text-foreground truncate">
-                                                {cust.name}
-                                            </p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-xs font-medium text-foreground truncate">
+                                                    {cust.name}
+                                                </p>
+                                                {cust.tier_label && (
+                                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
+                                                        {cust.tier_label}
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             <p className="text-[10px] font-mono text-muted-foreground truncate">
                                                 {cust.member_code || '-'}
                                                 {cust.phone ? ` • ${cust.phone}` : ''}

@@ -13,6 +13,7 @@ use App\Http\Controllers\FinancialTransactionController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductMemberPriceController;
 use App\Http\Controllers\ProductPriceTierController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PromotionController;
@@ -23,6 +24,7 @@ use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockOpnameController;
 use App\Http\Controllers\StoreSettingController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SupplierPromoClaimController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VoucherController;
@@ -95,9 +97,13 @@ Route::middleware('auth')->group(function () {
             Route::post('/{product}/price-tiers', [ProductPriceTierController::class, 'store'])->name('price-tiers.store');
             Route::patch('/{product}/price-tiers/{priceTier}', [ProductPriceTierController::class, 'update'])->name('price-tiers.update');
             Route::delete('/{product}/price-tiers/{priceTier}', [ProductPriceTierController::class, 'destroy'])->name('price-tiers.destroy');
+            Route::post('/{product}/member-prices', [ProductMemberPriceController::class, 'store'])->name('member-prices.store');
+            Route::patch('/{product}/member-prices/{memberPrice}', [ProductMemberPriceController::class, 'update'])->name('member-prices.update');
+            Route::delete('/{product}/member-prices/{memberPrice}', [ProductMemberPriceController::class, 'destroy'])->name('member-prices.destroy');
         });
 
         // Promo & Diskon
+        Route::get('/promotions/exclusive-groups', [PromotionController::class, 'searchExclusiveGroups'])->name('promotions.exclusive-groups');
         Route::resource('promotions', PromotionController::class)->only(['index', 'store', 'update', 'destroy']);
 
         // Voucher / Kode Promo
@@ -178,6 +184,11 @@ Route::middleware('auth')->group(function () {
             Route::prefix('/payables')->name('payables.')->group(function () {
                 Route::get('/', [AccountPayableController::class, 'index'])->name('index');
                 Route::post('/{accountPayable}/payments', [AccountPayableController::class, 'recordPayment'])->name('payments.store');
+            });
+
+            Route::prefix('/supplier-claims')->name('supplier-claims.')->group(function () {
+                Route::get('/', [SupplierPromoClaimController::class, 'index'])->name('index');
+                Route::post('/settle', [SupplierPromoClaimController::class, 'settle'])->name('settle');
             });
 
             Route::prefix('/transactions')->name('transactions.')->group(function () {

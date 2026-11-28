@@ -64,6 +64,20 @@ export function CheckoutSuccessDialog({
                                 </span>
                             </div>
                         )}
+                        {(receipt.points_redeemed ?? 0) > 0 && (
+                            <div className="flex justify-between text-violet-600 dark:text-violet-400">
+                                <span>Tukar Poin ({receipt.points_redeemed} pt)</span>
+                                <span className="font-mono font-semibold">
+                                    -{formatRupiah(receipt.points_redeem_amount ?? 0)}
+                                </span>
+                            </div>
+                        )}
+                        {(receipt.points_earned ?? 0) > 0 && (
+                            <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                                <span>Poin Diperoleh</span>
+                                <span className="font-mono font-semibold">+{receipt.points_earned} poin</span>
+                            </div>
+                        )}
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Total Bayar</span>
                             <span className="font-mono font-semibold">{formatRupiah(receipt.paid_amount)}</span>

@@ -141,6 +141,23 @@ class Product extends Model
             ->orderBy('min_qty');
     }
 
+    /** @return HasMany<ProductMemberPrice, $this> */
+    public function memberPrices(): HasMany
+    {
+        return $this->hasMany(ProductMemberPrice::class)
+            ->orderByRaw('CASE WHEN product_unit_id IS NULL THEN 0 ELSE 1 END')
+            ->orderBy('product_unit_id')
+            ->orderByRaw('CASE WHEN tier IS NULL THEN 0 ELSE 1 END')
+            ->orderBy('tier');
+    }
+
+    /** @return HasMany<ProductMemberPrice, $this> */
+    public function activeMemberPrices(): HasMany
+    {
+        return $this->hasMany(ProductMemberPrice::class)
+            ->where('is_active', true);
+    }
+
     /** @return BelongsToMany<Promotion, $this> */
     public function promotions(): BelongsToMany
     {

@@ -45,6 +45,8 @@ class UpdatePromotionRequest extends FormRequest
             PromotionType::MinSpendPercent->value,
             PromotionType::PaymentPromo->value,
             PromotionType::Cashback->value,
+            PromotionType::Birthday->value,
+            PromotionType::FirstPurchase->value,
         ], true);
 
         $requiresMinPurchase = in_array($type, [
@@ -75,6 +77,9 @@ class UpdatePromotionRequest extends FormRequest
             'type' => ['required', 'string', Rule::in(array_column(PromotionType::cases(), 'value'))],
             'scope' => ['required', 'string', Rule::in(array_column(PromotionScope::cases(), 'value'))],
             'funding' => ['nullable', 'string', Rule::in(array_column(PromotionFunding::cases(), 'value'))],
+            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            'store_share_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'supplier_share_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'discount_value' => [
                 Rule::requiredIf($requiresDiscountValue),
                 'nullable',
