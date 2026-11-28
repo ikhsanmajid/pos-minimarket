@@ -8,17 +8,19 @@ import {
     SidebarContent,
     SidebarFooter,
 } from "@/components/ui/sidebar"
-import { Users, House, Package, ShoppingCart, Truck, Wallet, Settings } from "lucide-react"
+import { Users, House, Package, ShoppingCart, Truck, Wallet, Settings, BarChart3, Contact, Tags, TicketPercent } from "lucide-react"
 import ThemeToggle from "./themetoggle"
 import { useAuth } from "@/hooks/use-auth"
 import { usePage } from "@inertiajs/react"
 import users from "@/routes/pos/users"
 import products from "@/routes/pos/products"
 import categories from "@/routes/pos/categories"
+import customers from "@/routes/pos/customers"
 import dashboard from "@/routes/pos/dashboard"
 import purchaseOrders from "@/routes/pos/purchase-orders"
 import suppliers from "@/routes/pos/suppliers"
 import financeAccounts from "@/routes/pos/finance/accounts"
+import financeCategories from "@/routes/pos/finance/categories"
 import financePayables from "@/routes/pos/finance/payables"
 import financeTransactions from "@/routes/pos/finance/transactions"
 import shifts from "@/routes/pos/shifts"
@@ -28,6 +30,9 @@ import transactions from "@/routes/pos/transactions"
 import settings from "@/routes/pos/settings"
 import inventoryAdjustments from "@/routes/pos/inventory/adjustments"
 import inventoryOpnames from "@/routes/pos/inventory/opnames"
+import promotions from "@/routes/pos/promotions"
+import vouchers from "@/routes/pos/vouchers"
+import reports from "@/routes/pos/reports"
 
 interface NavSubItem {
     title: string
@@ -98,6 +103,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             ],
         },
         {
+            title: "Pelanggan / Member",
+            url: customers.index.url(),
+            icon: <Contact />,
+            isActive: url.startsWith('/pos/customers'),
+            roles: ['admin', 'supervisor', 'cashier'],
+            items: [],
+        },
+        {
+            title: "Promo & Diskon",
+            url: promotions.index.url(),
+            icon: <Tags />,
+            isActive: url.startsWith('/pos/promotions'),
+            roles: ['admin', 'supervisor'],
+            items: [],
+        },
+        {
+            title: "Voucher",
+            url: vouchers.index.url(),
+            icon: <TicketPercent />,
+            isActive: url.startsWith('/pos/vouchers'),
+            roles: ['admin', 'supervisor'],
+            items: [],
+        },
+        {
             title: "Produk & Stok",
             url: "#",
             icon: <Package />,
@@ -153,22 +182,56 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             url: "#",
             icon: <Wallet />,
             isActive: url.startsWith('/pos/finance'),
-            roles: ['admin', 'supervisor'],
+            roles: ['admin'],
             items: [
                 {
                     title: "Akun Kas / Bank",
                     url: financeAccounts.index.url(),
-                    roles: ['admin', 'supervisor'],
+                    roles: ['admin'],
+                },
+                {
+                    title: "Kategori Keuangan",
+                    url: financeCategories.index.url(),
+                    roles: ['admin'],
                 },
                 {
                     title: "Hutang Dagang",
                     url: financePayables.index.url(),
-                    roles: ['admin', 'supervisor'],
+                    roles: ['admin'],
                 },
                 {
                     title: "Buku Arus Kas",
                     url: financeTransactions.index.url(),
+                    roles: ['admin'],
+                },
+            ],
+        },
+        {
+            title: "Laporan",
+            url: "#",
+            icon: <BarChart3 />,
+            isActive: url.startsWith('/pos/reports'),
+            roles: ['admin', 'supervisor', 'warehouse'],
+            items: [
+                {
+                    title: "Laporan Penjualan",
+                    url: reports.sales.url(),
                     roles: ['admin', 'supervisor'],
+                },
+                {
+                    title: "Laba Kotor (HPP)",
+                    url: reports.profitLoss.url(),
+                    roles: ['admin'],
+                },
+                {
+                    title: "Valuasi & Stok",
+                    url: reports.stockValuation.url(),
+                    roles: ['admin', 'supervisor', 'warehouse'],
+                },
+                {
+                    title: "Keuangan & Aging",
+                    url: reports.financeAging.url(),
+                    roles: ['admin'],
                 },
             ],
         },

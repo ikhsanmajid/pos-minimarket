@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Enums\ActivityLogCategory;
 use App\Enums\PaymentMethod;
+use App\Enums\PromotionType;
 use App\Enums\SalesReturnStatus;
 use App\Enums\StockMovementType;
 use App\Enums\TransactionStatus;
+use App\Models\AppliedPromotion;
 use App\Models\CashierShift;
 use App\Models\Product;
 use App\Models\SalesReturn;
@@ -15,6 +17,7 @@ use App\Models\StockMovement;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
 use App\Models\User;
+use App\Support\PricingMath;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -58,7 +61,7 @@ class SalesReturnService
                 ]);
             }
 
-            $lockedTx->load(['details.product:id,name,barcode,base_unit']);
+            $lockedTx->load(['details.product:id,name,barcode,base_unit,category_id', 'appliedPromotions']);
             $detailsMap = $lockedTx->details->keyBy('id');
 
             // Hitung total qty yang sudah pernah diretur per transaction_detail_id
@@ -119,8 +122,25 @@ class SalesReturnService
 
                 $conversionFactor = max(1, (int) $detail->conversion_factor);
                 $baseQty = $returnQty * $conversionFactor;
-                $effectiveUnitPrice = round((float) $detail->subtotal / $purchasedQty, 2);
-                $subtotalRefund = round($effectiveUnitPrice * $returnQty, 2);
+
+                // Hitung nilai bayar efektif baris (setelah alokasi diskon header) dan hormati free_qty BxGy
+                $netLinePaid = max(0, PricingMath::toRupiah($detail->subtotal) - PricingMath::toRupiah($detail->allocated_header_discount));
+                $freeQty = max(0, (int) ($detail->free_qty ?? 0));
+                $paidQty = max(0, $purchasedQty - $freeQty);
+
+                if ($paidQty === 0) {
+                    $effectiveUnitPrice = 0.0;
+                    $subtotalRefund = 0.0;
+                } else {
+                    $paidAlreadyReturned = min($alreadyReturned, $paidQty);
+                    $remainingPaidQty = max(0, $paidQty - $paidAlreadyReturned);
+                    $refundableQty = min($returnQty, $remainingPaidQty);
+                    $effectiveUnitPrice = round($netLinePaid / $paidQty, 2);
+                    $subtotalRefund = $refundableQty > 0
+                        ? (float) PricingMath::floorRupiah(($netLinePaid * $refundableQty) / $paidQty)
+                        : 0.0;
+                }
+
                 $totalRefundAmount = round($totalRefundAmount + $subtotalRefund, 2);
 
                 $resolvedItems[] = [
@@ -132,6 +152,47 @@ class SalesReturnService
                     'subtotal_refund' => $subtotalRefund,
                     'is_restockable' => (bool) $row['is_restockable'],
                 ];
+            }
+
+            // Hitung apakah seluruh item non-donasi sudah habis diretur (retur penuh vs parsial)
+            $allFullyReturned = true;
+            foreach ($lockedTx->details as $detail) {
+                if ($detail->is_donation) {
+                    continue;
+                }
+                $purchasedQty = $detail->qty > 0 ? $detail->qty : max(1, (int) $detail->quantity);
+                $totalReturnedForDetail = ($alreadyReturnedMap[$detail->id] ?? 0) + ($requestedQtyByDetail[$detail->id] ?? 0);
+                if ($totalReturnedForDetail < $purchasedQty) {
+                    $allFullyReturned = false;
+                    break;
+                }
+            }
+
+            // Potong refund sebesar manfaat voucher & promo (bundle/mix-match/min_spend/tebus_murah) yang hilang pada retur parsial
+            $voucherClawbackAmount = 0.0;
+            $promoClawbackAmount = 0.0;
+            if (! $allFullyReturned) {
+                $voucherClawbackAmount = $this->applyVoucherClawbackForPartialReturn(
+                    $lockedTx,
+                    $alreadyReturnedMap,
+                    $requestedQtyByDetail,
+                    $totalRefundAmount
+                );
+
+                if ($voucherClawbackAmount > 0.0) {
+                    $totalRefundAmount = round(max(0.0, $totalRefundAmount - $voucherClawbackAmount), 2);
+                }
+
+                $promoClawbackAmount = $this->applyPromotionClawbackForPartialReturn(
+                    $lockedTx,
+                    $alreadyReturnedMap,
+                    $requestedQtyByDetail,
+                    $totalRefundAmount
+                );
+
+                if ($promoClawbackAmount > 0.0) {
+                    $totalRefundAmount = round(max(0.0, $totalRefundAmount - $promoClawbackAmount), 2);
+                }
             }
 
             // Kunci baris produk secara terurut sebelum update stok
@@ -221,21 +282,9 @@ class SalesReturnService
                 ];
             }
 
-            // Catat pengeluaran refund melalui FinanceService
-            $this->financeService->recordSalesReturnRefund($salesReturn, $lockedTx, $actor);
-
-            // Tentukan status terbaru transaksi: refunded jika seluruh item non-donasi sudah habis diretur
-            $allFullyReturned = true;
-            foreach ($lockedTx->details as $detail) {
-                if ($detail->is_donation) {
-                    continue;
-                }
-                $purchasedQty = $detail->qty > 0 ? $detail->qty : max(1, (int) $detail->quantity);
-                $totalReturnedForDetail = ($alreadyReturnedMap[$detail->id] ?? 0) + ($requestedQtyByDetail[$detail->id] ?? 0);
-                if ($totalReturnedForDetail < $purchasedQty) {
-                    $allFullyReturned = false;
-                    break;
-                }
+            // Catat pengeluaran refund melalui FinanceService (hanya jika nominal refund > 0)
+            if ($totalRefundAmount > 0.0) {
+                $this->financeService->recordSalesReturnRefund($salesReturn, $lockedTx, $actor);
             }
 
             $oldStatus = $lockedTx->status->value;
@@ -254,6 +303,8 @@ class SalesReturnService
                     'new_status' => $newStatus->value,
                     'refund_method' => $refundMethod->label(),
                     'total_refund_amount' => $totalRefundAmount,
+                    'voucher_clawback_amount' => $voucherClawbackAmount,
+                    'promo_clawback_amount' => $promoClawbackAmount,
                     'reason' => $reason,
                     'approved_by' => $approver->name,
                     'returned_items' => $logItems,
@@ -274,6 +325,310 @@ class SalesReturnService
                 'financialAccount:id,code,name,type',
             ]);
         });
+    }
+
+    /**
+     * Jika retur parsial menyebabkan sisa belanja eligible tidak lagi memenuhi syarat voucher
+     * (berdasarkan snapshot applied_promotions), potong refund sebesar manfaat voucher yang tersisa pada item lain.
+     *
+     * @param  array<int, int>  $alreadyReturnedMap
+     * @param  array<int, int>  $requestedQtyByDetail
+     */
+    private function applyVoucherClawbackForPartialReturn(
+        Transaction $transaction,
+        array $alreadyReturnedMap,
+        array $requestedQtyByDetail,
+        float $currentTotalRefund
+    ): float {
+        $totalClawback = 0;
+
+        foreach ($transaction->appliedPromotions as $appliedPromo) {
+            if (! $appliedPromo instanceof AppliedPromotion || $appliedPromo->voucher_id === null) {
+                continue;
+            }
+
+            $meta = is_array($appliedPromo->meta) ? $appliedPromo->meta : [];
+            if (! empty($meta['voucher_clawback_applied'])) {
+                continue;
+            }
+
+            $minSpend = (int) ($meta['min_spend'] ?? 0);
+            $voucherType = (string) ($meta['voucher_type'] ?? '');
+            $freeProductId = isset($meta['free_product_id']) ? (int) $meta['free_product_id'] : null;
+            $applicableSkus = is_array($meta['applicable_skus'] ?? null)
+                ? array_map(fn (mixed $v): string => strtoupper(trim((string) $v)), $meta['applicable_skus'])
+                : [];
+            $applicableCategories = is_array($meta['applicable_categories'] ?? null)
+                ? array_map(fn (mixed $v): int => (int) $v, $meta['applicable_categories'])
+                : [];
+            $excludedSkus = is_array($meta['excluded_skus'] ?? null)
+                ? array_map(fn (mixed $v): string => strtoupper(trim((string) $v)), $meta['excluded_skus'])
+                : [];
+            $excludedCategories = is_array($meta['excluded_categories'] ?? null)
+                ? array_map(fn (mixed $v): int => (int) $v, $meta['excluded_categories'])
+                : [];
+            $voucherAllocations = is_array($meta['voucher_allocations'] ?? null)
+                ? $meta['voucher_allocations']
+                : [];
+
+            $remainingEligibleSpend = 0;
+            $remainingFreeProductQty = 0;
+            $remainingVoucherBenefit = 0;
+
+            foreach ($transaction->details as $detail) {
+                if ($detail->is_donation) {
+                    continue;
+                }
+
+                $purchasedQty = $detail->qty > 0 ? $detail->qty : max(1, (int) $detail->quantity);
+                $returnedAfterThis = ($alreadyReturnedMap[$detail->id] ?? 0) + ($requestedQtyByDetail[$detail->id] ?? 0);
+                $remainingQty = max(0, $purchasedQty - $returnedAfterThis);
+
+                if ($remainingQty <= 0) {
+                    continue;
+                }
+
+                $allocatedForDetail = (int) ($voucherAllocations[(string) $detail->id] ?? $voucherAllocations[$detail->id] ?? 0);
+                if ($allocatedForDetail > 0) {
+                    $remainingVoucherBenefit += PricingMath::floorRupiah(($allocatedForDetail * $remainingQty) / $purchasedQty);
+                }
+
+                if ($detail->is_promo_excluded) {
+                    continue;
+                }
+
+                if ($freeProductId !== null && $detail->product_id === $freeProductId) {
+                    $remainingFreeProductQty += $remainingQty;
+                }
+
+                $barcode = strtoupper(trim((string) ($detail->product->barcode ?? '')));
+                $productIdStr = (string) $detail->product_id;
+                $categoryId = $detail->product?->category_id !== null ? (int) $detail->product->category_id : null;
+
+                if (! empty($excludedSkus) && (in_array($barcode, $excludedSkus, true) || in_array($productIdStr, $excludedSkus, true))) {
+                    continue;
+                }
+                if ($categoryId !== null && ! empty($excludedCategories) && in_array($categoryId, $excludedCategories, true)) {
+                    continue;
+                }
+                if (! empty($applicableSkus) && ! in_array($barcode, $applicableSkus, true) && ! in_array($productIdStr, $applicableSkus, true)) {
+                    continue;
+                }
+                if (! empty($applicableCategories) && ($categoryId === null || ! in_array($categoryId, $applicableCategories, true))) {
+                    continue;
+                }
+
+                $lineSubtotal = PricingMath::toRupiah($detail->subtotal);
+                $remainingEligibleSpend += PricingMath::floorRupiah(($lineSubtotal * $remainingQty) / $purchasedQty);
+            }
+
+            $violatesMinSpend = $minSpend > 0 && $remainingEligibleSpend < $minSpend;
+            $violatesFreeItem = $voucherType === 'free_item' && $freeProductId !== null && $remainingFreeProductQty <= 0;
+
+            if (($violatesMinSpend || $violatesFreeItem) && $remainingVoucherBenefit > 0) {
+                $availableRefund = max(0, PricingMath::toRupiah($currentTotalRefund) - $totalClawback);
+                $clawback = min($availableRefund, $remainingVoucherBenefit);
+                $totalClawback += $clawback;
+
+                $meta['voucher_clawback_applied'] = true;
+                $meta['voucher_clawback_amount'] = $clawback;
+                $appliedPromo->update(['meta' => $meta]);
+            }
+        }
+
+        return (float) $totalClawback;
+    }
+
+    /**
+     * Hitung ulang manfaat promo bundel/mix-match serta syarat min_spend/tebus_murah pada retur parsial
+     * berdasarkan snapshot applied_promotions; potong refund sesuai selisih manfaat yang hilang.
+     *
+     * @param  array<int, int>  $alreadyReturnedMap
+     * @param  array<int, int>  $requestedQtyByDetail
+     */
+    private function applyPromotionClawbackForPartialReturn(
+        Transaction $transaction,
+        array $alreadyReturnedMap,
+        array $requestedQtyByDetail,
+        float $currentTotalRefund
+    ): float {
+        $totalClawback = 0;
+
+        foreach ($transaction->appliedPromotions as $appliedPromo) {
+            if (! $appliedPromo instanceof AppliedPromotion || $appliedPromo->promotion_id === null) {
+                continue;
+            }
+
+            $meta = is_array($appliedPromo->meta) ? $appliedPromo->meta : [];
+
+            // 1. Retur item Bundel / Mix & Match
+            if (in_array($appliedPromo->type, [PromotionType::Bundle->value, PromotionType::MixMatch->value], true)) {
+                $snapshot = is_array($meta['snapshot'] ?? null) ? $meta['snapshot'] : [];
+                $detailAllocations = is_array($meta['detail_allocations'] ?? null) ? $meta['detail_allocations'] : [];
+                $detailProducts = is_array($meta['detail_products'] ?? null) ? $meta['detail_products'] : [];
+                $alreadyClawedBack = (int) ($meta['clawback_applied_amount'] ?? 0);
+
+                if (empty($snapshot) || empty($detailAllocations)) {
+                    continue;
+                }
+
+                // Hitung sisa qty per detail & per product_id serta diskon bundel yang masih melekat pada item tersisa
+                $remainingQtyByProduct = [];
+                $remainingUnitPrices = [];
+                $retainedDiscountOnRemaining = 0;
+                $totalRemainingParticipatingQty = 0;
+
+                foreach ($transaction->details as $detail) {
+                    $detKey = (string) $detail->id;
+                    if (! isset($detailAllocations[$detKey]) && ! isset($detailAllocations[$detail->id])) {
+                        continue;
+                    }
+
+                    $purchasedQty = $detail->qty > 0 ? $detail->qty : max(1, (int) $detail->quantity);
+                    $returnedAfterThis = ($alreadyReturnedMap[$detail->id] ?? 0) + ($requestedQtyByDetail[$detail->id] ?? 0);
+                    $remainingQty = max(0, $purchasedQty - $returnedAfterThis);
+
+                    if ($remainingQty <= 0) {
+                        continue;
+                    }
+
+                    $origAlloc = (int) ($detailAllocations[$detKey] ?? $detailAllocations[$detail->id] ?? 0);
+                    $retainedDiscountOnRemaining += PricingMath::floorRupiah(($origAlloc * $remainingQty) / $purchasedQty);
+
+                    $pid = (int) ($detailProducts[$detKey]['product_id'] ?? $detail->product_id);
+                    $unitPrice = (int) ($detailProducts[$detKey]['unit_price'] ?? PricingMath::toRupiah($detail->unit_price));
+                    $remainingQtyByProduct[$pid] = ($remainingQtyByProduct[$pid] ?? 0) + $remainingQty;
+                    $totalRemainingParticipatingQty += $remainingQty;
+
+                    for ($i = 0; $i < $remainingQty; $i++) {
+                        $remainingUnitPrices[] = $unitPrice;
+                    }
+                }
+
+                $entitledRemainingDiscount = 0;
+                if (($snapshot['kind'] ?? '') === 'bundle') {
+                    $bundleItems = is_array($snapshot['bundle_items'] ?? null) ? $snapshot['bundle_items'] : [];
+                    $discountPerSet = (int) ($snapshot['discount_per_set'] ?? 0);
+                    $intactSets = PHP_INT_MAX;
+
+                    foreach ($bundleItems as $bItem) {
+                        $pid = (int) ($bItem['product_id'] ?? 0);
+                        $reqQty = max(1, (int) ($bItem['required_qty'] ?? 1));
+                        $avail = $remainingQtyByProduct[$pid] ?? 0;
+                        $intactSets = min($intactSets, intdiv($avail, $reqQty));
+                    }
+
+                    if ($intactSets === PHP_INT_MAX || $intactSets < 0) {
+                        $intactSets = 0;
+                    }
+
+                    $entitledRemainingDiscount = $intactSets * $discountPerSet;
+                } elseif (($snapshot['kind'] ?? '') === 'mix_match') {
+                    $packQty = max(2, (int) ($snapshot['buy_qty'] ?? 2));
+                    $intactSets = intdiv($totalRemainingParticipatingQty, $packQty);
+
+                    if ($intactSets > 0) {
+                        rsort($remainingUnitPrices);
+                        $bundledUnits = array_slice($remainingUnitPrices, 0, $intactSets * $packQty);
+                        $normalCost = array_sum($bundledUnits);
+                        $bundlePrice = (int) ($snapshot['bundle_price'] ?? 0);
+                        $discVal = (float) ($snapshot['discount_value'] ?? 0);
+                        $maxDisc = isset($snapshot['max_discount_amount']) && $snapshot['max_discount_amount'] !== null
+                            ? (int) $snapshot['max_discount_amount']
+                            : null;
+
+                        if ($bundlePrice > 0) {
+                            $entitledRemainingDiscount = max(0, $normalCost - ($intactSets * $bundlePrice));
+                        } elseif ($discVal <= 100.0) {
+                            $entitledRemainingDiscount = PricingMath::percentageDiscount($normalCost, $discVal, $maxDisc);
+                        } else {
+                            $entitledRemainingDiscount = min($normalCost, $intactSets * PricingMath::toRupiah($discVal));
+                        }
+                    }
+                }
+
+                $lostBenefit = max(0, $retainedDiscountOnRemaining - $entitledRemainingDiscount - $alreadyClawedBack);
+                if ($lostBenefit > 0) {
+                    $availableRefund = max(0, PricingMath::toRupiah($currentTotalRefund) - $totalClawback);
+                    $clawback = min($availableRefund, $lostBenefit);
+                    $totalClawback += $clawback;
+
+                    $meta['clawback_applied_amount'] = $alreadyClawedBack + $clawback;
+                    $appliedPromo->update(['meta' => $meta]);
+                }
+
+                continue;
+            }
+
+            // 2. Retur yang membuat min_spend_* atau tebus_murah tidak lagi memenuhi syarat
+            if (in_array($appliedPromo->type, [
+                PromotionType::MinSpendDiscount->value,
+                PromotionType::MinSpendPercent->value,
+                PromotionType::TebusMurah->value,
+            ], true)) {
+                if (! empty($meta['clawback_applied'])) {
+                    continue;
+                }
+
+                $minSpend = (int) ($meta['min_purchase_amount'] ?? 0);
+                if ($minSpend <= 0) {
+                    continue;
+                }
+
+                $rewardDetailId = isset($meta['reward_detail_id']) ? (int) $meta['reward_detail_id'] : null;
+                $detailAllocations = is_array($meta['detail_allocations'] ?? null) ? $meta['detail_allocations'] : [];
+
+                $remainingEligibleSpend = 0;
+                $retainedBenefit = 0;
+
+                foreach ($transaction->details as $detail) {
+                    if ($detail->is_donation) {
+                        continue;
+                    }
+
+                    $purchasedQty = $detail->qty > 0 ? $detail->qty : max(1, (int) $detail->quantity);
+                    $returnedAfterThis = ($alreadyReturnedMap[$detail->id] ?? 0) + ($requestedQtyByDetail[$detail->id] ?? 0);
+                    $remainingQty = max(0, $purchasedQty - $returnedAfterThis);
+
+                    if ($remainingQty <= 0) {
+                        continue;
+                    }
+
+                    if ($appliedPromo->type === PromotionType::TebusMurah->value) {
+                        if ($rewardDetailId !== null && $detail->id === $rewardDetailId) {
+                            // Item tebus murah tidak dihitung ke min_spend, dan manfaatnya masih dipegang pembeli jika tidak diretur
+                            $retainedBenefit = PricingMath::toRupiah($appliedPromo->discount_amount);
+
+                            continue;
+                        }
+                    } else {
+                        $alloc = (int) ($detailAllocations[(string) $detail->id] ?? $detailAllocations[$detail->id] ?? 0);
+                        if ($alloc > 0) {
+                            $retainedBenefit += PricingMath::floorRupiah(($alloc * $remainingQty) / $purchasedQty);
+                        }
+                    }
+
+                    if ($detail->is_promo_excluded) {
+                        continue;
+                    }
+
+                    $lineSub = PricingMath::toRupiah($detail->subtotal);
+                    $remainingEligibleSpend += PricingMath::floorRupiah(($lineSub * $remainingQty) / $purchasedQty);
+                }
+
+                if ($remainingEligibleSpend < $minSpend && $retainedBenefit > 0) {
+                    $availableRefund = max(0, PricingMath::toRupiah($currentTotalRefund) - $totalClawback);
+                    $clawback = min($availableRefund, $retainedBenefit);
+                    $totalClawback += $clawback;
+
+                    $meta['clawback_applied'] = true;
+                    $meta['clawback_amount'] = $clawback;
+                    $appliedPromo->update(['meta' => $meta]);
+                }
+            }
+        }
+
+        return (float) $totalClawback;
     }
 
     private function generateReturnNumber(): string

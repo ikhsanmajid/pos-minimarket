@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Banknote, CreditCard, Heart, Plus, Split, Trash2 } from 'lucide-react'
+import { Banknote, CreditCard, Heart, Plus, Sparkles, Split, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
     Dialog,
@@ -19,13 +20,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import type { PosDonationProduct, PosFinancialAccount, PosPaymentMethodOption } from '@/types'
+import type {
+    PosAppliedPaymentPromotion,
+    PosDonationProduct,
+    PosFinancialAccount,
+    PosPaymentMethodOption,
+} from '@/types'
 import { formatRupiah, getDefaultAccountIdForMethod } from './posUtils'
 
 export interface PaymentEntryPayload {
     payment_method: string
     financial_account_id: number
     amount: number
+    card_bin?: string | null
     reference_number?: string | null
 }
 
@@ -39,7 +46,13 @@ interface PaymentRowState {
     payment_method: string
     financial_account_id: string
     amount: string
+    card_bin: string
     reference_number: string
+}
+
+export interface PaymentPromoPreviewResult {
+    grandTotal: number
+    paymentPromotion: PosAppliedPaymentPromotion | null
 }
 
 interface PaymentDialogProps {
@@ -51,10 +64,19 @@ interface PaymentDialogProps {
     donationProducts?: PosDonationProduct[]
     isSubmitting: boolean
     errorMessage?: string | null
+    onPreviewPaymentPromo?: (
+        payments: Array<{
+            payment_method: string
+            amount: number
+            card_bin?: string | null
+            reference_number?: string | null
+        }>
+    ) => Promise<PaymentPromoPreviewResult | null>
     onSubmitPayment: (payments: PaymentEntryPayload[], donation?: PaymentDonationPayload | null) => void
 }
 
-const QUICK_CASH_AMOUNTS = [10000, 20000, 50000, 100000]
+const QUICK_CASH_AMOUNTS = [10000, 20000, 50000, 100000, 200000, 500000]
+const ADD_CASH_DENOMINATIONS = [1000, 2000, 5000, 10000, 20000, 50000, 100000]
 
 export function PaymentDialog({
     open,
@@ -65,14 +87,18 @@ export function PaymentDialog({
     donationProducts = [],
     isSubmitting,
     errorMessage = null,
+    onPreviewPaymentPromo,
     onSubmitPayment,
 }: PaymentDialogProps) {
     const [mode, setMode] = useState<'single' | 'split'>('single')
     const [singleMethod, setSingleMethod] = useState('cash')
     const [singleAccountId, setSingleAccountId] = useState('')
     const [singleAmount, setSingleAmount] = useState('')
+    const [singleCardBin, setSingleCardBin] = useState('')
     const [singleReference, setSingleReference] = useState('')
     const [splitRows, setSplitRows] = useState<PaymentRowState[]>([])
+    const [previewGrandTotal, setPreviewGrandTotal] = useState<number | null>(null)
+    const [previewPaymentPromo, setPreviewPaymentPromo] = useState<PosAppliedPaymentPromotion | null>(null)
     const [donateChange, setDonateChange] = useState(false)
     const [selectedDonationId, setSelectedDonationId] = useState('')
     const [donationAmountInput, setDonationAmountInput] = useState('')
@@ -110,13 +136,17 @@ export function PaymentDialog({
         setSingleMethod('cash')
         setSingleAccountId(defaultCashAcc ? String(defaultCashAcc) : '')
         setSingleAmount(String(grandTotal))
+        setSingleCardBin('')
         setSingleReference('')
+        setPreviewGrandTotal(null)
+        setPreviewPaymentPromo(null)
         setSplitRows([
             {
                 id: 'row-1',
                 payment_method: 'cash',
                 financial_account_id: defaultCashAcc ? String(defaultCashAcc) : '',
                 amount: String(Math.floor(grandTotal / 2)),
+                card_bin: '',
                 reference_number: '',
             },
             {
@@ -124,6 +154,7 @@ export function PaymentDialog({
                 payment_method: 'qris',
                 financial_account_id: defaultQrisAcc ? String(defaultQrisAcc) : '',
                 amount: String(grandTotal - Math.floor(grandTotal / 2)),
+                card_bin: '',
                 reference_number: '',
             },
         ])
@@ -162,8 +193,65 @@ export function PaymentDialog({
         )
     }, [mode, singleMethod, singleAmount, splitRows])
 
-    const remaining = Math.max(0, Math.round((grandTotal - totalPaid) * 100) / 100)
-    const rawChange = Math.max(0, Math.round((totalPaid - grandTotal) * 100) / 100)
+    // Preview promo metode bayar secara real-time saat metode / nominal / BIN berubah
+    useEffect(() => {
+        if (!open || !onPreviewPaymentPromo) {
+            setPreviewGrandTotal(null)
+            setPreviewPaymentPromo(null)
+            return
+        }
+
+        const payload =
+            mode === 'single'
+                ? [
+                      {
+                          payment_method: singleMethod,
+                          amount: Math.max(0, Number(singleAmount) || 0),
+                          card_bin: singleMethod !== 'cash' && singleCardBin.trim() ? singleCardBin.trim() : null,
+                          reference_number:
+                              singleMethod !== 'cash' && singleReference.trim() ? singleReference.trim() : null,
+                      },
+                  ]
+                : splitRows
+                      .filter((r) => (Number(r.amount) || 0) > 0)
+                      .map((r) => ({
+                          payment_method: r.payment_method,
+                          amount: Math.max(0, Number(r.amount) || 0),
+                          card_bin: r.payment_method !== 'cash' && r.card_bin.trim() ? r.card_bin.trim() : null,
+                          reference_number:
+                              r.payment_method !== 'cash' && r.reference_number.trim()
+                                  ? r.reference_number.trim()
+                                  : null,
+                      }))
+
+        if (payload.length === 0) {
+            setPreviewGrandTotal(null)
+            setPreviewPaymentPromo(null)
+            return
+        }
+
+        let cancelled = false
+        const timer = window.setTimeout(async () => {
+            const res = await onPreviewPaymentPromo(payload)
+            if (!cancelled && res) {
+                setPreviewGrandTotal(res.grandTotal)
+                setPreviewPaymentPromo(res.paymentPromotion)
+                if (mode === 'single' && singleMethod !== 'cash') {
+                    setSingleAmount(String(res.grandTotal))
+                }
+            }
+        }, 150)
+
+        return () => {
+            cancelled = true
+            window.clearTimeout(timer)
+        }
+    }, [open, mode, singleMethod, singleAmount, singleCardBin, singleReference, splitRows, onPreviewPaymentPromo])
+
+    const effectiveBillTotal = previewGrandTotal !== null ? previewGrandTotal : grandTotal
+
+    const remaining = Math.max(0, Math.round((effectiveBillTotal - totalPaid) * 100) / 100)
+    const rawChange = Math.max(0, Math.round((totalPaid - effectiveBillTotal) * 100) / 100)
 
     useEffect(() => {
         if (rawChange <= 0 && donateChange) {
@@ -178,7 +266,7 @@ export function PaymentDialog({
         donateChange && rawChange > 0 && donationProducts.length > 0
             ? Math.min(rawChange, Math.max(0, Math.round((Number(donationAmountInput) || 0) * 100) / 100))
             : 0
-    const finalGrandTotal = Math.round((grandTotal + effectiveDonationAmount) * 100) / 100
+    const finalGrandTotal = Math.round((effectiveBillTotal + effectiveDonationAmount) * 100) / 100
     const change = Math.max(0, Math.round((totalPaid - finalGrandTotal) * 100) / 100)
     const smallCoinsRemainder = Math.round((rawChange % 1000) * 100) / 100
 
@@ -203,6 +291,7 @@ export function PaymentDialog({
                 payment_method: 'qris',
                 financial_account_id: defaultAcc ? String(defaultAcc) : '',
                 amount: remaining > 0 ? String(remaining) : '0',
+                card_bin: '',
                 reference_number: '',
             },
         ])
@@ -232,12 +321,12 @@ export function PaymentDialog({
         e.preventDefault()
         setLocalError(null)
 
-        if (totalPaid < grandTotal) {
+        if (totalPaid < effectiveBillTotal) {
             setLocalError(`Total bayar masih kurang ${formatRupiah(remaining)}.`)
             return
         }
 
-        if (nonCashTotal > grandTotal) {
+        if (nonCashTotal > effectiveBillTotal) {
             setLocalError('Total pembayaran non-tunai tidak boleh melebihi grand total.')
             return
         }
@@ -269,6 +358,7 @@ export function PaymentDialog({
                         payment_method: singleMethod,
                         financial_account_id: Number(singleAccountId),
                         amount: Number(singleAmount),
+                        card_bin: singleMethod !== 'cash' && singleCardBin.trim() ? singleCardBin.trim() : null,
                         reference_number: singleMethod !== 'cash' && singleReference.trim() ? singleReference.trim() : null,
                     },
                 ],
@@ -289,6 +379,7 @@ export function PaymentDialog({
                 payment_method: row.payment_method,
                 financial_account_id: Number(row.financial_account_id),
                 amount: amt,
+                card_bin: row.payment_method !== 'cash' && row.card_bin.trim() ? row.card_bin.trim() : null,
                 reference_number: row.payment_method !== 'cash' && row.reference_number.trim() ? row.reference_number.trim() : null,
             })
         }
@@ -305,8 +396,8 @@ export function PaymentDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[calc(100%-2rem)] sm:max-w-2xl md:max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
-                <DialogHeader className="p-6 pb-4 border-b shrink-0">
+            <DialogContent className="w-[calc(100%-2rem)] sm:max-w-3xl md:max-w-4xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+                <DialogHeader className="p-6 pb-4 pr-14 border-b shrink-0">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <DialogTitle>Pembayaran Transaksi (F8)</DialogTitle>
@@ -388,6 +479,29 @@ export function PaymentDialog({
                             </div>
                         </div>
 
+                        {/* Preview Promo Metode Bayar */}
+                        {previewPaymentPromo && previewPaymentPromo.discount_amount > 0 && (
+                            <div className="rounded-xl border border-emerald-300/80 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30 px-4 py-3 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 truncate">
+                                            Promo Metode Bayar: {previewPaymentPromo.name}
+                                        </p>
+                                        <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+                                            Porsi eligible: {formatRupiah(previewPaymentPromo.eligible_payment_amount)}
+                                            {previewPaymentPromo.payment_bin_prefix
+                                                ? ` • BIN ${previewPaymentPromo.payment_bin_prefix}`
+                                                : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Badge variant="success" className="font-mono text-xs shrink-0">
+                                    -{formatRupiah(previewPaymentPromo.discount_amount)}
+                                </Badge>
+                            </div>
+                        )}
+
                         {mode === 'single' ? (
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -459,46 +573,98 @@ export function PaymentDialog({
                                 </div>
 
                                 {singleMethod === 'cash' ? (
-                                    <div className="space-y-2">
-                                        <p className="text-xs text-muted-foreground">Nominal Cepat Tunai:</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => setSingleAmount(String(grandTotal))}
-                                                className="font-mono text-xs cursor-pointer"
-                                            >
-                                                Uang Pas ({formatRupiah(grandTotal)})
-                                            </Button>
-                                            {QUICK_CASH_AMOUNTS.map((amt) => (
+                                    <div className="space-y-3">
+                                        <div className="space-y-1.5">
+                                            <p className="text-xs text-muted-foreground">Nominal Cepat Tunai:</p>
+                                            <div className="flex flex-wrap gap-2">
                                                 <Button
-                                                    key={amt}
                                                     type="button"
-                                                    variant="outline"
+                                                    variant="secondary"
                                                     size="sm"
-                                                    onClick={() => setSingleAmount(String(amt))}
+                                                    onClick={() => setSingleAmount(String(effectiveBillTotal))}
                                                     className="font-mono text-xs cursor-pointer"
                                                 >
-                                                    {formatRupiah(amt)}
+                                                    Uang Pas ({formatRupiah(effectiveBillTotal)})
                                                 </Button>
-                                            ))}
+                                                {QUICK_CASH_AMOUNTS.map((amt) => (
+                                                    <Button
+                                                        key={amt}
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => setSingleAmount(String(amt))}
+                                                        className="font-mono text-xs cursor-pointer"
+                                                    >
+                                                        {formatRupiah(amt)}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Tambah Pecahan Uang (klik untuk menambahkan ke nominal dibayarkan):
+                                                </p>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setSingleAmount('0')}
+                                                    className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive cursor-pointer"
+                                                >
+                                                    Reset Rp 0
+                                                </Button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {ADD_CASH_DENOMINATIONS.map((amt) => (
+                                                    <Button
+                                                        key={`add-${amt}`}
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            setSingleAmount(String((Number(singleAmount) || 0) + amt))
+                                                        }
+                                                        className="font-mono text-xs border-emerald-300/80 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/50 cursor-pointer"
+                                                    >
+                                                        +{formatRupiah(amt)}
+                                                    </Button>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="space-y-1.5">
-                                        <Label htmlFor="single-ref-number" className="flex items-center gap-1.5">
-                                            <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                                            Nomor Referensi QRIS / EDC / Transfer (Opsional)
-                                        </Label>
-                                        <Input
-                                            id="single-ref-number"
-                                            value={singleReference}
-                                            onChange={(e) => setSingleReference(e.target.value)}
-                                            placeholder="Contoh: REF-QRIS-98231"
-                                            disabled={isSubmitting}
-                                            className="h-9"
-                                        />
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="single-card-bin" className="flex items-center gap-1.5">
+                                                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                                                BIN Kartu 6–8 Digit (Opsional)
+                                            </Label>
+                                            <Input
+                                                id="single-card-bin"
+                                                value={singleCardBin}
+                                                onChange={(e) =>
+                                                    setSingleCardBin(e.target.value.replace(/\D/g, '').slice(0, 8))
+                                                }
+                                                placeholder="Contoh: 411111"
+                                                disabled={isSubmitting}
+                                                className="h-9 font-mono"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="single-ref-number" className="flex items-center gap-1.5">
+                                                No. Referensi QRIS / EDC / Transfer (Opsional)
+                                            </Label>
+                                            <Input
+                                                id="single-ref-number"
+                                                value={singleReference}
+                                                onChange={(e) => setSingleReference(e.target.value)}
+                                                placeholder="Contoh: REF-QRIS-98231"
+                                                disabled={isSubmitting}
+                                                className="h-9"
+                                            />
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -600,17 +766,33 @@ export function PaymentDialog({
                                         </div>
 
                                         {row.payment_method !== 'cash' && (
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">No. Referensi (Opsional)</Label>
-                                                <Input
-                                                    value={row.reference_number}
-                                                    onChange={(e) =>
-                                                        updateSplitRow(row.id, { reference_number: e.target.value })
-                                                    }
-                                                    placeholder="No. referensi QRIS / EDC / Transfer"
-                                                    disabled={isSubmitting}
-                                                    className="h-8 text-xs"
-                                                />
+                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs">BIN Kartu 6–8 Digit (Opsional)</Label>
+                                                    <Input
+                                                        value={row.card_bin}
+                                                        onChange={(e) =>
+                                                            updateSplitRow(row.id, {
+                                                                card_bin: e.target.value.replace(/\D/g, '').slice(0, 8),
+                                                            })
+                                                        }
+                                                        placeholder="Contoh: 411111"
+                                                        disabled={isSubmitting}
+                                                        className="h-8 font-mono text-xs"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs">No. Referensi (Opsional)</Label>
+                                                    <Input
+                                                        value={row.reference_number}
+                                                        onChange={(e) =>
+                                                            updateSplitRow(row.id, { reference_number: e.target.value })
+                                                        }
+                                                        placeholder="No. referensi QRIS / EDC / Transfer"
+                                                        disabled={isSubmitting}
+                                                        className="h-8 text-xs"
+                                                    />
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -754,7 +936,7 @@ export function PaymentDialog({
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isSubmitting || totalPaid < grandTotal || nonCashTotal > grandTotal}
+                            disabled={isSubmitting || totalPaid < effectiveBillTotal || nonCashTotal > effectiveBillTotal}
                             className="cursor-pointer"
                         >
                             {isSubmitting ? 'Memproses...' : `Bayar ${formatRupiah(finalGrandTotal)}`}

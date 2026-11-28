@@ -17,9 +17,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { Search, X, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Scale } from 'lucide-react'
+import { Search, X, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Scale, Plus } from 'lucide-react'
+import { toast } from 'react-toastify'
 import type { PageProps } from '@/types'
+import { useAuth } from '@/hooks/use-auth'
 import FinancialTransactionController from '@/actions/App/Http/Controllers/FinancialTransactionController'
+import {
+    DialogAddFinancialTransaction,
+    type ActiveFinancialAccountOption,
+    type ManualFinancialCategoryOption,
+} from './component/DialogAddFinancialTransaction'
 
 export interface FinancialTransactionRow {
     id: number
@@ -30,6 +37,9 @@ export interface FinancialTransactionRow {
     amount: number
     balance_before: number
     balance_after: number
+    reference_number: string | null
+    source_code: 'manual' | 'pos' | 'return' | 'payable' | 'shift' | 'system' | string
+    source_label: string
     description: string
     account_name: string
     account_code: string
@@ -63,9 +73,23 @@ type FinancialTransactionPageProps = PageProps<{
         net_flow: number
     }
     accounts: { id: number; code: string; name: string }[]
+    activeAccounts: ActiveFinancialAccountOption[]
     categories: { id: number; code: string; name: string; type: string }[]
+    manualCategories: ManualFinancialCategoryOption[]
     transactionTypes: { value: string; label: string }[]
+    canCreate: boolean
 }>
+
+const sourceBadgeClasses: Record<string, string> = {
+    manual:
+        'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/60 dark:text-violet-300 dark:border-violet-800',
+    pos: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800',
+    return: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
+    payable:
+        'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800',
+    shift: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/60 dark:text-cyan-300 dark:border-cyan-800',
+    system: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700',
+}
 
 const FinancialTransactionPage = () => {
     const {
@@ -73,9 +97,13 @@ const FinancialTransactionPage = () => {
         filters,
         summary,
         accounts = [],
+        activeAccounts = [],
         categories = [],
+        manualCategories = [],
         transactionTypes = [],
+        canCreate = false,
     } = usePage<FinancialTransactionPageProps>().props
+    const { flash } = useAuth()
 
     const [search, setSearch] = useState(filters.search ?? '')
     const [accountId, setAccountId] = useState(filters.financial_account_id ?? 'all')
@@ -84,7 +112,13 @@ const FinancialTransactionPage = () => {
     const [startDate, setStartDate] = useState(filters.start_date ?? '')
     const [endDate, setEndDate] = useState(filters.end_date ?? '')
     const [isLoading, setIsLoading] = useState(false)
+    const [createOpen, setCreateOpen] = useState(false)
     const isFirstRender = React.useRef(true)
+
+    useEffect(() => {
+        if (flash?.success) toast.success(flash.success)
+        if (flash?.error) toast.error(flash.error)
+    }, [flash?.success, flash?.error])
 
     useEffect(() => {
         const removeStart = router.on('start', () => setIsLoading(true))
@@ -169,10 +203,12 @@ const FinancialTransactionPage = () => {
             {
                 accessorKey: 'account_name',
                 header: 'Akun & Kategori',
-                size: 215,
+                size: 205,
                 cell: ({ row }) => (
                     <div className="flex flex-col min-w-0">
-                        <span className="font-medium text-foreground truncate">{row.original.account_name}</span>
+                        <span className="font-medium text-foreground truncate">
+                            {row.original.account_name}
+                        </span>
                         <span className="text-[11px] text-muted-foreground truncate">
                             {row.original.category_name}
                         </span>
@@ -180,9 +216,22 @@ const FinancialTransactionPage = () => {
                 ),
             },
             {
+                accessorKey: 'source_code',
+                header: 'Sumber',
+                size: 110,
+                cell: ({ row }) => (
+                    <Badge
+                        variant="outline"
+                        className={`text-[10px] font-medium ${sourceBadgeClasses[row.original.source_code] ?? sourceBadgeClasses.system}`}
+                    >
+                        {row.original.source_label}
+                    </Badge>
+                ),
+            },
+            {
                 accessorKey: 'type',
                 header: 'Arus',
-                size: 115,
+                size: 110,
                 cell: ({ row }) => {
                     const isIn = row.original.type === 'in'
                     return (
@@ -212,13 +261,16 @@ const FinancialTransactionPage = () => {
                         onSort={handleSort}
                     />
                 ),
-                size: 145,
+                size: 140,
                 cell: ({ row }) => {
                     const isIn = row.original.type === 'in'
                     return (
                         <span
-                            className={`font-mono text-xs font-bold ${isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                                }`}
+                            className={`font-mono text-xs font-bold ${
+                                isIn
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-rose-600 dark:text-rose-400'
+                            }`}
                         >
                             {isIn ? '+' : '-'} {formatRupiah(row.original.amount)}
                         </span>
@@ -228,7 +280,7 @@ const FinancialTransactionPage = () => {
             {
                 accessorKey: 'balance_after',
                 header: 'Saldo Akhir',
-                size: 145,
+                size: 140,
                 cell: ({ row }) => (
                     <span className="font-mono text-xs font-semibold text-foreground">
                         {formatRupiah(row.original.balance_after)}
@@ -238,20 +290,29 @@ const FinancialTransactionPage = () => {
             {
                 accessorKey: 'description',
                 header: 'Keterangan',
-                size: 250,
+                size: 245,
                 cell: ({ row }) => (
                     <div className="flex flex-col min-w-0">
                         <span className="text-xs text-foreground line-clamp-2 whitespace-normal">
                             {row.original.description}
                         </span>
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[10px] text-muted-foreground truncate">
+                            {row.original.reference_number
+                                ? `Ref: ${row.original.reference_number} • `
+                                : ''}
                             Oleh: {row.original.creator_name}
                         </span>
                     </div>
                 ),
             },
         ],
-        [transactions.from, filters.table_sort, filters.table_direction, filters.sort, filters.direction]
+        [
+            transactions.from,
+            filters.table_sort,
+            filters.table_direction,
+            filters.sort,
+            filters.direction,
+        ]
     )
 
     const accountItems = [
@@ -266,11 +327,19 @@ const FinancialTransactionPage = () => {
 
     return (
         <div className="w-full min-w-0 space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold tracking-tight">Buku Arus Kas (Financial Ledger)</h1>
-                <p className="text-sm text-muted-foreground">
-                    Catatan historis seluruh uang masuk dan keluar toko secara terpusat (read-only).
-                </p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Buku Arus Kas (Financial Ledger)</h1>
+                    <p className="text-sm text-muted-foreground">
+                        Catatan historis uang masuk/keluar otomatis maupun pencatatan biaya operasional manual toko.
+                    </p>
+                </div>
+                {canCreate && (
+                    <Button onClick={() => setCreateOpen(true)} className="gap-1.5 cursor-pointer">
+                        <Plus className="h-4 w-4" />
+                        Catat Pemasukan / Pengeluaran
+                    </Button>
+                )}
             </div>
 
             <SummaryStatGrid>
@@ -340,13 +409,12 @@ const FinancialTransactionPage = () => {
                 />
             </SummaryStatGrid>
 
-            {/* Filter Toolbar */}
             <div className="mb-4 space-y-3 rounded-lg border bg-card p-3.5 shadow-xs sm:p-4">
                 <div className="flex flex-wrap items-center gap-2.5">
                     <div className="relative w-full sm:w-64 lg:w-72">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                         <Input
-                            placeholder="Cari no. mutasi / keterangan…"
+                            placeholder="Cari no. mutasi / ref / keterangan…"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="pl-9 pr-8 h-9 text-sm"
@@ -526,6 +594,15 @@ const FinancialTransactionPage = () => {
                 routeUrl={FinancialTransactionController.index}
                 isLoading={isLoading}
             />
+
+            {canCreate && (
+                <DialogAddFinancialTransaction
+                    accounts={activeAccounts}
+                    categories={manualCategories}
+                    open={createOpen}
+                    onOpenChange={setCreateOpen}
+                />
+            )}
         </div>
     )
 }

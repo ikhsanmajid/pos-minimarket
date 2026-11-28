@@ -11,12 +11,12 @@ class AccountPayablePolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]);
+        return $user->hasRoles(UserRoles::Admin);
     }
 
     public function view(User $user, AccountPayable $accountPayable): bool
     {
-        return $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]);
+        return $user->hasRoles(UserRoles::Admin);
     }
 
     public function recordPayment(User $user, AccountPayable $accountPayable): bool

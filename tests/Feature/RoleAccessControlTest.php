@@ -30,7 +30,7 @@ function createRoleUser(UserRoles $role, string $prefix): User
     ]);
 }
 
-test('supervisor has read-only access to finance and cannot record payable or purchase order payments', function () {
+test('supervisor cannot access finance module and cannot record payable or purchase order payments', function () {
     $admin = createRoleUser(UserRoles::Admin, 'admin_fin');
     $supervisor = createRoleUser(UserRoles::Supervisor, 'sup_fin');
 
@@ -73,21 +73,22 @@ test('supervisor has read-only access to finance and cannot record payable or pu
         'status' => PaymentStatus::Unpaid,
     ]);
 
-    // Supervisor can view all finance pages
+    // Supervisor is forbidden from all finance module pages
     $this->actingAs($supervisor)
         ->get(route('pos.finance.accounts.index'))
-        ->assertOk();
+        ->assertForbidden();
+
+    $this->actingAs($supervisor)
+        ->get(route('pos.finance.categories.index'))
+        ->assertForbidden();
 
     $this->actingAs($supervisor)
         ->get(route('pos.finance.transactions.index'))
-        ->assertOk();
+        ->assertForbidden();
 
     $this->actingAs($supervisor)
         ->get(route('pos.finance.payables.index'))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('payables.data.0.can_pay', false)
-        );
+        ->assertForbidden();
 
     $this->actingAs($supervisor)
         ->get(route('pos.purchase-orders.show', $po))

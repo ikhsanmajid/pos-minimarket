@@ -28,6 +28,17 @@ use Illuminate\Validation\ValidationException;
 class FinanceService
 {
     /**
+     * Kode kategori sistem yang hanya boleh diposting otomatis oleh alur POS / PO / Retur.
+     *
+     * @var array<int, string>
+     */
+    public const array AUTO_SYSTEM_CATEGORY_CODES = [
+        'INC-SALES',
+        'EXP-PO',
+        'EXP-REFUND',
+    ];
+
+    /**
      * Membuat atau menyinkronkan data Hutang Dagang (AccountPayable) dari sebuah PO yang sudah disetujui.
      */
     public function syncPayableForPurchaseOrder(
@@ -431,6 +442,289 @@ class FinanceService
         }
 
         $account->delete();
+    }
+
+    /**
+     * Membuat kategori keuangan baru dengan auto-generate kode unik jika tidak diisi.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function createCategory(array $data): FinancialCategory
+    {
+        return DB::transaction(function () use ($data): FinancialCategory {
+            $type = FinancialCategoryType::from((string) $data['type']);
+            $code = ! empty($data['code'])
+                ? strtoupper(trim((string) $data['code']))
+                : $this->generateCategoryCode($type);
+
+            return FinancialCategory::create([
+                'code' => $code,
+                'name' => trim((string) $data['name']),
+                'type' => $type,
+                'is_system' => false,
+                'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true,
+                'description' => isset($data['description']) && trim((string) $data['description']) !== ''
+                    ? trim((string) $data['description'])
+                    : null,
+            ]);
+        });
+    }
+
+    /**
+     * Memperbarui kategori keuangan dengan proteksi kategori sistem dan kategori yang sudah terpakai.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function updateCategory(FinancialCategory $category, array $data): FinancialCategory
+    {
+        return DB::transaction(function () use ($category, $data): FinancialCategory {
+            $newType = FinancialCategoryType::from((string) $data['type']);
+
+            if ($newType !== $category->type) {
+                if ($category->is_system) {
+                    throw ValidationException::withMessages([
+                        'type' => "Tipe kategori sistem {$category->name} tidak dapat diubah.",
+                    ]);
+                }
+
+                if ($category->transactions()->exists()) {
+                    throw ValidationException::withMessages([
+                        'type' => "Tipe kategori {$category->name} tidak dapat diubah karena sudah digunakan pada transaksi keuangan.",
+                    ]);
+                }
+            }
+
+            if ($category->is_system && array_key_exists('is_active', $data) && ! (bool) $data['is_active']) {
+                throw ValidationException::withMessages([
+                    'is_active' => "Kategori sistem {$category->name} tidak dapat dinonaktifkan.",
+                ]);
+            }
+
+            $payload = [
+                'name' => trim((string) $data['name']),
+                'type' => $newType,
+                'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : $category->is_active,
+                'description' => isset($data['description']) && trim((string) $data['description']) !== ''
+                    ? trim((string) $data['description'])
+                    : null,
+            ];
+
+            if (! $category->is_system && ! empty($data['code'])) {
+                $payload['code'] = strtoupper(trim((string) $data['code']));
+            }
+
+            $category->update($payload);
+
+            return $category->refresh();
+        });
+    }
+
+    /**
+     * Menghapus kategori keuangan (ditolak jika kategori sistem atau sudah dipakai di transaksi).
+     */
+    public function deleteCategory(FinancialCategory $category): void
+    {
+        if ($category->is_system) {
+            throw ValidationException::withMessages([
+                'category' => "Kategori bawaan sistem {$category->name} tidak dapat dihapus.",
+            ]);
+        }
+
+        if ($category->transactions()->exists()) {
+            throw ValidationException::withMessages([
+                'category' => "Kategori {$category->name} sudah digunakan pada riwayat transaksi keuangan sehingga tidak dapat dihapus. Nonaktifkan saja kategori ini.",
+            ]);
+        }
+
+        $category->delete();
+    }
+
+    /**
+     * Ringkasan KPI kategori keuangan dalam 1 query agregasi PostgreSQL.
+     *
+     * @return array{
+     *     total_categories: int,
+     *     income_categories: int,
+     *     expense_categories: int,
+     *     active_categories: int,
+     *     system_categories: int
+     * }
+     */
+    public function getCategorySummary(): array
+    {
+        $row = FinancialCategory::query()
+            ->selectRaw(
+                'COUNT(*) as total_categories,
+                COUNT(*) FILTER (WHERE type = ?) as income_categories,
+                COUNT(*) FILTER (WHERE type = ?) as expense_categories,
+                COUNT(*) FILTER (WHERE is_active = true) as active_categories,
+                COUNT(*) FILTER (WHERE is_system = true) as system_categories',
+                [
+                    FinancialCategoryType::Income->value,
+                    FinancialCategoryType::Expense->value,
+                ]
+            )
+            ->first();
+
+        return [
+            'total_categories' => (int) ($row->total_categories ?? 0),
+            'income_categories' => (int) ($row->income_categories ?? 0),
+            'expense_categories' => (int) ($row->expense_categories ?? 0),
+            'active_categories' => (int) ($row->active_categories ?? 0),
+            'system_categories' => (int) ($row->system_categories ?? 0),
+        ];
+    }
+
+    /**
+     * Mencatat transaksi keuangan operasional manual (Pemasukan Lainnya / Pengeluaran Operasional)
+     * secara atomik dengan pessimistic locking pada FinancialAccount.
+     *
+     * @param  array{
+     *     financial_account_id: int|string,
+     *     financial_category_id: int|string,
+     *     type: string,
+     *     amount: float|int|string,
+     *     transaction_date: string,
+     *     reference_number?: string|null,
+     *     description: string
+     * }  $data
+     */
+    public function recordManualTransaction(array $data, User $actor): FinancialTransaction
+    {
+        return DB::transaction(function () use ($data, $actor): FinancialTransaction {
+            $type = FinancialTransactionType::from((string) $data['type']);
+            $amount = round((float) $data['amount'], 2);
+
+            if ($amount <= 0) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Nominal transaksi harus lebih besar dari 0.',
+                ]);
+            }
+
+            /** @var FinancialAccount $account */
+            $account = FinancialAccount::query()
+                ->where('id', (int) $data['financial_account_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $account->is_active) {
+                throw ValidationException::withMessages([
+                    'financial_account_id' => "Akun keuangan {$account->name} sedang nonaktif.",
+                ]);
+            }
+
+            /** @var FinancialCategory $category */
+            $category = FinancialCategory::query()
+                ->where('id', (int) $data['financial_category_id'])
+                ->firstOrFail();
+
+            if (! $category->is_active) {
+                throw ValidationException::withMessages([
+                    'financial_category_id' => "Kategori keuangan {$category->name} sedang nonaktif.",
+                ]);
+            }
+
+            if (in_array($category->code, self::AUTO_SYSTEM_CATEGORY_CODES, true)) {
+                throw ValidationException::withMessages([
+                    'financial_category_id' => "Kategori {$category->name} ({$category->code}) khusus untuk transaksi otomatis sistem dan tidak dapat digunakan untuk pencatatan manual.",
+                ]);
+            }
+
+            $expectedCategoryType = $type === FinancialTransactionType::In
+                ? FinancialCategoryType::Income
+                : FinancialCategoryType::Expense;
+
+            if ($category->type !== $expectedCategoryType) {
+                throw ValidationException::withMessages([
+                    'financial_category_id' => sprintf(
+                        'Kategori %s bertipe %s sehingga tidak cocok untuk transaksi %s.',
+                        $category->name,
+                        $category->type->label(),
+                        $type->label()
+                    ),
+                ]);
+            }
+
+            $balanceBefore = round((float) $account->current_balance, 2);
+
+            if ($type === FinancialTransactionType::Out && $balanceBefore < $amount) {
+                throw ValidationException::withMessages([
+                    'amount' => sprintf(
+                        'Saldo akun %s tidak mencukupi (Saldo tersedia: Rp %s).',
+                        $account->name,
+                        number_format($balanceBefore, 0, ',', '.')
+                    ),
+                ]);
+            }
+
+            $balanceAfter = $type === FinancialTransactionType::In
+                ? round($balanceBefore + $amount, 2)
+                : round($balanceBefore - $amount, 2);
+
+            $account->current_balance = $balanceAfter;
+            $account->save();
+
+            $referenceNumber = isset($data['reference_number']) && trim((string) $data['reference_number']) !== ''
+                ? trim((string) $data['reference_number'])
+                : null;
+            $description = trim((string) $data['description']);
+
+            $transaction = FinancialTransaction::create([
+                'financial_account_id' => $account->id,
+                'financial_category_id' => $category->id,
+                'type' => $type,
+                'amount' => $amount,
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
+                'transaction_date' => $data['transaction_date'],
+                'reference_type' => null,
+                'reference_id' => null,
+                'reference_number' => $referenceNumber,
+                'description' => $description,
+                'created_by' => $actor->id,
+            ]);
+
+            activity(ActivityLogCategory::Finance->value)
+                ->event('created')
+                ->performedOn($transaction)
+                ->causedBy($actor)
+                ->withProperties([
+                    'transaction_number' => $transaction->transaction_number,
+                    'type' => $type->value,
+                    'financial_account' => $account->name,
+                    'financial_category' => $category->name,
+                    'amount' => $amount,
+                    'old_balance' => $balanceBefore,
+                    'new_balance' => $balanceAfter,
+                    'transaction_date' => (string) $data['transaction_date'],
+                    'reference_number' => $referenceNumber,
+                    'description' => $description,
+                ])
+                ->log(sprintf(
+                    'Transaksi Keuangan Manual %s (%s - %s) sebesar Rp %s pada akun %s berhasil dicatat.',
+                    $transaction->transaction_number,
+                    $type->label(),
+                    $category->name,
+                    number_format($amount, 0, ',', '.'),
+                    $account->name
+                ));
+
+            return $transaction->load(['financialAccount', 'financialCategory', 'creator']);
+        });
+    }
+
+    private function generateCategoryCode(FinancialCategoryType $type): string
+    {
+        $prefix = $type === FinancialCategoryType::Income ? 'INC' : 'EXP';
+        $nextNumber = (FinancialCategory::withTrashed()->max('id') ?? 0) + 1;
+
+        do {
+            $candidate = sprintf('%s-%03d', $prefix, $nextNumber);
+            $exists = FinancialCategory::withTrashed()->where('code', $candidate)->exists();
+            $nextNumber++;
+        } while ($exists);
+
+        return $candidate;
     }
 
     /**

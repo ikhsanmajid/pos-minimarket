@@ -10,9 +10,11 @@ import {
     Package,
     ArrowLeftRight,
     History,
+    Tag,
 } from 'lucide-react'
-import type { PageProps } from '@/types'
+import type { PageProps, ProductPriceTierRow } from '@/types'
 import { DetailTabProduct } from './component/DetailTabProduct'
+import { ProductPriceTiersTab } from './component/ProductPriceTiersTab'
 import {
     StokMutasiProduct,
     type PaginatedStockMovements,
@@ -27,6 +29,7 @@ export interface DetailProductData extends Product {
     category_name?: string
     created_at?: string
     updated_at?: string
+    price_tiers?: ProductPriceTierRow[]
 }
 
 type DetailProductProps = PageProps<{
@@ -34,6 +37,7 @@ type DetailProductProps = PageProps<{
     stockMovements?: PaginatedStockMovements | null
     activities?: PaginatedProductActivities
     canViewStock?: boolean
+    canManagePriceTiers?: boolean
 }>
 
 const DetailProduct = () => {
@@ -42,6 +46,7 @@ const DetailProduct = () => {
         stockMovements,
         activities,
         canViewStock = true,
+        canManagePriceTiers = false,
     } = usePage<DetailProductProps>().props
 
     const queryTab =
@@ -51,9 +56,11 @@ const DetailProduct = () => {
     const [activeTab, setActiveTab] = useState(
         queryTab === 'history'
             ? 'history'
-            : queryTab === 'mutation' && canViewStock
-              ? 'mutation'
-              : 'detail'
+            : queryTab === 'tiers'
+                ? 'tiers'
+                : queryTab === 'mutation' && canViewStock
+                    ? 'mutation'
+                    : 'detail'
     )
     const [isLoadingActivities, setIsLoadingActivities] = useState(false)
     const [isLoadingMovements, setIsLoadingMovements] = useState(false)
@@ -122,6 +129,15 @@ const DetailProduct = () => {
                         <Package className="h-4 w-4" />
                         Detail Produk
                     </TabsTrigger>
+                    <TabsTrigger value="tiers" className="gap-2 pb-2.5">
+                        <Tag className="h-4 w-4" />
+                        Harga Grosir
+                        {(product.price_tiers?.length ?? 0) > 0 && (
+                            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+                                {product.price_tiers?.length}
+                            </Badge>
+                        )}
+                    </TabsTrigger>
                     {canViewStock && (
                         <TabsTrigger value="mutation" className="gap-2 pb-2.5">
                             <ArrowLeftRight className="h-4 w-4" />
@@ -146,6 +162,10 @@ const DetailProduct = () => {
 
                 <TabsContent value="detail" className="m-0 focus-visible:outline-none">
                     <DetailTabProduct product={product} canViewStock={canViewStock} />
+                </TabsContent>
+
+                <TabsContent value="tiers" className="m-0 focus-visible:outline-none">
+                    <ProductPriceTiersTab product={product} canManage={canManagePriceTiers} />
                 </TabsContent>
 
                 {canViewStock && (

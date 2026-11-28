@@ -13,7 +13,7 @@ use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
 #[Table('categories')]
-#[Fillable(['code', 'name', 'slug', 'description', 'is_active'])]
+#[Fillable(['code', 'name', 'slug', 'description', 'is_active', 'is_promo_excluded'])]
 class Category extends Model
 {
     use LogsActivity, SoftDeletes;
@@ -22,6 +22,7 @@ class Category extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_promo_excluded' => 'boolean',
         ];
     }
 
@@ -36,9 +37,33 @@ class Category extends Model
                 'restored' => "Kategori {$this->name} dipulihkan.",
                 default => "Kategori {$this->name} ({$eventName}).",
             })
-            ->logOnly(['code', 'name', 'slug', 'description', 'is_active'])
+            ->logOnly(['code', 'name', 'slug', 'description', 'is_active', 'is_promo_excluded'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
+    }
+
+    public function isExcludedFromPromotions(): bool
+    {
+        if ($this->is_promo_excluded) {
+            return true;
+        }
+
+        /** @var array<int, string> $keywords */
+        $keywords = config('pos_promotions.excluded_category_keywords', []);
+        $haystack = strtolower(trim(($this->name ?? '').' '.($this->slug ?? '')));
+
+        foreach ($keywords as $keyword) {
+            $needle = strtolower(trim($keyword));
+            if ($needle === '') {
+                continue;
+            }
+
+            if (preg_match('/(^|[^a-z0-9])'.preg_quote($needle, '/').'([^a-z0-9]|$)/', $haystack) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected static function booted(): void
