@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { router } from '@inertiajs/react'
 import {
     Dialog,
@@ -68,6 +68,17 @@ export function CloseShiftDialog({
     const [processing, setProcessing] = useState(false)
     const [errors, setErrors] = useState<Record<string, string>>({})
 
+    useEffect(() => {
+        if (open) {
+            setCounts(Object.fromEntries(denominations.map((d) => [d, 0])))
+            setClosingNotes('')
+            setSupervisorPin('')
+            setCashAccountId('auto')
+            setNonCashAccountId('auto')
+            setErrors({})
+        }
+    }, [open, shiftId, denominations])
+
     const cashAccounts = useMemo(
         () => financialAccounts.filter((a) => a.type === 'cash'),
         [financialAccounts]
@@ -75,6 +86,27 @@ export function CloseShiftDialog({
     const nonCashAccounts = useMemo(
         () => financialAccounts.filter((a) => a.type === 'bank' || a.type === 'ewallet'),
         [financialAccounts]
+    )
+
+    const cashAccountItems = useMemo(
+        () => [
+            { value: 'auto', label: 'Otomatis (Brankas Default)' },
+            ...cashAccounts.map((acc) => ({
+                value: String(acc.id),
+                label: `[${acc.code}] ${acc.name}`,
+            })),
+        ],
+        [cashAccounts]
+    )
+    const nonCashAccountItems = useMemo(
+        () => [
+            { value: 'auto', label: 'Otomatis (Bank Utama)' },
+            ...nonCashAccounts.map((acc) => ({
+                value: String(acc.id),
+                label: `[${acc.code}] ${acc.name}`,
+            })),
+        ],
+        [nonCashAccounts]
     )
 
     const breakdown: DenominationRow[] = useMemo(
@@ -148,7 +180,7 @@ export function CloseShiftDialog({
 
     return (
         <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
-            <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+            <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
                 <DialogHeader className="p-6 pb-4 border-b shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                         <Lock className="h-5 w-5 text-primary" />
@@ -194,42 +226,49 @@ export function CloseShiftDialog({
                             {breakdown.map((row) => (
                                 <div
                                     key={row.denomination}
-                                    className="flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2"
+                                    className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5"
                                 >
-                                    <div className="min-w-[92px]">
-                                        <p className="font-mono text-xs font-semibold text-foreground">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-mono text-xs font-semibold text-foreground truncate">
                                             {formatRupiah(row.denomination)}
                                         </p>
-                                        <p className="font-mono text-[11px] text-muted-foreground">
+                                        <p className="font-mono text-[11px] text-muted-foreground truncate">
                                             = {formatRupiah(row.subtotal)}
                                         </p>
                                     </div>
 
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-1.5 shrink-0">
                                         <Button
                                             type="button"
                                             variant="outline"
                                             size="icon"
-                                            className="h-7 w-7 shrink-0"
+                                            className="h-8 w-8 shrink-0"
+                                            disabled={row.qty <= 0}
+                                            aria-label={`Kurangi pecahan ${formatRupiah(row.denomination)}`}
                                             onClick={() => updateCount(row.denomination, row.qty - 1)}
                                         >
                                             <Minus className="h-3.5 w-3.5" />
                                         </Button>
                                         <Input
-                                            type="number"
-                                            min="0"
-                                            value={row.qty === 0 ? '' : row.qty}
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            value={row.qty === 0 ? '' : String(row.qty)}
                                             placeholder="0"
-                                            onChange={(e) =>
-                                                updateCount(row.denomination, parseInt(e.target.value || '0', 10))
-                                            }
-                                            className="h-7 w-16 text-center font-mono text-xs"
+                                            aria-label={`Jumlah pecahan ${formatRupiah(row.denomination)}`}
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => {
+                                                const digits = e.target.value.replace(/\D/g, '')
+                                                updateCount(row.denomination, digits ? parseInt(digits, 10) : 0)
+                                            }}
+                                            className="h-8 w-16 px-1.5 text-center font-mono text-xs tabular-nums"
                                         />
                                         <Button
                                             type="button"
                                             variant="outline"
                                             size="icon"
-                                            className="h-7 w-7 shrink-0"
+                                            className="h-8 w-8 shrink-0"
+                                            aria-label={`Tambah pecahan ${formatRupiah(row.denomination)}`}
                                             onClick={() => updateCount(row.denomination, row.qty + 1)}
                                         >
                                             <Plus className="h-3.5 w-3.5" />
@@ -266,15 +305,20 @@ export function CloseShiftDialog({
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="space-y-1.5">
                                 <Label className="text-xs">Akun Setoran Tunai (Default: Brankas)</Label>
-                                <Select value={cashAccountId} onValueChange={(v) => setCashAccountId(v || 'auto')}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Otomatis (Brankas Default)" />
+                                <Select
+                                    items={cashAccountItems}
+                                    value={cashAccountId}
+                                    onValueChange={(v) => setCashAccountId(v || 'auto')}
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Otomatis (Brankas Default)">
+                                            {(val) => cashAccountItems.find((item) => item.value === val)?.label}
+                                        </SelectValue>
                                     </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="auto">Otomatis (Brankas Default)</SelectItem>
-                                        {cashAccounts.map((acc) => (
-                                            <SelectItem key={acc.id} value={String(acc.id)}>
-                                                [{acc.code}] {acc.name}
+                                    <SelectContent className="w-auto min-w-(--anchor-width)">
+                                        {cashAccountItems.map((item) => (
+                                            <SelectItem key={item.value} value={item.value}>
+                                                {item.label}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -282,15 +326,20 @@ export function CloseShiftDialog({
                             </div>
                             <div className="space-y-1.5">
                                 <Label className="text-xs">Akun Setoran Non-Tunai (Default: Bank/E-Wallet)</Label>
-                                <Select value={nonCashAccountId} onValueChange={(v) => setNonCashAccountId(v || 'auto')}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Otomatis (Bank Utama)" />
+                                <Select
+                                    items={nonCashAccountItems}
+                                    value={nonCashAccountId}
+                                    onValueChange={(v) => setNonCashAccountId(v || 'auto')}
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Otomatis (Bank Utama)">
+                                            {(val) => nonCashAccountItems.find((item) => item.value === val)?.label}
+                                        </SelectValue>
                                     </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="auto">Otomatis (Bank Utama)</SelectItem>
-                                        {nonCashAccounts.map((acc) => (
-                                            <SelectItem key={acc.id} value={String(acc.id)}>
-                                                [{acc.code}] {acc.name}
+                                    <SelectContent className="w-auto min-w-(--anchor-width)">
+                                        {nonCashAccountItems.map((item) => (
+                                            <SelectItem key={item.value} value={item.value}>
+                                                {item.label}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -311,9 +360,8 @@ export function CloseShiftDialog({
                             value={closingNotes}
                             onChange={(e) => setClosingNotes(e.target.value)}
                             placeholder="Catatan serah terima atau penjelasan jika terdapat selisih kas..."
-                            className={`w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                                notesRequiredByError ? 'border-destructive ring-1 ring-destructive' : 'border-input'
-                            }`}
+                            className={`w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${notesRequiredByError ? 'border-destructive ring-1 ring-destructive' : 'border-input'
+                                }`}
                         />
                         {errors.closing_notes && (
                             <p className="text-xs font-medium text-destructive">{errors.closing_notes}</p>
@@ -323,11 +371,10 @@ export function CloseShiftDialog({
                     {/* PIN Otorisasi Supervisor (Opsional, atau wajib jika backend mendeteksi selisih > toleransi) */}
                     {!policyRules.is_privileged && (
                         <div
-                            className={`rounded-lg border p-4 space-y-2 ${
-                                pinRequiredByError
+                            className={`rounded-lg border p-4 space-y-2 ${pinRequiredByError
                                     ? 'border-destructive bg-destructive/10'
                                     : 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20'
-                            }`}
+                                }`}
                         >
                             <Label htmlFor="close-supervisor-pin" className="flex items-center gap-1.5">
                                 <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />

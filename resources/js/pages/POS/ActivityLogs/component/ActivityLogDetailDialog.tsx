@@ -126,22 +126,22 @@ export default function ActivityLogDetailDialog({
                                                     </div>
                                                 </td>
                                                 <td className="p-3 font-mono text-muted-foreground align-top">
-                                                    {key === 'image' ? (
+                                                    {key === 'image' || key === 'store_logo' ? (
                                                         <ActivityLogImagePreview
                                                             key={`old-${String(oldVal ?? '')}`}
                                                             val={oldVal}
-                                                            label="Foto Sebelumnya"
+                                                            label={key === 'store_logo' ? 'Logo Sebelumnya' : 'Foto Sebelumnya'}
                                                         />
                                                     ) : (
                                                         formatDiffValue(key, oldVal, resolvedCategoryMap)
                                                     )}
                                                 </td>
                                                 <td className="p-3 font-mono font-medium text-foreground align-top">
-                                                    {key === 'image' ? (
+                                                    {key === 'image' || key === 'store_logo' ? (
                                                         <ActivityLogImagePreview
                                                             key={`new-${String(newVal ?? '')}`}
                                                             val={newVal}
-                                                            label="Foto Sesudahnya"
+                                                            label={key === 'store_logo' ? 'Logo Sesudahnya' : 'Foto Sesudahnya'}
                                                             isNew
                                                         />
                                                     ) : isChanged ? (

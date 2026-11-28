@@ -8,7 +8,7 @@ import {
     SidebarContent,
     SidebarFooter,
 } from "@/components/ui/sidebar"
-import { Users, House, Package, ShoppingCart, BarChart3, Truck, Wallet } from "lucide-react"
+import { Users, House, Package, ShoppingCart, BarChart3, Truck, Wallet, Settings } from "lucide-react"
 import ThemeToggle from "./themetoggle"
 import { useAuth } from "@/hooks/use-auth"
 import { usePage } from "@inertiajs/react"
@@ -23,6 +23,7 @@ import financePayables from "@/routes/pos/finance/payables"
 import financeTransactions from "@/routes/pos/finance/transactions"
 import shifts from "@/routes/pos/shifts"
 import cashier from "@/routes/pos/cashier"
+import settings from "@/routes/pos/settings"
 
 interface NavSubItem {
     title: string
@@ -94,11 +95,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     title: "Kategori",
                     url: categories.index.url(),
                     roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
-                },
-                {
-                    title: "Tambah Produk",
-                    url: products.create.url(),
-                    roles: ['admin', 'warehouse'],
                 },
             ],
         },
@@ -187,6 +183,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     roles: ['admin', 'supervisor', 'warehouse'],
                 },
             ],
+        },
+        {
+            title: "Pengaturan Toko",
+            url: settings.edit.url(),
+            icon: <Settings />,
+            isActive: url.startsWith('/pos/settings'),
+            roles: ['admin'],
+            items: [],
         },
     ]
 

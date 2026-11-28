@@ -11,6 +11,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseOrderController;
+use App\Http\Controllers\StoreSettingController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -119,6 +120,12 @@ Route::middleware('auth')->group(function () {
 
         // Log Aktivitas
         Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+
+        // Pengaturan Toko
+        Route::prefix('/settings')->name('settings.')->group(function () {
+            Route::get('/', [StoreSettingController::class, 'edit'])->name('edit');
+            Route::match(['post', 'put'], '/', [StoreSettingController::class, 'update'])->name('update');
+        });
     });
 });
 

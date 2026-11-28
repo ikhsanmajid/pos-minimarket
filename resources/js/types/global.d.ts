@@ -1,5 +1,6 @@
 import '@inertiajs/core';
 import type { Auth } from '@/types/auth';
+import type { StoreSettingsData } from '@/types/store-setting';
 
 declare global {
     var route: typeof routeFn;
@@ -14,6 +15,7 @@ declare module 'react' {
 declare module '@inertiajs/core' {
     export interface PageProps {
         auth: Auth;
+        storeSettings: StoreSettingsData;
         [key: string]: unknown;
     }
 
@@ -21,6 +23,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            storeSettings: StoreSettingsData;
             sidebarOpen: boolean;
             [key: string]: unknown;
         };

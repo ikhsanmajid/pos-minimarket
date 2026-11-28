@@ -116,6 +116,15 @@ const fieldLabels: Record<string, string> = {
     cash_deposited: 'Setoran Tunai ke Kas/Brankas',
     non_cash_deposited: 'Setoran Non-Tunai ke Bank',
     financial_transaction_number: 'No. Transaksi Keuangan',
+    store_name: 'Nama Toko',
+    store_address: 'Alamat Toko',
+    store_phone: 'Telepon Toko',
+    store_logo: 'Logo Toko',
+    receipt_header: 'Header Struk',
+    receipt_footer: 'Footer Struk',
+    default_tax_rate: 'Tarif PPN Default (%)',
+    rounding_mode: 'Mode Pembulatan Kasir',
+    shift_variance_tolerance: 'Toleransi Selisih Kas Shift',
 }
 
 const CURRENCY_FIELDS = new Set([
@@ -148,6 +157,7 @@ const CURRENCY_FIELDS = new Set([
     'total_cash_drop',
     'cash_deposited',
     'non_cash_deposited',
+    'shift_variance_tolerance',
 ])
 
 const STATUS_LABELS: Record<string, string> = {
@@ -171,6 +181,11 @@ const STATUS_LABELS: Record<string, string> = {
     cash_in: 'Kas Masuk (Cash In)',
     cash_out: 'Kas Keluar (Cash Out)',
     cash_drop: 'Setor Brankas (Cash Drop)',
+    none: 'Tanpa Pembulatan',
+    nearest_100: 'Bulatkan ke Rp 100 Terdekat',
+    down_100: 'Bulatkan ke Bawah (Rp 100)',
+    up_100: 'Bulatkan ke Atas (Rp 100)',
+    nearest_500: 'Bulatkan ke Rp 500 Terdekat',
 }
 
 export const isPlainObject = (val: unknown): val is Record<string, unknown> =>
@@ -214,7 +229,7 @@ export const formatDiffValue = (
         return catName ? `${catName} (#${lookupKey})` : `Kategori #${lookupKey}`
     }
 
-    if (key === 'image') {
+    if (key === 'image' || key === 'store_logo') {
         const filename = String(val).split('/').pop()
         return val ? `File: ${filename}` : 'Tidak ada foto'
     }
