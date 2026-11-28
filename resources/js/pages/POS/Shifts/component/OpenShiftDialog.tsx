@@ -30,7 +30,7 @@ export interface CashRegisterOption {
 interface OpenShiftDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    cashRegisters: CashRegisterOption[]
+    cashRegisters?: CashRegisterOption[]
     canManageRegisters?: boolean
 }
 
@@ -39,7 +39,7 @@ const CASH_PRESETS = [200000, 300000, 500000, 1000000]
 export function OpenShiftDialog({
     open,
     onOpenChange,
-    cashRegisters,
+    cashRegisters = [],
     canManageRegisters = false,
 }: OpenShiftDialogProps) {
     const firstAvailable = useMemo(

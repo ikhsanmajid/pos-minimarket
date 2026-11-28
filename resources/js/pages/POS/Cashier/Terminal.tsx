@@ -29,6 +29,7 @@ import {
     Clock,
     CreditCard,
     FolderClock,
+    Heart,
     Minus,
     PauseCircle,
     Plus,
@@ -44,6 +45,7 @@ import type {
     PageProps,
     PosCartItem,
     PosCustomerOption,
+    PosDonationProduct,
     PosFinancialAccount,
     PosHeldTransaction,
     PosLookupProduct,
@@ -52,7 +54,11 @@ import type {
 } from '@/types'
 import { CheckoutSuccessDialog } from './component/CheckoutSuccessDialog'
 import { HeldBillsDialog } from './component/HeldBillsDialog'
-import { PaymentDialog, type PaymentEntryPayload } from './component/PaymentDialog'
+import {
+    PaymentDialog,
+    type PaymentDonationPayload,
+    type PaymentEntryPayload,
+} from './component/PaymentDialog'
 import { ProductSearchDialog } from './component/ProductSearchDialog'
 import { calculateCartSummary, formatRupiah, getXsrfToken } from './component/posUtils'
 
@@ -68,6 +74,7 @@ type TerminalPageProps = PageProps<{
     financialAccounts: PosFinancialAccount[]
     paymentMethods: PosPaymentMethodOption[]
     customers: PosCustomerOption[]
+    donationProducts?: PosDonationProduct[]
     heldTransactions: PosHeldTransaction[]
     policyRules: {
         manual_discount_pin_threshold: number
@@ -81,6 +88,7 @@ const Terminal = () => {
         financialAccounts,
         paymentMethods,
         customers,
+        donationProducts = [],
         heldTransactions: initialHeld,
         policyRules,
         storeSettings,
@@ -103,6 +111,7 @@ const Terminal = () => {
     const [pinDialogOpen, setPinDialogOpen] = useState(false)
     const [pinError, setPinError] = useState<string | null>(null)
     const [pendingPayments, setPendingPayments] = useState<PaymentEntryPayload[] | null>(null)
+    const [pendingDonation, setPendingDonation] = useState<PaymentDonationPayload | null>(null)
 
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [paymentError, setPaymentError] = useState<string | null>(null)
@@ -174,7 +183,7 @@ const Terminal = () => {
                     .filter((l) => l.product.id === product.id)
                     .reduce((s, l) => s + l.qty * l.conversion_factor, 0)
 
-                if (usedBaseQty + conversionFactor > product.stock) {
+                if (!product.is_donation && usedBaseQty + conversionFactor > product.stock) {
                     toast.error(
                         `Stok ${product.name} tidak mencukupi (tersedia ${product.stock} ${product.base_unit}).`
                     )
@@ -252,7 +261,7 @@ const Terminal = () => {
         if (!target) return
 
         const otherBaseQty = getUsedBaseQtyForProduct(target.product.id, lineId)
-        if (otherBaseQty + newQty * target.conversion_factor > target.product.stock) {
+        if (!target.product.is_donation && otherBaseQty + newQty * target.conversion_factor > target.product.stock) {
             toast.error(
                 `Stok ${target.product.name} tidak mencukupi (tersedia ${target.product.stock} ${target.product.base_unit}).`
             )
@@ -315,9 +324,14 @@ const Terminal = () => {
         setPaymentError(null)
         setPinError(null)
         setPendingPayments(null)
+        setPendingDonation(null)
     }, [])
 
-    const executeCheckout = async (payments: PaymentEntryPayload[], supervisorPin?: string) => {
+    const executeCheckout = async (
+        payments: PaymentEntryPayload[],
+        donation?: PaymentDonationPayload | null,
+        supervisorPin?: string
+    ) => {
         setIsSubmitting(true)
         setPaymentError(null)
         setPinError(null)
@@ -334,6 +348,8 @@ const Terminal = () => {
                     customer_id: selectedCustomerId !== 'guest' ? Number(selectedCustomerId) : null,
                     held_transaction_id: activeHeldId,
                     discount_amount: summary.transactionDiscount,
+                    donation_product_id: donation?.donation_product_id ?? null,
+                    donation_amount: donation?.donation_amount ?? 0,
                     supervisor_pin: supervisorPin ?? null,
                     items: cart.map((l) => ({
                         product_id: l.product.id,
@@ -354,6 +370,8 @@ const Terminal = () => {
             if (!res.ok) {
                 const firstError =
                     data.errors?.supervisor_pin?.[0] ??
+                    data.errors?.donation_amount?.[0] ??
+                    data.errors?.donation_product_id?.[0] ??
                     data.errors?.payments?.[0] ??
                     data.errors?.items?.[0] ??
                     Object.values(data.errors ?? {})[0]?.[0] ??
@@ -385,23 +403,27 @@ const Terminal = () => {
         }
     }
 
-    const handlePaymentSubmit = (payments: PaymentEntryPayload[]) => {
+    const handlePaymentSubmit = (
+        payments: PaymentEntryPayload[],
+        donation?: PaymentDonationPayload | null
+    ) => {
         const needsPin =
             summary.totalDiscount > policyRules.manual_discount_pin_threshold && !policyRules.is_privileged
 
         if (needsPin) {
             setPendingPayments(payments)
+            setPendingDonation(donation ?? null)
             setPinError(null)
             setPinDialogOpen(true)
             return
         }
 
-        void executeCheckout(payments)
+        void executeCheckout(payments, donation)
     }
 
     const handlePinConfirm = (pin: string) => {
         if (!pendingPayments) return
-        void executeCheckout(pendingPayments, pin)
+        void executeCheckout(pendingPayments, pendingDonation, pin)
     }
 
     const handleHoldBill = async (e: React.FormEvent) => {
@@ -700,9 +722,27 @@ const Terminal = () => {
                                                 return (
                                                     <tr key={line.line_id} className="hover:bg-muted/20">
                                                         <td className="px-3 py-2.5 align-middle">
-                                                            <p className="font-medium text-foreground truncate" title={line.product.name}>
-                                                                {line.product.name}
-                                                            </p>
+                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                <p className="font-medium text-foreground truncate" title={line.product.name}>
+                                                                    {line.product.name}
+                                                                </p>
+                                                                {line.product.is_donation ? (
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="h-4 px-1.5 py-0 text-[10px] gap-0.5 shrink-0 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/60 dark:text-pink-300"
+                                                                    >
+                                                                        <Heart className="h-2.5 w-2.5" />
+                                                                        Donasi
+                                                                    </Badge>
+                                                                ) : line.product.is_tax_exempt ? (
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="h-4 px-1.5 py-0 text-[10px] shrink-0 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                                                    >
+                                                                        Bebas PPN
+                                                                    </Badge>
+                                                                ) : null}
+                                                            </div>
                                                             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] text-muted-foreground">
                                                                 <span className="inline-flex items-center gap-1 text-foreground/80">
                                                                     <Barcode className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -887,12 +927,26 @@ const Terminal = () => {
                                         </div>
                                     )}
                                     {(storeSettings?.default_tax_rate ?? 0) > 0 && (
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">
-                                                PPN ({storeSettings.default_tax_rate}%)
-                                            </span>
-                                            <span className="font-mono">{formatRupiah(summary.taxAmount)}</span>
-                                        </div>
+                                        <>
+                                            {summary.hasTaxExemptItems && (
+                                                <>
+                                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                                        <span>DPP (Kena PPN)</span>
+                                                        <span className="font-mono">{formatRupiah(summary.taxableAmount)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400">
+                                                        <span>Subtotal Bebas PPN</span>
+                                                        <span className="font-mono">{formatRupiah(summary.taxExemptAmount)}</span>
+                                                    </div>
+                                                </>
+                                            )}
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">
+                                                    PPN ({storeSettings.default_tax_rate}%)
+                                                </span>
+                                                <span className="font-mono">{formatRupiah(summary.taxAmount)}</span>
+                                            </div>
+                                        </>
                                     )}
                                     {summary.roundingAmount !== 0 && (
                                         <div className="flex justify-between">
@@ -993,6 +1047,7 @@ const Terminal = () => {
                 grandTotal={summary.grandTotal}
                 paymentMethods={paymentMethods}
                 financialAccounts={financialAccounts}
+                donationProducts={donationProducts}
                 isSubmitting={isSubmitting}
                 errorMessage={paymentError}
                 onSubmitPayment={handlePaymentSubmit}

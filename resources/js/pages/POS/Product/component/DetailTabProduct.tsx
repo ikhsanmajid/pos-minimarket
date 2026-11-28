@@ -12,6 +12,8 @@ import {
     TrendingUp,
     Boxes,
     Star,
+    Percent,
+    Heart,
 } from 'lucide-react'
 import type { DetailProductData } from '../DetailProduct'
 
@@ -39,9 +41,10 @@ function DetailItem({
 
 interface DetailTabProductProps {
     product: DetailProductData
+    canViewStock?: boolean
 }
 
-export function DetailTabProduct({ product }: DetailTabProductProps) {
+export function DetailTabProduct({ product, canViewStock = true }: DetailTabProductProps) {
     const formatCurrency = (val: number | string) => {
         return new Intl.NumberFormat('id-ID', {
             style: 'currency',
@@ -58,10 +61,12 @@ export function DetailTabProduct({ product }: DetailTabProductProps) {
     const units = product.units ?? []
 
     const getStockStatus = () => {
-        if (product.stock === 0) {
+        const stockVal = product.stock ?? 0
+        const minStockVal = product.min_stock ?? 0
+        if (stockVal === 0) {
             return <Badge className="bg-red-300 text-red-700 dark:bg-red-950 dark:text-red-300">Habis!</Badge>
         }
-        if (product.stock <= product.min_stock) {
+        if (stockVal <= minStockVal) {
             return <Badge className="bg-orange-300 text-orange-700 dark:bg-orange-950 dark:text-orange-300">Hampir Habis</Badge>
         }
         return <Badge className="bg-green-300 text-green-700 dark:bg-green-950 dark:text-green-300">Aman</Badge>
@@ -100,6 +105,25 @@ export function DetailTabProduct({ product }: DetailTabProductProps) {
                                     <Badge variant="success">Aktif (Dijual)</Badge>
                                 ) : (
                                     <Badge variant="secondary">Nonaktif</Badge>
+                                )}
+                                {product.is_donation && (
+                                    <Badge
+                                        variant="outline"
+                                        className="gap-1 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/60 dark:text-pink-300"
+                                    >
+                                        <Heart className="h-3 w-3" />
+                                        Produk Donasi
+                                    </Badge>
+                                )}
+                                {product.is_tax_exempt ? (
+                                    <Badge
+                                        variant="outline"
+                                        className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                    >
+                                        Bebas PPN
+                                    </Badge>
+                                ) : (
+                                    <Badge variant="secondary">Kena PPN</Badge>
                                 )}
                             </div>
                         </div>
@@ -170,40 +194,63 @@ export function DetailTabProduct({ product }: DetailTabProductProps) {
                                     )
                                 }
                             />
+
+                            <Separator />
+
+                            <DetailItem
+                                icon={Percent}
+                                label="Skema PPN"
+                                value={
+                                    product.is_tax_exempt ? (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                        >
+                                            Bebas PPN (0%)
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="secondary">Kena PPN (Tarif Default Toko)</Badge>
+                                    )
+                                }
+                            />
                         </div>
 
                         {/* Kolom Kanan: Inventaris & Waktu */}
                         <div className="space-y-4">
                             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                                Inventaris & Waktu
+                                {canViewStock ? 'Inventaris & Waktu' : 'Informasi Waktu'}
                             </h3>
 
-                            <DetailItem
-                                icon={Layers}
-                                label="Stok Saat Ini"
-                                value={
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-base font-bold font-mono">
-                                            {product.stock} {baseUnit}
-                                        </span>
-                                        {getStockStatus()}
-                                    </div>
-                                }
-                            />
+                            {canViewStock && (
+                                <>
+                                    <DetailItem
+                                        icon={Layers}
+                                        label="Stok Saat Ini"
+                                        value={
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-base font-bold font-mono">
+                                                    {product.stock ?? 0} {baseUnit}
+                                                </span>
+                                                {getStockStatus()}
+                                            </div>
+                                        }
+                                    />
 
-                            <Separator />
+                                    <Separator />
 
-                            <DetailItem
-                                icon={Layers}
-                                label="Batas Minimum Stok"
-                                value={
-                                    <span className="font-mono">
-                                        {product.min_stock} {baseUnit}
-                                    </span>
-                                }
-                            />
+                                    <DetailItem
+                                        icon={Layers}
+                                        label="Batas Minimum Stok"
+                                        value={
+                                            <span className="font-mono">
+                                                {product.min_stock ?? 0} {baseUnit}
+                                            </span>
+                                        }
+                                    />
 
-                            <Separator />
+                                    <Separator />
+                                </>
+                            )}
 
                             <DetailItem
                                 icon={Calendar}

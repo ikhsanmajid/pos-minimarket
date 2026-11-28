@@ -70,6 +70,7 @@ const Home = () => {
                     myShift: null,
                     myTodayTransactionsCount: 0,
                     myRecentShifts: [],
+                    cashRegisters: [],
                 }
             }
         />

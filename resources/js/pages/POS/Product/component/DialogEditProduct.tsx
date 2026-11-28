@@ -65,10 +65,12 @@ export function DialogEditProduct({
         base_unit: product.base_unit || 'pcs',
         buy_price: String(product.buy_price),
         sell_price: String(product.sell_price),
-        stock: String(product.stock),
-        min_stock: String(product.min_stock),
+        stock: String(product.stock ?? 0),
+        min_stock: String(product.min_stock ?? 0),
         image: null as File | null,
         active: Boolean(product.active),
+        is_tax_exempt: Boolean(product.is_tax_exempt),
+        is_donation: Boolean(product.is_donation),
         units_present: true,
         units: mapUnitsToForm(product.units),
     })
@@ -84,10 +86,12 @@ export function DialogEditProduct({
                 base_unit: product.base_unit || 'pcs',
                 buy_price: String(product.buy_price),
                 sell_price: String(product.sell_price),
-                stock: String(product.stock),
-                min_stock: String(product.min_stock),
+                stock: String(product.stock ?? 0),
+                min_stock: String(product.min_stock ?? 0),
                 image: null,
                 active: Boolean(product.active),
+                is_tax_exempt: Boolean(product.is_tax_exempt),
+                is_donation: Boolean(product.is_donation),
                 units_present: true,
                 units: mapUnitsToForm(product.units),
             })
@@ -359,6 +363,51 @@ export function DialogEditProduct({
                                 onChange={(nextUnits) => setData('units', nextUnits)}
                                 errors={errors as Record<string, string | undefined>}
                             />
+
+                            {/* Produk Donasi */}
+                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="edit-donation" className="text-sm font-medium cursor-pointer">
+                                        Produk Donasi (Kembalian Kasir)
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {data.is_donation
+                                            ? 'Dapat dipilih saat kembalian kasir didonasikan. Otomatis bebas PPN & tidak memotong stok.'
+                                            : 'Aktifkan jika produk ini adalah program donasi kembalian pelanggan.'}
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="edit-donation"
+                                    checked={data.is_donation}
+                                    onCheckedChange={(checked) => {
+                                        setData((prev) => ({
+                                            ...prev,
+                                            is_donation: checked,
+                                            is_tax_exempt: checked ? true : prev.is_tax_exempt,
+                                        }))
+                                    }}
+                                />
+                            </div>
+
+                            {/* Skema Pajak PPN */}
+                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="edit-tax-exempt" className="text-sm font-medium cursor-pointer">
+                                        Produk Bebas PPN
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {data.is_tax_exempt
+                                            ? 'Produk bebas PPN (0%) dan tidak dikenakan pajak di kasir POS.'
+                                            : 'Produk dikenakan tarif PPN default toko saat transaksi kasir.'}
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="edit-tax-exempt"
+                                    checked={data.is_tax_exempt}
+                                    disabled={data.is_donation}
+                                    onCheckedChange={(checked) => setData('is_tax_exempt', checked)}
+                                />
+                            </div>
 
                             {/* Status Aktif */}
                             <div className="flex items-center justify-between rounded-lg border border-border p-3">

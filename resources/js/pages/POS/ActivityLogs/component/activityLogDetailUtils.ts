@@ -19,6 +19,8 @@ const fieldLabels: Record<string, string> = {
     role: 'Role',
     is_active: 'Status Aktif',
     active: 'Status Aktif',
+    is_tax_exempt: 'Status PPN',
+    is_donation: 'Produk Donasi',
     barcode: 'Barcode',
     base_unit: 'Satuan Dasar',
     category_id: 'Kategori Produk',
@@ -72,6 +74,8 @@ const fieldLabels: Record<string, string> = {
     tax_type: 'Tipe Pajak',
     tax_value: 'Nilai Pajak',
     tax_percentage: 'Persentase Pajak (%)',
+    taxable_amount: 'DPP (Kena PPN)',
+    tax_exempt_amount: 'Subtotal Bebas PPN',
     tax_amount: 'Nominal Pajak',
     total_amount: 'Total Nilai',
     adjusted_total_amount: 'Penyesuaian Total Tagihan',
@@ -131,6 +135,7 @@ const fieldLabels: Record<string, string> = {
     return_number: 'No. Retur',
     grand_total: 'Grand Total',
     rounding_amount: 'Pembulatan',
+    donation_amount: 'Donasi',
     change_amount: 'Kembalian',
     void_reason: 'Alasan Void',
     voided_by: 'Di-void Oleh',
@@ -143,6 +148,15 @@ const fieldLabels: Record<string, string> = {
     subtotal_refund: 'Subtotal Refund',
     qty: 'Qty',
     base_qty: 'Qty Satuan Dasar',
+    adjustment_number: 'No. Penyesuaian Stok',
+    opname_number: 'No. Stock Opname',
+    qty_change: 'Perubahan Qty',
+    unit_cost_snapshot: 'HPP Snapshot',
+    total_cost_impact: 'Dampak Nilai (Rp)',
+    is_blind_count: 'Mode Blind Count',
+    total_items_counted: 'Total Produk Dihitung',
+    total_variance_items: 'Total Item Berselisih',
+    total_variance_value: 'Total Nilai Selisih',
 }
 
 const CURRENCY_FIELDS = new Set([
@@ -150,6 +164,8 @@ const CURRENCY_FIELDS = new Set([
     'sell_price',
     'subtotal',
     'discount_amount',
+    'taxable_amount',
+    'tax_exempt_amount',
     'tax_amount',
     'total_amount',
     'adjusted_total_amount',
@@ -178,9 +194,13 @@ const CURRENCY_FIELDS = new Set([
     'shift_variance_tolerance',
     'grand_total',
     'rounding_amount',
+    'donation_amount',
     'change_amount',
     'total_refund_amount',
     'subtotal_refund',
+    'unit_cost_snapshot',
+    'total_cost_impact',
+    'total_variance_value',
 ])
 
 const STATUS_LABELS: Record<string, string> = {
@@ -213,6 +233,15 @@ const STATUS_LABELS: Record<string, string> = {
     voided: 'Dibatalkan (Void)',
     partially_refunded: 'Retur Sebagian',
     refunded: 'Retur Penuh',
+    pending: 'Menunggu Persetujuan',
+    in_progress: 'Berlangsung',
+    in: 'Penambahan Stok (+)',
+    out: 'Pengurangan Stok (-)',
+    damaged: 'Barang Rusak',
+    expired: 'Kedaluwarsa',
+    lost: 'Barang Hilang / Shrinkage',
+    internal_use: 'Pemakaian Internal Toko',
+    correction: 'Koreksi Kesalahan Input',
 }
 
 export const isPlainObject = (val: unknown): val is Record<string, unknown> =>
@@ -270,6 +299,10 @@ export const formatDiffValue = (
 
     if (key === 'is_active' || key === 'active') {
         return val ? 'Aktif' : 'Nonaktif'
+    }
+
+    if (key === 'is_tax_exempt') {
+        return val ? 'Bebas PPN' : 'Kena PPN'
     }
 
     if (typeof val === 'boolean') {

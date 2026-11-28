@@ -43,9 +43,14 @@ class StoreProductRequest extends FormRequest
             }
         }
 
+        $isDonation = filter_var($this->input('is_donation', false), FILTER_VALIDATE_BOOLEAN);
+        $isTaxExempt = $isDonation || filter_var($this->input('is_tax_exempt', false), FILTER_VALIDATE_BOOLEAN);
+
         $this->merge([
             'base_unit' => $baseUnit !== '' ? $baseUnit : 'pcs',
             'active' => filter_var($this->input('active', true), FILTER_VALIDATE_BOOLEAN),
+            'is_tax_exempt' => $isTaxExempt,
+            'is_donation' => $isDonation,
             'units' => $normalizedUnits,
         ]);
     }
@@ -65,6 +70,8 @@ class StoreProductRequest extends FormRequest
             'stock' => ['required', 'integer', 'min:0'],
             'min_stock' => ['required', 'integer', 'min:0'],
             'active' => ['required', 'boolean'],
+            'is_tax_exempt' => ['required', 'boolean'],
+            'is_donation' => ['required', 'boolean'],
             'image' => ['nullable', 'image', 'max:2048'],
             'units' => ['nullable', 'array'],
             'units.*.unit_name' => ['required', 'string', 'max:30'],

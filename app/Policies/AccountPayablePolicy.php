@@ -29,6 +29,6 @@ class AccountPayablePolicy
             return false;
         }
 
-        return $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]);
+        return $user->hasRoles(UserRoles::Admin);
     }
 }

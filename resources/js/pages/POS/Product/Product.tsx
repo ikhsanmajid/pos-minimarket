@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
 import { formatNumber, formatPercent } from '@/lib/utils'
 import type { PageProps } from '@/types'
-import { AlertTriangle, Package, PackageCheck, PackageX } from 'lucide-react'
+import { AlertTriangle, Heart, Package, PackageCheck, PackageX } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
 import ProductController from '@/actions/App/Http/Controllers/ProductController'
@@ -42,10 +42,12 @@ export type Product = {
     category: string | null
     buy_price: string | number
     sell_price: string | number
-    stock: number
-    min_stock: number
+    stock?: number | null
+    min_stock?: number | null
     image?: string | null
     active: boolean
+    is_tax_exempt?: boolean
+    is_donation?: boolean
     units?: ProductUnit[]
 }
 
@@ -58,6 +60,7 @@ interface GetColumnsOptions {
     categories: Category[]
     canEdit: boolean
     canDelete: boolean
+    canViewStock: boolean
     filters: ProductFilters
     onSort: (field: string) => void
 }
@@ -67,9 +70,95 @@ const getColumns = ({
     categories,
     canEdit,
     canDelete,
+    canViewStock,
     filters,
     onSort,
-}: GetColumnsOptions): DataTableColumn<Product>[] => [
+}: GetColumnsOptions): DataTableColumn<Product>[] => {
+    const stockColumns: DataTableColumn<Product>[] = canViewStock
+        ? [
+              {
+                  accessorKey: 'stock',
+                  header: () => (
+                      <DataTableSortHeader
+                          label="Stok"
+                          field="stock"
+                          tableSort={filters.table_sort}
+                          tableDirection={filters.table_direction}
+                          toolbarSort={filters.sort}
+                          toolbarDirection={filters.direction}
+                          onSort={onSort}
+                      />
+                  ),
+                  size: 185,
+                  cell: (info) => {
+                      const row = info.row.original
+                      if (row.is_donation) {
+                          return (
+                              <Badge
+                                  variant="outline"
+                                  className="border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/60 dark:text-pink-300"
+                              >
+                                  Non-Stok
+                              </Badge>
+                          )
+                      }
+                      const unit = row.base_unit || 'pcs'
+                      const stockVal = row.stock ?? 0
+                      const minStockVal = row.min_stock ?? 0
+
+                      if (stockVal === 0) {
+                          return (
+                              <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-semibold text-destructive">
+                                      {stockVal} <span className="text-[11px] font-normal">{unit}</span>
+                                  </span>
+                                  <Badge className="bg-red-300 text-red-700 dark:bg-red-950 dark:text-red-300">
+                                      Habis!
+                                  </Badge>
+                              </div>
+                          )
+                      }
+                      if (stockVal > 0 && stockVal <= minStockVal) {
+                          return (
+                              <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-semibold text-orange-600 dark:text-orange-400">
+                                      {stockVal} <span className="text-[11px] font-normal">{unit}</span>
+                                  </span>
+                                  <Badge className="bg-orange-300 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+                                      Hampir Habis
+                                  </Badge>
+                              </div>
+                          )
+                      }
+                      return (
+                          <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-semibold text-green-600 dark:text-green-400">
+                                  {stockVal} <span className="text-[11px] font-normal">{unit}</span>
+                              </span>
+                              <Badge className="bg-green-300 text-green-700 dark:bg-green-950 dark:text-green-300">
+                                  Aman
+                              </Badge>
+                          </div>
+                      )
+                  },
+              },
+              {
+                  accessorKey: 'min_stock',
+                  header: 'Min. Stok',
+                  size: 105,
+                  cell: (info) => {
+                      const row = info.row.original
+                      return (
+                          <span className="font-mono text-xs text-muted-foreground">
+                              {row.min_stock ?? 0} {row.base_unit || 'pcs'}
+                          </span>
+                      )
+                  },
+              },
+          ]
+        : []
+
+    return [
     {
         id: 'no',
         header: 'No',
@@ -115,6 +204,15 @@ const getColumns = ({
                             <span className="text-xs text-muted-foreground font-mono truncate">
                                 {row.barcode}
                             </span>
+                            {row.is_donation && (
+                                <Badge
+                                    variant="outline"
+                                    className="text-[10px] px-1.5 py-0 h-4 gap-0.5 shrink-0 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/60 dark:text-pink-300"
+                                >
+                                    <Heart className="h-2.5 w-2.5" />
+                                    Donasi
+                                </Badge>
+                            )}
                             {activeUnitsCount > 0 && (
                                 <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 font-mono shrink-0">
                                     +{activeUnitsCount} UOM
@@ -184,12 +282,13 @@ const getColumns = ({
             </span>
         ),
     },
+    ...stockColumns,
     {
-        accessorKey: 'stock',
+        accessorKey: 'is_tax_exempt',
         header: () => (
             <DataTableSortHeader
-                label="Stok"
-                field="stock"
+                label="PPN"
+                field="is_tax_exempt"
                 tableSort={filters.table_sort}
                 tableDirection={filters.table_direction}
                 toolbarSort={filters.sort}
@@ -197,59 +296,18 @@ const getColumns = ({
                 onSort={onSort}
             />
         ),
-        size: 185,
-        cell: (info) => {
-            const row = info.row.original
-            const unit = row.base_unit || 'pcs'
-
-            if (row.stock === 0) {
-                return (
-                    <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-semibold text-destructive">
-                            {row.stock} <span className="text-[11px] font-normal">{unit}</span>
-                        </span>
-                        <Badge className="bg-red-300 text-red-700 dark:bg-red-950 dark:text-red-300">
-                            Habis!
-                        </Badge>
-                    </div>
-                )
-            }
-            if (row.stock > 0 && row.stock <= row.min_stock) {
-                return (
-                    <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-semibold text-orange-600 dark:text-orange-400">
-                            {row.stock} <span className="text-[11px] font-normal">{unit}</span>
-                        </span>
-                        <Badge className="bg-orange-300 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
-                            Hampir Habis
-                        </Badge>
-                    </div>
-                )
-            }
-            return (
-                <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-semibold text-green-600 dark:text-green-400">
-                        {row.stock} <span className="text-[11px] font-normal">{unit}</span>
-                    </span>
-                    <Badge className="bg-green-300 text-green-700 dark:bg-green-950 dark:text-green-300">
-                        Aman
-                    </Badge>
-                </div>
-            )
-        },
-    },
-    {
-        accessorKey: 'min_stock',
-        header: 'Min. Stok',
-        size: 105,
-        cell: (info) => {
-            const row = info.row.original
-            return (
-                <span className="font-mono text-xs text-muted-foreground">
-                    {row.min_stock} {row.base_unit || 'pcs'}
-                </span>
-            )
-        },
+        size: 115,
+        cell: (info) =>
+            info.getValue<boolean>() ? (
+                <Badge
+                    variant="outline"
+                    className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                >
+                    Bebas PPN
+                </Badge>
+            ) : (
+                <Badge variant="secondary">Kena PPN</Badge>
+            ),
     },
     {
         accessorKey: 'active',
@@ -293,6 +351,7 @@ const getColumns = ({
         },
     },
 ]
+}
 
 type ProductPageProps = PageProps<{
     products: PaginatedProducts
@@ -301,15 +360,22 @@ type ProductPageProps = PageProps<{
     summary: {
         total_products: number
         active_products: number
-        safe_stock_count: number
-        low_stock_count: number
-        out_of_stock_count: number
+        safe_stock_count: number | null
+        low_stock_count: number | null
+        out_of_stock_count: number | null
         active_units_count: number
     }
+    canViewStock?: boolean
 }>
 
 const ProductPage = () => {
-    const { products, filters, categories = [], summary } = usePage<ProductPageProps>().props
+    const {
+        products,
+        filters,
+        categories = [],
+        summary,
+        canViewStock = true,
+    } = usePage<ProductPageProps>().props
     const { flash, user } = useAuth()
     const [isLoading, setIsLoading] = useState(false)
 
@@ -374,6 +440,7 @@ const ProductPage = () => {
                 categories,
                 canEdit,
                 canDelete,
+                canViewStock,
                 filters,
                 onSort: handleSort,
             }),
@@ -382,6 +449,7 @@ const ProductPage = () => {
             categories,
             canEdit,
             canDelete,
+            canViewStock,
             filters.table_sort,
             filters.table_direction,
             filters.sort,
@@ -422,54 +490,76 @@ const ProductPage = () => {
                 )}
             </div>
 
-            <SummaryStatGrid>
-                <SummaryStatCard
-                    title="Total Produk"
-                    value={formatNumber(summary.total_products)}
-                    icon={Package}
-                    variant="blue"
-                    subInfo={`${formatPercent(summary.active_products, summary.total_products)} aktif • ${formatNumber(summary.active_units_count)} UOM`}
-                    periodLabel="Semua Data"
-                    isActive={!filters.stock_status || filters.stock_status === 'all'}
-                    onClick={() => handleFilterStockStatus(undefined)}
-                />
-                <SummaryStatCard
-                    title="Stok Aman"
-                    value={formatNumber(summary.safe_stock_count)}
-                    icon={PackageCheck}
-                    variant="emerald"
-                    subInfo={`${formatPercent(summary.safe_stock_count, summary.total_products)} dari total produk`}
-                    periodLabel="> Min. Stok"
-                    isActive={filters.stock_status === 'in_stock'}
-                    onClick={() => handleFilterStockStatus('in_stock')}
-                />
-                <SummaryStatCard
-                    title="Stok Hampir Habis"
-                    value={formatNumber(summary.low_stock_count)}
-                    icon={AlertTriangle}
-                    variant="amber"
-                    subInfo="Perlu restock segera"
-                    periodLabel="≤ Min. Stok"
-                    isActive={filters.stock_status === 'low_stock'}
-                    onClick={() => handleFilterStockStatus('low_stock')}
-                />
-                <SummaryStatCard
-                    title="Stok Habis"
-                    value={formatNumber(summary.out_of_stock_count)}
-                    icon={PackageX}
-                    variant="rose"
-                    subInfo="Segera buat order PO"
-                    periodLabel="Stok 0"
-                    isActive={filters.stock_status === 'out_of_stock'}
-                    onClick={() => handleFilterStockStatus('out_of_stock')}
-                />
-            </SummaryStatGrid>
+            {canViewStock ? (
+                <SummaryStatGrid>
+                    <SummaryStatCard
+                        title="Total Produk"
+                        value={formatNumber(summary.total_products)}
+                        icon={Package}
+                        variant="blue"
+                        subInfo={`${formatPercent(summary.active_products, summary.total_products)} aktif • ${formatNumber(summary.active_units_count)} UOM`}
+                        periodLabel="Semua Data"
+                        isActive={!filters.stock_status || filters.stock_status === 'all'}
+                        onClick={() => handleFilterStockStatus(undefined)}
+                    />
+                    <SummaryStatCard
+                        title="Stok Aman"
+                        value={formatNumber(summary.safe_stock_count ?? 0)}
+                        icon={PackageCheck}
+                        variant="emerald"
+                        subInfo={`${formatPercent(summary.safe_stock_count ?? 0, summary.total_products)} dari total produk`}
+                        periodLabel="> Min. Stok"
+                        isActive={filters.stock_status === 'in_stock'}
+                        onClick={() => handleFilterStockStatus('in_stock')}
+                    />
+                    <SummaryStatCard
+                        title="Stok Hampir Habis"
+                        value={formatNumber(summary.low_stock_count ?? 0)}
+                        icon={AlertTriangle}
+                        variant="amber"
+                        subInfo="Perlu restock segera"
+                        periodLabel="≤ Min. Stok"
+                        isActive={filters.stock_status === 'low_stock'}
+                        onClick={() => handleFilterStockStatus('low_stock')}
+                    />
+                    <SummaryStatCard
+                        title="Stok Habis"
+                        value={formatNumber(summary.out_of_stock_count ?? 0)}
+                        icon={PackageX}
+                        variant="rose"
+                        subInfo="Segera buat order PO"
+                        periodLabel="Stok 0"
+                        isActive={filters.stock_status === 'out_of_stock'}
+                        onClick={() => handleFilterStockStatus('out_of_stock')}
+                    />
+                </SummaryStatGrid>
+            ) : (
+                <SummaryStatGrid className="sm:grid-cols-2 lg:grid-cols-2">
+                    <SummaryStatCard
+                        title="Total Produk"
+                        value={formatNumber(summary.total_products)}
+                        icon={Package}
+                        variant="blue"
+                        subInfo={`${formatNumber(summary.active_units_count)} satuan Multi-UOM terdaftar`}
+                        periodLabel="Katalog"
+                    />
+                    <SummaryStatCard
+                        title="Produk Aktif"
+                        value={formatNumber(summary.active_products)}
+                        icon={PackageCheck}
+                        variant="emerald"
+                        subInfo={`${formatPercent(summary.active_products, summary.total_products)} dari total katalog`}
+                        periodLabel="Dijual"
+                    />
+                </SummaryStatGrid>
+            )}
 
             <ProductTableToolbar
                 filters={filters}
                 categories={categories}
                 routeUrl={ProductController.index}
                 isLoading={isLoading}
+                canViewStock={canViewStock}
             />
 
             <DataTable

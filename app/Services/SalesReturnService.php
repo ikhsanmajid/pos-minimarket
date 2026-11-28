@@ -86,6 +86,12 @@ class SalesReturnService
                     ]);
                 }
 
+                if ($detail->is_donation) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.transaction_detail_id" => 'Item donasi tidak dapat diretur.',
+                    ]);
+                }
+
                 $returnQty = (int) $row['qty'];
                 if ($returnQty < 1) {
                     throw ValidationException::withMessages([
@@ -218,9 +224,12 @@ class SalesReturnService
             // Catat pengeluaran refund melalui FinanceService
             $this->financeService->recordSalesReturnRefund($salesReturn, $lockedTx, $actor);
 
-            // Tentukan status terbaru transaksi: refunded jika seluruh item sudah habis diretur, selain itu partially_refunded
+            // Tentukan status terbaru transaksi: refunded jika seluruh item non-donasi sudah habis diretur
             $allFullyReturned = true;
             foreach ($lockedTx->details as $detail) {
+                if ($detail->is_donation) {
+                    continue;
+                }
                 $purchasedQty = $detail->qty > 0 ? $detail->qty : max(1, (int) $detail->quantity);
                 $totalReturnedForDetail = ($alreadyReturnedMap[$detail->id] ?? 0) + ($requestedQtyByDetail[$detail->id] ?? 0);
                 if ($totalReturnedForDetail < $purchasedQty) {

@@ -14,8 +14,18 @@ export interface PosLookupProduct {
     sell_price: number
     stock: number
     image: string | null
+    is_tax_exempt: boolean
+    is_donation?: boolean
     matched_unit_id: number | null
     units: PosProductUnit[]
+}
+
+export interface PosDonationProduct {
+    id: number
+    barcode: string
+    name: string
+    base_unit: string
+    sell_price: number
 }
 
 export interface PosCartItem {
@@ -78,6 +88,8 @@ export interface PosReceiptItem {
     qty: number
     unit_price: number
     discount_amount: number
+    is_tax_exempt?: boolean
+    is_donation?: boolean
     subtotal: number
 }
 
@@ -104,6 +116,7 @@ export interface PosReceiptData {
     discount_amount: number
     tax_amount: number
     rounding_amount: number
+    donation_amount?: number
     grand_total: number
     paid_amount: number
     change_amount: number
@@ -137,6 +150,8 @@ export interface TransactionDetailLine {
     returnable_qty: number
     unit_price: number
     discount_amount: number
+    is_tax_exempt?: boolean
+    is_donation?: boolean
     subtotal: number
 }
 
@@ -181,6 +196,7 @@ export interface TransactionDetailData {
     discount_amount: number
     tax_amount: number
     rounding_amount: number
+    donation_amount?: number
     grand_total: number
     paid_amount: number
     change_amount: number

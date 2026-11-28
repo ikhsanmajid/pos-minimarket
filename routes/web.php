@@ -14,6 +14,8 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\SalesReturnController;
+use App\Http\Controllers\StockAdjustmentController;
+use App\Http\Controllers\StockOpnameController;
 use App\Http\Controllers\StoreSettingController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\TransactionController;
@@ -84,6 +86,27 @@ Route::middleware('auth')->group(function () {
         // Categories
         Route::get('/categories/search', [CategoryController::class, 'search'])->name('categories.search');
         Route::resource('categories', CategoryController::class)->only(['index', 'store', 'update', 'destroy']);
+
+        // Inventaris: Stock Adjustment & Stock Opname
+        Route::prefix('/inventory')->name('inventory.')->group(function () {
+            Route::prefix('/stock-adjustments')->name('adjustments.')->group(function () {
+                Route::get('/', [StockAdjustmentController::class, 'index'])->name('index');
+                Route::post('/', [StockAdjustmentController::class, 'store'])->name('store');
+                Route::post('/{stockAdjustment}/approve', [StockAdjustmentController::class, 'approve'])->name('approve');
+                Route::post('/{stockAdjustment}/reject', [StockAdjustmentController::class, 'reject'])->name('reject');
+            });
+
+            Route::prefix('/stock-opnames')->name('opnames.')->group(function () {
+                Route::get('/', [StockOpnameController::class, 'index'])->name('index');
+                Route::post('/', [StockOpnameController::class, 'store'])->name('store');
+                Route::get('/{stockOpname}', [StockOpnameController::class, 'show'])->name('show');
+                Route::patch('/{stockOpname}/counts', [StockOpnameController::class, 'updateCounts'])->name('counts.update');
+                Route::get('/{stockOpname}/lookup-barcode', [StockOpnameController::class, 'lookupBarcode'])->name('lookup-barcode');
+                Route::post('/{stockOpname}/finalize', [StockOpnameController::class, 'finalize'])->name('finalize');
+                Route::post('/{stockOpname}/cancel', [StockOpnameController::class, 'cancel'])->name('cancel');
+                Route::get('/{stockOpname}/pdf', [StockOpnameController::class, 'downloadPdf'])->name('pdf');
+            });
+        });
 
         // Suppliers
         Route::get('/suppliers/search', [SupplierController::class, 'search'])->name('suppliers.search');

@@ -56,6 +56,8 @@ const fieldLabels: Record<string, string> = {
     sell_price: 'Harga Jual',
     min_stock: 'Minimum Stok',
     active: 'Status Aktif',
+    is_tax_exempt: 'Status PPN',
+    is_donation: 'Produk Donasi',
     image: 'Foto Produk',
 }
 
@@ -96,6 +98,9 @@ const formatValue = (key: string, val: any, categoryMap?: Record<string | number
     }
     if (key === 'active') {
         return val ? 'Aktif (Dijual)' : 'Nonaktif'
+    }
+    if (key === 'is_tax_exempt') {
+        return val ? 'Bebas PPN' : 'Kena PPN'
     }
     if (typeof val === 'boolean') {
         return val ? 'Ya' : 'Tidak'

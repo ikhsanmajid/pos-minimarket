@@ -12,6 +12,7 @@ use App\Enums\StockMovementType;
 use App\Enums\TransactionStatus;
 use App\Models\AccountPayable;
 use App\Models\CashierShift;
+use App\Models\CashRegister;
 use App\Models\FinancialAccount;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
@@ -595,31 +596,17 @@ class DashboardService
 
         $movementRows = StockMovement::query()
             ->whereBetween('created_at', [$start, $end])
-            ->selectRaw('DATE(created_at) as move_date, type, COALESCE(SUM(ABS(qty_change)), 0) as total_qty')
-            ->groupBy(DB::raw('DATE(created_at)'), 'type')
+            ->selectRaw('DATE(created_at) as move_date, COALESCE(SUM(CASE WHEN qty_change >= 0 THEN qty_change ELSE 0 END), 0) as total_in, COALESCE(SUM(CASE WHEN qty_change < 0 THEN ABS(qty_change) ELSE 0 END), 0) as total_out')
+            ->groupBy(DB::raw('DATE(created_at)'))
             ->get();
-
-        $inTypes = [
-            StockMovementType::PurchaseIn->value,
-            StockMovementType::AdjustmentIn->value,
-            StockMovementType::SaleReturnIn->value,
-            StockMovementType::SaleReturn->value,
-            StockMovementType::SaleVoid->value,
-        ];
 
         $grouped = [];
         foreach ($movementRows as $row) {
             $dateKey = (string) $row->move_date;
-            if (! isset($grouped[$dateKey])) {
-                $grouped[$dateKey] = ['stock_in' => 0, 'stock_out' => 0];
-            }
-            $qty = (int) $row->total_qty;
-            $moveType = $row->type instanceof StockMovementType ? $row->type->value : (string) $row->type;
-            if (in_array($moveType, $inTypes, true)) {
-                $grouped[$dateKey]['stock_in'] += $qty;
-            } else {
-                $grouped[$dateKey]['stock_out'] += $qty;
-            }
+            $grouped[$dateKey] = [
+                'stock_in' => (int) ($row->total_in ?? 0),
+                'stock_out' => (int) ($row->total_out ?? 0),
+            ];
         }
 
         $stockTrend = [];
@@ -740,6 +727,24 @@ class DashboardService
             ->values()
             ->all();
 
+        $cashRegisters = CashRegister::query()
+            ->where('is_active', true)
+            ->with(['activeShift.user:id,name'])
+            ->orderBy('code')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (CashRegister $register): array => [
+                'id' => $register->id,
+                'code' => $register->code,
+                'name' => $register->name,
+                'location' => $register->location,
+                'is_in_use' => $register->activeShift !== null,
+                'active_shift_number' => $register->activeShift?->shift_number,
+                'active_cashier_name' => $register->activeShift?->user?->name,
+            ])
+            ->values()
+            ->all();
+
         return [
             'myShift' => $activeShift ? [
                 'id' => $activeShift->id,
@@ -752,6 +757,7 @@ class DashboardService
             ] : null,
             'myTodayTransactionsCount' => $todayTransactionsCount,
             'myRecentShifts' => $recentOwnShifts,
+            'cashRegisters' => $cashRegisters,
         ];
     }
 

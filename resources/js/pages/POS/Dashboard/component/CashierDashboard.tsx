@@ -233,7 +233,11 @@ export function CashierDashboard({
                 </CardContent>
             </Card>
 
-            <OpenShiftDialog open={openDialog} onOpenChange={setOpenDialog} />
+            <OpenShiftDialog
+                open={openDialog}
+                onOpenChange={setOpenDialog}
+                cashRegisters={cashierData.cashRegisters ?? []}
+            />
         </div>
     )
 }

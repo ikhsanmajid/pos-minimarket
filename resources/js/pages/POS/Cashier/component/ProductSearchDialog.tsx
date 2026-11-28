@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Loader2, Package, Plus, Search, X } from 'lucide-react'
+import { Heart, Loader2, Package, Plus, Search, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -129,7 +129,7 @@ export function ProductSearchDialog({
                         </div>
                     ) : (
                         results.map((product) => {
-                            const outOfStock = product.stock <= 0
+                            const outOfStock = !product.is_donation && product.stock <= 0
                             return (
                                 <div
                                     key={product.id}
@@ -140,12 +140,30 @@ export function ProductSearchDialog({
                                             <span className="font-semibold text-sm text-foreground break-words leading-snug">
                                                 {product.name}
                                             </span>
-                                            <Badge
-                                                variant={outOfStock ? 'destructive' : 'secondary'}
-                                                className="font-mono text-[11px] shrink-0"
-                                            >
-                                                Stok: {product.stock} {product.base_unit}
-                                            </Badge>
+                                            {product.is_donation ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="text-[10px] gap-0.5 shrink-0 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/60 dark:text-pink-300"
+                                                >
+                                                    <Heart className="h-2.5 w-2.5" />
+                                                    Produk Donasi
+                                                </Badge>
+                                            ) : (
+                                                <Badge
+                                                    variant={outOfStock ? 'destructive' : 'secondary'}
+                                                    className="font-mono text-[11px] shrink-0"
+                                                >
+                                                    Stok: {product.stock} {product.base_unit}
+                                                </Badge>
+                                            )}
+                                            {!product.is_donation && product.is_tax_exempt && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="text-[10px] shrink-0 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                                >
+                                                    Bebas PPN
+                                                </Badge>
+                                            )}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                             <span className="font-mono break-all">{product.barcode}</span>

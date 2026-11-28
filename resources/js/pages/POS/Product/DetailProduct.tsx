@@ -31,19 +31,29 @@ export interface DetailProductData extends Product {
 
 type DetailProductProps = PageProps<{
     product: DetailProductData
-    stockMovements?: PaginatedStockMovements
+    stockMovements?: PaginatedStockMovements | null
     activities?: PaginatedProductActivities
+    canViewStock?: boolean
 }>
 
 const DetailProduct = () => {
-    const { product, stockMovements, activities } = usePage<DetailProductProps>().props
+    const {
+        product,
+        stockMovements,
+        activities,
+        canViewStock = true,
+    } = usePage<DetailProductProps>().props
 
     const queryTab =
         typeof window !== 'undefined'
             ? new URLSearchParams(window.location.search).get('tab')
             : null
     const [activeTab, setActiveTab] = useState(
-        queryTab === 'history' ? 'history' : queryTab === 'mutation' ? 'mutation' : 'detail'
+        queryTab === 'history'
+            ? 'history'
+            : queryTab === 'mutation' && canViewStock
+              ? 'mutation'
+              : 'detail'
     )
     const [isLoadingActivities, setIsLoadingActivities] = useState(false)
     const [isLoadingMovements, setIsLoadingMovements] = useState(false)
@@ -69,7 +79,7 @@ const DetailProduct = () => {
         if (val === 'history' && !activities && !isLoadingActivities) {
             loadActivities()
         }
-        if (val === 'mutation' && !stockMovements && !isLoadingMovements) {
+        if (val === 'mutation' && canViewStock && !stockMovements && !isLoadingMovements) {
             loadStockMovements()
         }
     }
@@ -78,10 +88,10 @@ const DetailProduct = () => {
         if (activeTab === 'history' && !activities && !isLoadingActivities) {
             loadActivities()
         }
-        if (activeTab === 'mutation' && !stockMovements && !isLoadingMovements) {
+        if (activeTab === 'mutation' && canViewStock && !stockMovements && !isLoadingMovements) {
             loadStockMovements()
         }
-    }, [activeTab])
+    }, [activeTab, canViewStock])
 
     return (
         <div className="w-full min-w-0 space-y-6">
@@ -112,15 +122,17 @@ const DetailProduct = () => {
                         <Package className="h-4 w-4" />
                         Detail Produk
                     </TabsTrigger>
-                    <TabsTrigger value="mutation" className="gap-2 pb-2.5">
-                        <ArrowLeftRight className="h-4 w-4" />
-                        Mutasi Stok
-                        {stockMovements?.total !== undefined && (
-                            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
-                                {stockMovements.total}
-                            </Badge>
-                        )}
-                    </TabsTrigger>
+                    {canViewStock && (
+                        <TabsTrigger value="mutation" className="gap-2 pb-2.5">
+                            <ArrowLeftRight className="h-4 w-4" />
+                            Mutasi Stok
+                            {stockMovements?.total !== undefined && (
+                                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+                                    {stockMovements.total}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
+                    )}
                     <TabsTrigger value="history" className="gap-2 pb-2.5">
                         <History className="h-4 w-4" />
                         Riwayat Perubahan
@@ -133,17 +145,19 @@ const DetailProduct = () => {
                 </TabsList>
 
                 <TabsContent value="detail" className="m-0 focus-visible:outline-none">
-                    <DetailTabProduct product={product} />
+                    <DetailTabProduct product={product} canViewStock={canViewStock} />
                 </TabsContent>
 
-                <TabsContent value="mutation" className="m-0 focus-visible:outline-none">
-                    <StokMutasiProduct
-                        product={product}
-                        stockMovements={stockMovements}
-                        isLoading={isLoadingMovements}
-                        onRefresh={loadStockMovements}
-                    />
-                </TabsContent>
+                {canViewStock && (
+                    <TabsContent value="mutation" className="m-0 focus-visible:outline-none">
+                        <StokMutasiProduct
+                            product={product}
+                            stockMovements={stockMovements ?? undefined}
+                            isLoading={isLoadingMovements}
+                            onRefresh={loadStockMovements}
+                        />
+                    </TabsContent>
+                )}
 
                 <TabsContent value="history" className="m-0 focus-visible:outline-none">
                     <RiwayatPerubahanProduct

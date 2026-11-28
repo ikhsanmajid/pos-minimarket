@@ -424,94 +424,100 @@ const AccountPayablePage = () => {
             </SummaryStatGrid>
 
             {/* Filter Toolbar */}
-            <div className="flex flex-wrap items-center gap-2.5">
-                <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                        placeholder="Cari No. AP / PO / supplier..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="pl-9 h-9 text-sm"
-                    />
-                </div>
+            <div className="mb-4 space-y-3 rounded-lg border bg-card p-3.5 shadow-xs sm:p-4">
+                <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="relative w-full sm:w-64 lg:w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                            placeholder="Cari No. AP / PO / supplier…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9 pr-8 h-9 text-sm"
+                        />
+                    </div>
 
-                <Select
-                    items={statusItems}
-                    value={status}
-                    onValueChange={(val) => {
-                        if (!val) return
-                        setStatus(val)
-                        router.visit(
-                            AccountPayableController.index({
-                                mergeQuery: { status: val !== 'all' ? val : undefined, page: 1 },
-                            }),
-                            { preserveState: true, preserveScroll: true, replace: true }
-                        )
-                    }}
-                >
-                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
-                        <SelectValue placeholder="Semua Status">
-                            {(val) => statusItems.find((i) => i.value === val)?.label}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {statusItems.map((i) => (
-                            <SelectItem key={i.value} value={i.value}>
-                                {i.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-
-                <Select
-                    items={dueItems}
-                    value={dueFilter}
-                    onValueChange={(val) => {
-                        if (!val) return
-                        setDueFilter(val)
-                        router.visit(
-                            AccountPayableController.index({
-                                mergeQuery: { due_filter: val !== 'all' ? val : undefined, page: 1 },
-                            }),
-                            { preserveState: true, preserveScroll: true, replace: true }
-                        )
-                    }}
-                >
-                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[195px] h-9">
-                        <SelectValue placeholder="Semua Jatuh Tempo">
-                            {(val) => dueItems.find((i) => i.value === val)?.label}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {dueItems.map((i) => (
-                            <SelectItem key={i.value} value={i.value}>
-                                {i.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-
-                {(search || status !== 'all' || dueFilter !== 'all') && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 text-xs gap-1"
-                        onClick={() => {
-                            isFirstRender.current = true
-                            setSearch('')
-                            setStatus('all')
-                            setDueFilter('all')
-                            router.visit(AccountPayableController.index.url(), {
-                                preserveState: true,
-                                preserveScroll: true,
-                                replace: true,
-                            })
+                    <Select
+                        items={statusItems}
+                        value={status}
+                        onValueChange={(val) => {
+                            if (!val) return
+                            setStatus(val)
+                            router.visit(
+                                AccountPayableController.index({
+                                    mergeQuery: { status: val !== 'all' ? val : undefined, page: 1 },
+                                }),
+                                { preserveState: true, preserveScroll: true, replace: true }
+                            )
                         }}
+                        disabled={isLoading}
                     >
-                        <X className="h-3.5 w-3.5" />
-                        Reset
-                    </Button>
-                )}
+                        <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
+                            <SelectValue placeholder="Semua Status">
+                                {(val) => statusItems.find((i) => i.value === val)?.label}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {statusItems.map((i) => (
+                                <SelectItem key={i.value} value={i.value}>
+                                    {i.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select
+                        items={dueItems}
+                        value={dueFilter}
+                        onValueChange={(val) => {
+                            if (!val) return
+                            setDueFilter(val)
+                            router.visit(
+                                AccountPayableController.index({
+                                    mergeQuery: { due_filter: val !== 'all' ? val : undefined, page: 1 },
+                                }),
+                                { preserveState: true, preserveScroll: true, replace: true }
+                            )
+                        }}
+                        disabled={isLoading}
+                    >
+                        <SelectTrigger className="w-full sm:w-auto sm:min-w-[195px] h-9">
+                            <SelectValue placeholder="Semua Jatuh Tempo">
+                                {(val) => dueItems.find((i) => i.value === val)?.label}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {dueItems.map((i) => (
+                                <SelectItem key={i.value} value={i.value}>
+                                    {i.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {(search || status !== 'all' || dueFilter !== 'all') && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isLoading}
+                            className="h-9 px-3 text-xs gap-1.5 text-muted-foreground hover:text-foreground border-dashed"
+                            onClick={() => {
+                                isFirstRender.current = true
+                                setSearch('')
+                                setStatus('all')
+                                setDueFilter('all')
+                                router.visit(AccountPayableController.index.url(), {
+                                    preserveState: true,
+                                    preserveScroll: true,
+                                    replace: true,
+                                })
+                            }}
+                        >
+                            <X className="h-3.5 w-3.5" />
+                            Reset Filter
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <DataTable

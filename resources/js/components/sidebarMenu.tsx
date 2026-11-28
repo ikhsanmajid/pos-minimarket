@@ -8,7 +8,7 @@ import {
     SidebarContent,
     SidebarFooter,
 } from "@/components/ui/sidebar"
-import { Users, House, Package, ShoppingCart, BarChart3, Truck, Wallet, Settings } from "lucide-react"
+import { Users, House, Package, ShoppingCart, Truck, Wallet, Settings } from "lucide-react"
 import ThemeToggle from "./themetoggle"
 import { useAuth } from "@/hooks/use-auth"
 import { usePage } from "@inertiajs/react"
@@ -26,6 +26,8 @@ import cashRegisters from "@/routes/pos/cash-registers"
 import cashier from "@/routes/pos/cashier"
 import transactions from "@/routes/pos/transactions"
 import settings from "@/routes/pos/settings"
+import inventoryAdjustments from "@/routes/pos/inventory/adjustments"
+import inventoryOpnames from "@/routes/pos/inventory/opnames"
 
 interface NavSubItem {
     title: string
@@ -99,7 +101,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             title: "Produk & Stok",
             url: "#",
             icon: <Package />,
-            isActive: url.startsWith('/pos/products') || url.startsWith('/pos/categories'),
+            isActive:
+                url.startsWith('/pos/products') ||
+                url.startsWith('/pos/categories') ||
+                url.startsWith('/pos/inventory'),
             roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
             items: [
                 {
@@ -110,6 +115,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {
                     title: "Kategori",
                     url: categories.index.url(),
+                    roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
+                },
+                {
+                    title: "Stock Adjustment",
+                    url: inventoryAdjustments.index.url(),
+                    roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
+                },
+                {
+                    title: "Stock Opname",
+                    url: inventoryOpnames.index.url(),
                     roles: ['admin', 'cashier', 'warehouse', 'supervisor'],
                 },
             ],
@@ -162,7 +177,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             url: "#",
             icon: <Users />,
             isActive: url.startsWith('/pos/users') || url.startsWith('/pos/activity-logs'),
-            roles: ['admin', 'supervisor'],
+            roles: ['admin'],
             items: [
                 {
                     title: "Karyawan",
@@ -172,26 +187,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {
                     title: "Log Aktifitas",
                     url: "/pos/activity-logs",
-                    roles: ['admin', 'supervisor'],
-                },
-            ],
-        },
-        {
-            title: "Laporan",
-            url: "#",
-            icon: <BarChart3 />,
-            isActive: url.startsWith('/pos/reports'),
-            roles: ['admin', 'supervisor'],
-            items: [
-                {
-                    title: "Laporan Penjualan",
-                    url: "#",
-                    roles: ['admin', 'supervisor'],
-                },
-                {
-                    title: "Laporan Stok",
-                    url: "#",
-                    roles: ['admin', 'supervisor', 'warehouse'],
+                    roles: ['admin'],
                 },
             ],
         },

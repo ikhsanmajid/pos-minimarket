@@ -1,3 +1,5 @@
+import type { CashRegisterOption } from '../../Shifts/component/OpenShiftDialog'
+
 export interface PeriodMeta {
     preset: 'today' | '7d' | 'month' | 'custom' | string
     start_date: string
@@ -151,6 +153,7 @@ export interface CashierDashboardData {
         total_transactions: number
         cash_variance: number
     }[]
+    cashRegisters: CashRegisterOption[]
 }
 
 export const formatRupiah = (amount: number | string | null | undefined): string => {

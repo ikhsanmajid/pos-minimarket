@@ -82,7 +82,10 @@ export function ReceiptPrint({
             <div className="space-y-1.5 text-[10px] border-b border-dashed border-black pb-2 mb-2">
                 {receipt.items.map((item) => (
                     <div key={item.id}>
-                        <div className="font-semibold leading-tight">{item.product_name}</div>
+                        <div className="font-semibold leading-tight">
+                            {item.product_name}
+                            {item.is_donation ? ' (Donasi)' : item.is_tax_exempt ? ' (Bebas PPN)' : ''}
+                        </div>
                         <div className="flex justify-between gap-2">
                             <span>
                                 {item.qty} {item.unit_name} x {formatRp(item.unit_price)}
@@ -123,6 +126,12 @@ export function ReceiptPrint({
                             {receipt.rounding_amount > 0 ? '+' : ''}
                             {formatRp(receipt.rounding_amount)}
                         </span>
+                    </div>
+                )}
+                {(receipt.donation_amount ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                        <span>Donasi</span>
+                        <span>{formatRp(receipt.donation_amount ?? 0)}</span>
                     </div>
                 )}
                 <div className="flex justify-between text-xs font-bold border-t border-dotted border-black pt-1 mt-1">

@@ -15,7 +15,7 @@ class ActivityLogController extends Controller
 {
     public function index(Request $request): Response
     {
-        if (! $request->user()?->hasRoles([UserRoles::Admin, UserRoles::Supervisor])) {
+        if (! $request->user()?->hasRoles(UserRoles::Admin)) {
             abort(403, 'Akses tidak diizinkan.');
         }
 

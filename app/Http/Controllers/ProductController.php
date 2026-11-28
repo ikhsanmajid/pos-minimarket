@@ -26,9 +26,12 @@ class ProductController extends Controller
     {
         Gate::authorize('viewAny', Product::class);
 
+        $canViewStock = $request->user()?->can('viewStock', Product::class) ?? false;
+
         $filters = $request->only([
             'search',
             'status',
+            'tax_status',
             'category_id',
             'stock_status',
             'sort',
@@ -37,10 +40,24 @@ class ProductController extends Controller
             'table_direction',
         ]);
 
+        if (! $canViewStock) {
+            unset($filters['stock_status']);
+            if (($filters['sort'] ?? null) === 'stock') {
+                unset($filters['sort'], $filters['direction']);
+            }
+            if (($filters['table_sort'] ?? null) === 'stock') {
+                unset($filters['table_sort'], $filters['table_direction']);
+            }
+        }
+
         $perPage = $request->integer('per_page', 10);
 
-        $allowedTableSorts = ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active'];
-        $allowedToolbarSorts = ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active', 'created_at'];
+        $allowedTableSorts = $canViewStock
+            ? ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active', 'is_tax_exempt']
+            : ['name', 'barcode', 'buy_price', 'sell_price', 'active', 'is_tax_exempt'];
+        $allowedToolbarSorts = $canViewStock
+            ? ['name', 'barcode', 'buy_price', 'sell_price', 'stock', 'active', 'is_tax_exempt', 'created_at']
+            : ['name', 'barcode', 'buy_price', 'sell_price', 'active', 'is_tax_exempt', 'created_at'];
 
         $tableSort = $request->input('table_sort');
         $tableDirection = strtolower((string) $request->input('table_direction')) === 'desc' ? 'desc' : 'asc';
@@ -74,7 +91,24 @@ class ProductController extends Controller
                     $query->where('active', $isActive);
                 }
             })
-            ->when($request->stock_status && $request->stock_status !== 'all', function ($query) use ($request) {
+            ->when($request->tax_status && $request->tax_status !== 'all', function ($query) use ($request) {
+                if ($request->tax_status === 'donation') {
+                    $query->where('is_donation', true);
+
+                    return;
+                }
+
+                $isTaxExempt = match ($request->tax_status) {
+                    'exempt' => true,
+                    'taxable' => false,
+                    default => null,
+                };
+
+                if (! is_null($isTaxExempt)) {
+                    $query->where('is_tax_exempt', $isTaxExempt);
+                }
+            })
+            ->when($canViewStock && $request->stock_status && $request->stock_status !== 'all', function ($query) use ($request) {
                 match ($request->stock_status) {
                     'out_of_stock' => $query->where('stock', '<=', 0),
                     'low_stock' => $query->where('stock', '>', 0)->whereColumn('stock', '<=', 'min_stock'),
@@ -108,10 +142,12 @@ class ProductController extends Controller
                 'category' => $product->category?->name,
                 'buy_price' => $product->buy_price,
                 'sell_price' => $product->sell_price,
-                'stock' => $product->stock,
-                'min_stock' => $product->min_stock,
+                'stock' => $canViewStock ? $product->stock : null,
+                'min_stock' => $canViewStock ? $product->min_stock : null,
                 'image' => $product->image ? asset('storage/'.$product->image) : null,
                 'active' => (bool) $product->active,
+                'is_tax_exempt' => (bool) $product->is_tax_exempt,
+                'is_donation' => (bool) $product->is_donation,
                 'units' => $product->units->map(fn (ProductUnit $unit) => [
                     'id' => $unit->id,
                     'unit_name' => $unit->unit_name,
@@ -140,9 +176,9 @@ class ProductController extends Controller
         $summary = [
             'total_products' => (int) ($summaryRow->total_products ?? 0),
             'active_products' => (int) ($summaryRow->active_products ?? 0),
-            'safe_stock_count' => (int) ($summaryRow->safe_stock_count ?? 0),
-            'low_stock_count' => (int) ($summaryRow->low_stock_count ?? 0),
-            'out_of_stock_count' => (int) ($summaryRow->out_of_stock_count ?? 0),
+            'safe_stock_count' => $canViewStock ? (int) ($summaryRow->safe_stock_count ?? 0) : null,
+            'low_stock_count' => $canViewStock ? (int) ($summaryRow->low_stock_count ?? 0) : null,
+            'out_of_stock_count' => $canViewStock ? (int) ($summaryRow->out_of_stock_count ?? 0) : null,
             'active_units_count' => (int) ($summaryRow->active_units_count ?? 0),
         ];
 
@@ -151,6 +187,7 @@ class ProductController extends Controller
             'filters' => $filters,
             'categories' => $categories,
             'summary' => $summary,
+            'canViewStock' => $canViewStock,
         ]);
     }
 
@@ -180,9 +217,12 @@ class ProductController extends Controller
     {
         Gate::authorize('view', $product);
 
+        $canViewStock = $request->user()?->can('viewStock', Product::class) ?? false;
+
         $product->load(['category', 'units']);
 
         return Inertia::render('POS/Product/DetailProduct', [
+            'canViewStock' => $canViewStock,
             'product' => [
                 'id' => $product->id,
                 'category_id' => $product->category_id,
@@ -192,10 +232,12 @@ class ProductController extends Controller
                 'base_unit' => $product->base_unit ?: 'pcs',
                 'buy_price' => $product->buy_price,
                 'sell_price' => $product->sell_price,
-                'stock' => $product->stock,
-                'min_stock' => $product->min_stock,
+                'stock' => $canViewStock ? $product->stock : null,
+                'min_stock' => $canViewStock ? $product->min_stock : null,
                 'image' => $product->image ? asset('storage/'.$product->image) : null,
                 'active' => (bool) $product->active,
+                'is_tax_exempt' => (bool) $product->is_tax_exempt,
+                'is_donation' => (bool) $product->is_donation,
                 'created_at' => $product->created_at?->format('d M Y H:i'),
                 'updated_at' => $product->updated_at?->format('d M Y H:i'),
                 'units' => $product->units->map(fn (ProductUnit $unit) => [
@@ -209,7 +251,11 @@ class ProductController extends Controller
                     'is_active' => (bool) $unit->is_active,
                 ])->values()->all(),
             ],
-            'stockMovements' => Inertia::optional(function () use ($request, $product) {
+            'stockMovements' => Inertia::optional(function () use ($request, $product, $canViewStock) {
+                if (! $canViewStock) {
+                    return null;
+                }
+
                 $perPage = $request->integer('mutation_per_page', 15);
                 $likeOperator = DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
 
@@ -301,6 +347,7 @@ class ProductController extends Controller
                     ['value' => StockMovementType::SaleReturn->value, 'label' => StockMovementType::SaleReturn->label()],
                     ['value' => StockMovementType::AdjustmentIn->value, 'label' => StockMovementType::AdjustmentIn->label()],
                     ['value' => StockMovementType::AdjustmentOut->value, 'label' => StockMovementType::AdjustmentOut->label()],
+                    ['value' => StockMovementType::Opname->value, 'label' => StockMovementType::Opname->label()],
                     ['value' => StockMovementType::PurchaseReturnOut->value, 'label' => StockMovementType::PurchaseReturnOut->label()],
                 ];
 
@@ -414,6 +461,8 @@ class ProductController extends Controller
                 'min_stock' => $product->min_stock,
                 'image' => $product->image ? asset('storage/'.$product->image) : null,
                 'active' => (bool) $product->active,
+                'is_tax_exempt' => (bool) $product->is_tax_exempt,
+                'is_donation' => (bool) $product->is_donation,
                 'units' => $product->units->map(fn (ProductUnit $unit) => [
                     'id' => $unit->id,
                     'unit_name' => $unit->unit_name,
@@ -450,6 +499,7 @@ class ProductController extends Controller
     {
         Gate::authorize('viewAny', Product::class);
 
+        $canViewStock = $request->user()?->can('viewStock', Product::class) ?? false;
         $search = trim((string) $request->input('search', $request->input('q', '')));
         $onlyActive = $request->boolean('only_active', true);
 
@@ -469,29 +519,40 @@ class ProductController extends Controller
             })
             ->orderBy('name')
             ->limit(25)
-            ->get(['id', 'name', 'base_unit', 'barcode', 'buy_price', 'sell_price', 'stock', 'min_stock', 'category_id'])
-            ->map(fn (Product $p) => [
-                'value' => $p->id,
-                'label' => "{$p->name} ({$p->barcode}) - Stok: {$p->stock} ".($p->base_unit ?: 'pcs'),
-                'id' => $p->id,
-                'name' => $p->name,
-                'base_unit' => $p->base_unit ?: 'pcs',
-                'barcode' => $p->barcode,
-                'buy_price' => (float) $p->buy_price,
-                'sell_price' => (float) $p->sell_price,
-                'stock' => (int) $p->stock,
-                'min_stock' => (int) $p->min_stock,
-                'category_name' => $p->category?->name ?? '-',
-                'units' => $p->activeUnits->map(fn (ProductUnit $unit) => [
-                    'id' => $unit->id,
-                    'unit_name' => $unit->unit_name,
-                    'conversion_factor' => (int) $unit->conversion_factor,
-                    'barcode' => $unit->barcode,
-                    'buy_price' => (float) $unit->buy_price,
-                    'sell_price' => $unit->sell_price !== null ? (float) $unit->sell_price : null,
-                    'is_default_purchase' => (bool) $unit->is_default_purchase,
-                ])->values()->all(),
-            ]);
+            ->get(['id', 'name', 'base_unit', 'barcode', 'buy_price', 'sell_price', 'stock', 'min_stock', 'category_id', 'is_tax_exempt', 'is_donation'])
+            ->map(function (Product $p) use ($canViewStock): array {
+                $item = [
+                    'value' => $p->id,
+                    'label' => $canViewStock
+                        ? "{$p->name} ({$p->barcode}) - Stok: {$p->stock} ".($p->base_unit ?: 'pcs')
+                        : "{$p->name} ({$p->barcode})",
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'base_unit' => $p->base_unit ?: 'pcs',
+                    'barcode' => $p->barcode,
+                    'buy_price' => (float) $p->buy_price,
+                    'sell_price' => (float) $p->sell_price,
+                    'is_tax_exempt' => (bool) $p->is_tax_exempt,
+                    'is_donation' => (bool) $p->is_donation,
+                    'category_name' => $p->category?->name ?? '-',
+                    'units' => $p->activeUnits->map(fn (ProductUnit $unit) => [
+                        'id' => $unit->id,
+                        'unit_name' => $unit->unit_name,
+                        'conversion_factor' => (int) $unit->conversion_factor,
+                        'barcode' => $unit->barcode,
+                        'buy_price' => (float) $unit->buy_price,
+                        'sell_price' => $unit->sell_price !== null ? (float) $unit->sell_price : null,
+                        'is_default_purchase' => (bool) $unit->is_default_purchase,
+                    ])->values()->all(),
+                ];
+
+                if ($canViewStock) {
+                    $item['stock'] = (int) $p->stock;
+                    $item['min_stock'] = (int) $p->min_stock;
+                }
+
+                return $item;
+            });
 
         return response()->json($products);
     }

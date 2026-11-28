@@ -25,6 +25,14 @@ class ProductPolicy
     }
 
     /**
+     * Determine whether the user can view stock quantities and stock movements.
+     */
+    public function viewStock(User $user): bool
+    {
+        return $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor, UserRoles::Warehouse]);
+    }
+
+    /**
      * Determine whether the user can create models.
      */
     public function create(User $user): bool
