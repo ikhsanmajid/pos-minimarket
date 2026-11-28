@@ -6,13 +6,18 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashRegisterController;
 use App\Http\Controllers\CashierShiftController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FinancialAccountController;
+use App\Http\Controllers\FinancialCategoryController;
 use App\Http\Controllers\FinancialTransactionController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductPriceTierController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PromotionController;
 use App\Http\Controllers\PurchaseOrderController;
+use App\Http\Controllers\Reports\ReportController;
 use App\Http\Controllers\SalesReturnController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockOpnameController;
@@ -20,12 +25,13 @@ use App\Http\Controllers\StoreSettingController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\VoucherController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
     Route::redirect('/', '/login');
     Route::get('/login', [AuthController::class, 'index'])->name('login');
-    Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1');
+    Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:20,1');
 });
 
 Route::middleware('auth')->group(function () {
@@ -44,6 +50,11 @@ Route::middleware('auth')->group(function () {
         Route::prefix('/cashier')->name('cashier.')->middleware('shift.open')->group(function () {
             Route::get('/', [PosController::class, 'index'])->name('index');
             Route::get('/lookup', [PosController::class, 'lookup'])->name('lookup');
+            Route::post('/calculate-cart', [PosController::class, 'calculateCart'])->name('calculate-cart');
+            Route::post('/voucher/validate', [PosController::class, 'validateVoucher'])->name('voucher.validate');
+            Route::post('/voucher/reserve', [PosController::class, 'reserveVoucher'])->name('voucher.reserve');
+            Route::post('/voucher/release', [PosController::class, 'releaseVoucher'])->name('voucher.release');
+            Route::get('/check-promo', [PosController::class, 'checkProductPromo'])->name('check-promo');
             Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
             Route::post('/hold', [PosController::class, 'hold'])->name('hold');
             Route::get('/held', [PosController::class, 'heldList'])->name('held.index');
@@ -81,7 +92,18 @@ Route::middleware('auth')->group(function () {
             Route::get('/{product}/edit', [ProductController::class, 'edit'])->name('edit');
             Route::match(['post', 'patch'], '/{product}', [ProductController::class, 'update'])->name('update');
             Route::delete('/{product}', [ProductController::class, 'destroy'])->name('destroy');
+            Route::post('/{product}/price-tiers', [ProductPriceTierController::class, 'store'])->name('price-tiers.store');
+            Route::patch('/{product}/price-tiers/{priceTier}', [ProductPriceTierController::class, 'update'])->name('price-tiers.update');
+            Route::delete('/{product}/price-tiers/{priceTier}', [ProductPriceTierController::class, 'destroy'])->name('price-tiers.destroy');
         });
+
+        // Promo & Diskon
+        Route::resource('promotions', PromotionController::class)->only(['index', 'store', 'update', 'destroy']);
+
+        // Voucher / Kode Promo
+        Route::get('/vouchers/generate-code', [VoucherController::class, 'generateCode'])->name('vouchers.generate-code');
+        Route::post('/vouchers/bulk', [VoucherController::class, 'generateBulk'])->name('vouchers.bulk');
+        Route::resource('vouchers', VoucherController::class)->only(['index', 'store', 'update', 'destroy']);
 
         // Categories
         Route::get('/categories/search', [CategoryController::class, 'search'])->name('categories.search');
@@ -107,6 +129,10 @@ Route::middleware('auth')->group(function () {
                 Route::get('/{stockOpname}/pdf', [StockOpnameController::class, 'downloadPdf'])->name('pdf');
             });
         });
+
+        // Pelanggan / Member (Customer)
+        Route::get('/customers/search', [CustomerController::class, 'search'])->name('customers.search');
+        Route::resource('customers', CustomerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
 
         // Suppliers
         Route::get('/suppliers/search', [SupplierController::class, 'search'])->name('suppliers.search');
@@ -142,12 +168,43 @@ Route::middleware('auth')->group(function () {
                 Route::delete('/{financialAccount}', [FinancialAccountController::class, 'destroy'])->name('destroy');
             });
 
+            Route::prefix('/categories')->name('categories.')->group(function () {
+                Route::get('/', [FinancialCategoryController::class, 'index'])->name('index');
+                Route::post('/', [FinancialCategoryController::class, 'store'])->name('store');
+                Route::patch('/{financialCategory}', [FinancialCategoryController::class, 'update'])->name('update');
+                Route::delete('/{financialCategory}', [FinancialCategoryController::class, 'destroy'])->name('destroy');
+            });
+
             Route::prefix('/payables')->name('payables.')->group(function () {
                 Route::get('/', [AccountPayableController::class, 'index'])->name('index');
                 Route::post('/{accountPayable}/payments', [AccountPayableController::class, 'recordPayment'])->name('payments.store');
             });
 
-            Route::get('/transactions', [FinancialTransactionController::class, 'index'])->name('transactions.index');
+            Route::prefix('/transactions')->name('transactions.')->group(function () {
+                Route::get('/', [FinancialTransactionController::class, 'index'])->name('index');
+                Route::post('/', [FinancialTransactionController::class, 'store'])->name('store');
+            });
+        });
+
+        // Laporan Bisnis & Ekspor (CSV / PDF)
+        Route::prefix('/reports')->name('reports.')->group(function () {
+            Route::get('/cashiers/search', [ReportController::class, 'searchCashiers'])->name('cashiers.search');
+
+            Route::get('/sales', [ReportController::class, 'sales'])->name('sales');
+            Route::get('/sales/export/csv', [ReportController::class, 'exportSalesCsv'])->name('sales.export.csv');
+            Route::get('/sales/export/pdf', [ReportController::class, 'exportSalesPdf'])->name('sales.export.pdf');
+
+            Route::get('/profit-loss', [ReportController::class, 'profitLoss'])->name('profit-loss');
+            Route::get('/profit-loss/export/csv', [ReportController::class, 'exportProfitLossCsv'])->name('profit-loss.export.csv');
+            Route::get('/profit-loss/export/pdf', [ReportController::class, 'exportProfitLossPdf'])->name('profit-loss.export.pdf');
+
+            Route::get('/stock-valuation', [ReportController::class, 'stockValuation'])->name('stock-valuation');
+            Route::get('/stock-valuation/export/csv', [ReportController::class, 'exportStockCsv'])->name('stock-valuation.export.csv');
+            Route::get('/stock-valuation/export/pdf', [ReportController::class, 'exportStockPdf'])->name('stock-valuation.export.pdf');
+
+            Route::get('/finance-aging', [ReportController::class, 'financeAging'])->name('finance-aging');
+            Route::get('/finance-aging/export/csv', [ReportController::class, 'exportFinanceCsv'])->name('finance-aging.export.csv');
+            Route::get('/finance-aging/export/pdf', [ReportController::class, 'exportFinancePdf'])->name('finance-aging.export.pdf');
         });
 
         // Manajemen Users

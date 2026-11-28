@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
+use App\Policies\ReportPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -24,6 +26,15 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->registerReportGates();
+    }
+
+    protected function registerReportGates(): void
+    {
+        Gate::define('reports.sales', [ReportPolicy::class, 'viewSales']);
+        Gate::define('reports.profit-loss', [ReportPolicy::class, 'viewProfitLoss']);
+        Gate::define('reports.stock', [ReportPolicy::class, 'viewStock']);
+        Gate::define('reports.finance', [ReportPolicy::class, 'viewFinance']);
     }
 
     /**

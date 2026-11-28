@@ -42,4 +42,10 @@ class ProductUnit extends Model
     {
         return $this->hasMany(PurchaseOrderItem::class);
     }
+
+    /** @return HasMany<ProductPriceTier, $this> */
+    public function priceTiers(): HasMany
+    {
+        return $this->hasMany(ProductPriceTier::class)->orderBy('min_qty');
+    }
 }

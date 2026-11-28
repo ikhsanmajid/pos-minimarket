@@ -21,6 +21,12 @@ use Illuminate\Support\Carbon;
  * @property string $unit_price
  * @property string $cost_price_snapshot
  * @property string $discount_amount
+ * @property int|null $applied_promotion_id
+ * @property string|null $applied_promotion_name
+ * @property string $pricing_source
+ * @property string $allocated_header_discount
+ * @property int $free_qty
+ * @property bool $is_promo_excluded
  * @property bool $is_tax_exempt
  * @property bool $is_donation
  * @property string $quantity
@@ -42,6 +48,12 @@ use Illuminate\Support\Carbon;
     'unit_price',
     'cost_price_snapshot',
     'discount_amount',
+    'applied_promotion_id',
+    'applied_promotion_name',
+    'pricing_source',
+    'allocated_header_discount',
+    'free_qty',
+    'is_promo_excluded',
     'is_tax_exempt',
     'is_donation',
     'quantity',
@@ -60,6 +72,9 @@ class TransactionDetail extends Model
             'unit_price' => 'decimal:2',
             'cost_price_snapshot' => 'decimal:2',
             'discount_amount' => 'decimal:2',
+            'allocated_header_discount' => 'decimal:2',
+            'free_qty' => 'integer',
+            'is_promo_excluded' => 'boolean',
             'is_tax_exempt' => 'boolean',
             'is_donation' => 'boolean',
             'buy_price' => 'decimal:2',
@@ -90,5 +105,17 @@ class TransactionDetail extends Model
     public function returnItems(): HasMany
     {
         return $this->hasMany(SalesReturnItem::class);
+    }
+
+    /** @return BelongsTo<Promotion, $this> */
+    public function appliedPromotion(): BelongsTo
+    {
+        return $this->belongsTo(Promotion::class, 'applied_promotion_id');
+    }
+
+    /** @return HasMany<AppliedPromotion, $this> */
+    public function appliedPromotions(): HasMany
+    {
+        return $this->hasMany(AppliedPromotion::class);
     }
 }

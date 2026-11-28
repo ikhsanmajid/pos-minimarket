@@ -6,9 +6,14 @@ use App\Models\AccountPayable;
 use App\Models\CashRegister;
 use App\Models\CashierShift;
 use App\Models\Category;
+use App\Models\Customer;
 use App\Models\FinancialAccount;
+use App\Models\FinancialCategory;
+use App\Models\FinancialTransaction;
 use App\Models\PayablePayment;
 use App\Models\Product;
+use App\Models\ProductPriceTier;
+use App\Models\Promotion;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderReceipt;
 use App\Models\SalesReturn;
@@ -19,6 +24,8 @@ use App\Models\StoreSetting;
 use App\Models\Supplier;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Models\Voucher;
+use App\Models\VoucherRedemption;
 
 enum ActivityLogCategory: string
 {
@@ -29,12 +36,15 @@ enum ActivityLogCategory: string
     case Transaction = 'transaction';
     case CashierShift = 'cashier_shift';
     case CashRegister = 'cash_register';
+    case Customer = 'customer';
+    case Promotion = 'promotion';
     case Supplier = 'supplier';
     case PurchaseOrder = 'purchase_order';
     case Finance = 'finance';
     case StockAdjustment = 'stock_adjustment';
     case StockOpname = 'stock_opname';
     case StoreSetting = 'store_setting';
+    case Report = 'report';
     case Default = 'default';
 
     /**
@@ -50,12 +60,15 @@ enum ActivityLogCategory: string
             self::Transaction => 'Transaksi Penjualan',
             self::CashierShift => 'Sesi Shift Kasir',
             self::CashRegister => 'Kasir Fisik (Mesin Kasir)',
+            self::Customer => 'Pelanggan / Member',
+            self::Promotion => 'Promo & Harga Grosir',
             self::Supplier => 'Pemasok / Supplier',
             self::PurchaseOrder => 'Purchase Order (Pengadaan)',
             self::Finance => 'Keuangan & Hutang Dagang',
             self::StockAdjustment => 'Penyesuaian Stok (Adjustment)',
             self::StockOpname => 'Stock Opname (Audit Stok)',
             self::StoreSetting => 'Pengaturan Toko',
+            self::Report => 'Laporan Bisnis & Ekspor',
             self::Default => 'Master Data (Lainnya)',
         };
     }
@@ -73,12 +86,15 @@ enum ActivityLogCategory: string
             self::Transaction => 'Transaksi',
             self::CashierShift => 'Sesi Shift',
             self::CashRegister => 'Kasir Fisik',
+            self::Customer => 'Pelanggan',
+            self::Promotion => 'Promo & Grosir',
             self::Supplier => 'Supplier',
             self::PurchaseOrder => 'Purchase Order',
             self::Finance => 'Keuangan',
             self::StockAdjustment => 'Stock Adjustment',
             self::StockOpname => 'Stock Opname',
             self::StoreSetting => 'Pengaturan Toko',
+            self::Report => 'Laporan',
             self::Default => 'Master Data',
         };
     }
@@ -95,6 +111,8 @@ enum ActivityLogCategory: string
             self::Transaction => Transaction::class,
             self::CashierShift => CashierShift::class,
             self::CashRegister => CashRegister::class,
+            self::Customer => Customer::class,
+            self::Promotion => Promotion::class,
             self::Supplier => Supplier::class,
             self::PurchaseOrder => PurchaseOrder::class,
             self::Finance => FinancialAccount::class,
@@ -118,6 +136,8 @@ enum ActivityLogCategory: string
 
         if (in_array($baseName, [
             class_basename(FinancialAccount::class),
+            class_basename(FinancialCategory::class),
+            class_basename(FinancialTransaction::class),
             class_basename(AccountPayable::class),
             class_basename(PayablePayment::class),
         ], true)) {
@@ -140,6 +160,15 @@ enum ActivityLogCategory: string
             class_basename(SalesReturn::class),
         ], true)) {
             return self::Transaction;
+        }
+
+        if (in_array($baseName, [
+            class_basename(Promotion::class),
+            class_basename(ProductPriceTier::class),
+            class_basename(Voucher::class),
+            class_basename(VoucherRedemption::class),
+        ], true)) {
+            return self::Promotion;
         }
 
         foreach (self::cases() as $case) {

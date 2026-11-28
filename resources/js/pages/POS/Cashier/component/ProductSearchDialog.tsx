@@ -77,7 +77,15 @@ export function ProductSearchDialog({
     }, [query, open])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(nextOpen, eventDetails) => {
+                if (!nextOpen && eventDetails?.reason === 'outside-press') {
+                    return
+                }
+                onOpenChange(nextOpen)
+            }}
+        >
             <DialogContent className="w-[calc(100%-2rem)] sm:max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
                 <DialogHeader className="p-6 pb-4 border-b shrink-0">
                     <DialogTitle>Cari Produk (F2)</DialogTitle>

@@ -22,6 +22,12 @@ class CheckoutPosRequest extends FormRequest
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'held_transaction_id' => ['nullable', 'integer', 'exists:held_transactions,id'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'voucher_code' => ['nullable', 'string', 'max:64'],
+            'voucher_reservation_token' => ['nullable', 'string', 'max:64'],
+            'vouchers' => ['nullable', 'array'],
+            'vouchers.*.code' => ['required_with:vouchers', 'string', 'max:64'],
+            'vouchers.*.reservation_token' => ['nullable', 'string', 'max:64'],
+            'selected_tebus_murah_promotion_id' => ['nullable', 'integer', 'exists:promotions,id'],
             'donation_product_id' => ['nullable', 'integer', 'exists:products,id'],
             'donation_amount' => ['nullable', 'numeric', 'min:0'],
             'supervisor_pin' => ['nullable', 'string', 'max:20'],
@@ -33,7 +39,8 @@ class CheckoutPosRequest extends FormRequest
             'payments' => ['required', 'array', 'min:1'],
             'payments.*.payment_method' => ['required', 'string', Rule::in(array_column(PaymentMethod::cases(), 'value'))],
             'payments.*.financial_account_id' => ['required', 'integer', 'exists:financial_accounts,id'],
-            'payments.*.amount' => ['required', 'numeric', 'gt:0'],
+            'payments.*.amount' => ['required', 'numeric', 'min:0'],
+            'payments.*.card_bin' => ['nullable', 'string', 'max:16'],
             'payments.*.reference_number' => ['nullable', 'string', 'max:100'],
         ];
     }

@@ -94,8 +94,14 @@ export function ReceiptPrint({
                         </div>
                         {item.discount_amount > 0 && (
                             <div className="flex justify-between gap-2 text-[9px] italic">
-                                <span>Diskon item</span>
-                                <span>-{formatRp(item.discount_amount)}</span>
+                                <span className="truncate">
+                                    {item.pricing_source === 'wholesale_tier'
+                                        ? 'Harga Grosir'
+                                        : item.pricing_source === 'promotion' && item.applied_promotion_name
+                                          ? `Promo: ${item.applied_promotion_name}`
+                                          : 'Diskon item'}
+                                </span>
+                                <span className="shrink-0">-{formatRp(item.discount_amount)}</span>
                             </div>
                         )}
                     </div>
@@ -107,12 +113,38 @@ export function ReceiptPrint({
                     <span>Subtotal</span>
                     <span>{formatRp(receipt.subtotal)}</span>
                 </div>
+                {(receipt.transaction_promotions ?? []).map((tp, idx) => (
+                    <div key={`${tp.type}-${idx}`} className="flex justify-between gap-2">
+                        <span className="truncate">{tp.name}</span>
+                        <span className="shrink-0">-{formatRp(tp.discount_amount)}</span>
+                    </div>
+                ))}
+                {(receipt.voucher_discount_amount ?? 0) > 0 && (
+                    <div className="flex justify-between gap-2">
+                        <span className="truncate">
+                            Voucher{receipt.voucher_code ? ` (${receipt.voucher_code})` : ''}
+                        </span>
+                        <span className="shrink-0">-{formatRp(receipt.voucher_discount_amount ?? 0)}</span>
+                    </div>
+                )}
+                {receipt.payment_promotion && receipt.payment_promotion.discount_amount > 0 && (
+                    <div className="flex justify-between gap-2">
+                        <span className="truncate">Promo Bayar: {receipt.payment_promotion.name}</span>
+                        <span className="shrink-0">-{formatRp(receipt.payment_promotion.discount_amount)}</span>
+                    </div>
+                )}
                 {receipt.discount_amount > 0 && (
                     <div className="flex justify-between">
-                        <span>Diskon</span>
+                        <span>Total Diskon</span>
                         <span>-{formatRp(receipt.discount_amount)}</span>
                     </div>
                 )}
+                {(receipt.cashback_promotions ?? []).map((cb, idx) => (
+                    <div key={`cb-${idx}`} className="flex justify-between gap-2 text-[9px] italic">
+                        <span className="truncate">{cb.name}</span>
+                        <span className="shrink-0">+{formatRp(cb.cashback_amount)}</span>
+                    </div>
+                ))}
                 {receipt.tax_amount > 0 && (
                     <div className="flex justify-between">
                         <span>PPN</span>

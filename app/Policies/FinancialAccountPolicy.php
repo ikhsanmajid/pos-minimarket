@@ -10,12 +10,12 @@ class FinancialAccountPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]);
+        return $user->hasRoles(UserRoles::Admin);
     }
 
     public function view(User $user, FinancialAccount $financialAccount): bool
     {
-        return $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]);
+        return $user->hasRoles(UserRoles::Admin);
     }
 
     public function create(User $user): bool

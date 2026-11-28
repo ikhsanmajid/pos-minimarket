@@ -142,7 +142,7 @@ class Transaction extends Model
     /** @return BelongsTo<Customer, $this> */
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(Customer::class);
+        return $this->belongsTo(Customer::class)->withTrashed();
     }
 
     /** @return BelongsTo<User, $this> */
@@ -173,5 +173,17 @@ class Transaction extends Model
     public function salesReturns(): HasMany
     {
         return $this->hasMany(SalesReturn::class)->latest('id');
+    }
+
+    /** @return HasMany<AppliedPromotion, $this> */
+    public function appliedPromotions(): HasMany
+    {
+        return $this->hasMany(AppliedPromotion::class);
+    }
+
+    /** @return HasMany<VoucherRedemption, $this> */
+    public function voucherRedemptions(): HasMany
+    {
+        return $this->hasMany(VoucherRedemption::class);
     }
 }

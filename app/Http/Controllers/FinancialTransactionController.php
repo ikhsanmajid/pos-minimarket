@@ -3,11 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Enums\FinancialTransactionType;
-use App\Enums\UserRoles;
+use App\Http\Requests\StoreFinancialTransactionRequest;
 use App\Models\FinancialAccount;
 use App\Models\FinancialCategory;
 use App\Models\FinancialTransaction;
+use App\Models\User;
+use App\Services\FinanceService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,9 +20,7 @@ class FinancialTransactionController extends Controller
 {
     public function index(Request $request): Response
     {
-        if (! $request->user()?->hasRoles([UserRoles::Admin, UserRoles::Supervisor])) {
-            abort(403, 'Akses tidak diizinkan.');
-        }
+        Gate::authorize('viewAny', FinancialTransaction::class);
 
         $filters = $request->only([
             'search',
@@ -43,27 +46,31 @@ class FinancialTransactionController extends Controller
         $toolbarDirection = strtolower((string) $request->input('direction')) === 'asc' ? 'asc' : 'desc';
         $hasToolbarSort = ! empty($toolbarSort) && in_array($toolbarSort, $allowedSorts, true);
 
+        $likeOperator = DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
+
         $baseQuery = FinancialTransaction::query()
-            ->when($request->search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('transaction_number', 'ilike', "%{$search}%")
-                        ->orWhere('description', 'ilike', "%{$search}%");
+            ->when($request->search, function ($query, $search) use ($likeOperator): void {
+                $term = trim((string) $search);
+                $query->where(function ($q) use ($term, $likeOperator): void {
+                    $q->where('transaction_number', $likeOperator, "%{$term}%")
+                        ->orWhere('reference_number', $likeOperator, "%{$term}%")
+                        ->orWhere('description', $likeOperator, "%{$term}%");
                 });
             })
-            ->when($request->financial_account_id && $request->financial_account_id !== 'all', function ($query) use ($request) {
+            ->when($request->financial_account_id && $request->financial_account_id !== 'all', function ($query) use ($request): void {
                 $query->where('financial_account_id', $request->financial_account_id);
             })
-            ->when($request->financial_category_id && $request->financial_category_id !== 'all', function ($query) use ($request) {
+            ->when($request->financial_category_id && $request->financial_category_id !== 'all', function ($query) use ($request): void {
                 $query->where('financial_category_id', $request->financial_category_id);
             })
-            ->when($request->type && $request->type !== 'all', function ($query) use ($request) {
+            ->when($request->type && $request->type !== 'all', function ($query) use ($request): void {
                 $query->where('type', $request->type);
             })
-            ->when($request->start_date, function ($query, $date) {
-                $query->whereDate('transaction_date', '>=', $date);
+            ->when($request->start_date, function ($query, $date): void {
+                $query->whereDate('transaction_date', '>=', (string) $date);
             })
-            ->when($request->end_date, function ($query, $date) {
-                $query->whereDate('transaction_date', '<=', $date);
+            ->when($request->end_date, function ($query, $date): void {
+                $query->whereDate('transaction_date', '<=', (string) $date);
             });
 
         $summaryRow = FinancialTransaction::query()
@@ -113,29 +120,66 @@ class FinancialTransactionController extends Controller
 
         $transactions = $query->paginate($perPage)
             ->withQueryString()
-            ->through(fn (FinancialTransaction $tx) => [
-                'id' => $tx->id,
-                'transaction_number' => $tx->transaction_number,
-                'transaction_date' => $tx->transaction_date?->format('d M Y'),
-                'type' => $tx->type->value,
-                'type_label' => $tx->type->label(),
-                'amount' => (float) $tx->amount,
-                'balance_before' => (float) $tx->balance_before,
-                'balance_after' => (float) $tx->balance_after,
-                'description' => $tx->description,
-                'account_name' => $tx->financialAccount?->name ?? '-',
-                'account_code' => $tx->financialAccount?->code ?? '-',
-                'category_name' => $tx->financialCategory?->name ?? '-',
-                'creator_name' => $tx->creator?->name ?? 'Sistem',
-                'created_at' => $tx->created_at?->format('d M Y H:i'),
-            ]);
+            ->through(function (FinancialTransaction $tx): array {
+                $source = $tx->resolveSource();
+
+                return [
+                    'id' => $tx->id,
+                    'transaction_number' => $tx->transaction_number,
+                    'transaction_date' => $tx->transaction_date->format('d M Y'),
+                    'type' => $tx->type->value,
+                    'type_label' => $tx->type->label(),
+                    'amount' => (float) $tx->amount,
+                    'balance_before' => (float) $tx->balance_before,
+                    'balance_after' => (float) $tx->balance_after,
+                    'reference_number' => $tx->reference_number,
+                    'source_code' => $source['code'],
+                    'source_label' => $source['label'],
+                    'description' => $tx->description,
+                    'account_name' => $tx->financialAccount?->name ?? '-',
+                    'account_code' => $tx->financialAccount?->code ?? '-',
+                    'category_name' => $tx->financialCategory?->name ?? '-',
+                    'creator_name' => $tx->creator?->name ?? 'Sistem',
+                    'created_at' => $tx->created_at?->format('d M Y H:i') ?? '-',
+                ];
+            });
 
         $accounts = FinancialAccount::withTrashed()
             ->orderBy('name')
             ->get(['id', 'code', 'name', 'is_active']);
 
+        $activeAccounts = FinancialAccount::query()
+            ->where('is_active', true)
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'type', 'current_balance', 'is_default'])
+            ->map(fn (FinancialAccount $acc): array => [
+                'id' => $acc->id,
+                'code' => $acc->code,
+                'name' => $acc->name,
+                'type' => $acc->type->value,
+                'type_label' => $acc->type->label(),
+                'current_balance' => (float) $acc->current_balance,
+                'is_default' => (bool) $acc->is_default,
+            ])
+            ->values();
+
         $categories = FinancialCategory::orderBy('type')->orderBy('name')
             ->get(['id', 'code', 'name', 'type']);
+
+        $manualCategories = FinancialCategory::query()
+            ->active()
+            ->whereNotIn('code', FinanceService::AUTO_SYSTEM_CATEGORY_CODES)
+            ->orderBy('type')
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'type'])
+            ->map(fn (FinancialCategory $cat): array => [
+                'id' => $cat->id,
+                'code' => $cat->code,
+                'name' => $cat->name,
+                'type' => $cat->type->value,
+            ])
+            ->values();
 
         return Inertia::render('POS/Finance/FinancialTransaction', [
             'transactions' => $transactions,
@@ -149,11 +193,36 @@ class FinancialTransactionController extends Controller
                 'net_flow' => round($totalIn - $totalOut, 2),
             ],
             'accounts' => $accounts,
+            'activeAccounts' => $activeAccounts,
             'categories' => $categories,
-            'transactionTypes' => collect(FinancialTransactionType::cases())->map(fn ($t) => [
+            'manualCategories' => $manualCategories,
+            'transactionTypes' => collect(FinancialTransactionType::cases())->map(fn (FinancialTransactionType $t): array => [
                 'value' => $t->value,
                 'label' => $t->label(),
-            ]),
+            ])->values(),
+            'canCreate' => $request->user()?->can('create', FinancialTransaction::class) ?? false,
         ]);
+    }
+
+    public function store(StoreFinancialTransactionRequest $request, FinanceService $financeService): RedirectResponse
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+
+        /** @var array{
+         *     financial_account_id: int|string,
+         *     financial_category_id: int|string,
+         *     type: string,
+         *     amount: float|int|string,
+         *     transaction_date: string,
+         *     reference_number?: string|null,
+         *     description: string
+         * } $validated */
+        $validated = $request->validated();
+
+        $transaction = $financeService->recordManualTransaction($validated, $actor);
+
+        return redirect()->route('pos.finance.transactions.index')
+            ->with('success', "Transaksi {$transaction->transaction_number} berhasil dicatat dan saldo akun diperbarui.");
     }
 }

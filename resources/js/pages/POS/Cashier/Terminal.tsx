@@ -29,6 +29,7 @@ import {
     Clock,
     CreditCard,
     FolderClock,
+    Gift,
     Heart,
     Minus,
     PauseCircle,
@@ -36,14 +37,21 @@ import {
     ReceiptText,
     Search,
     ShoppingCart,
+    Sparkles,
+    Tag,
+    TicketPercent,
     Trash2,
+    X,
 } from 'lucide-react'
 import cashier from '@/routes/pos/cashier'
+import PosController from '@/actions/App/Http/Controllers/PosController'
 import shifts from '@/routes/pos/shifts'
 import transactions from '@/routes/pos/transactions'
 import type {
     PageProps,
+    PosCartCalculationResponse,
     PosCartItem,
+    PosCartPricingLine,
     PosCustomerOption,
     PosDonationProduct,
     PosFinancialAccount,
@@ -51,13 +59,17 @@ import type {
     PosLookupProduct,
     PosPaymentMethodOption,
     PosReceiptData,
+    PosTebusMurahOffer,
 } from '@/types'
 import { CheckoutSuccessDialog } from './component/CheckoutSuccessDialog'
+import { CheckPromoDialog } from './component/CheckPromoDialog'
+import { CustomerPicker } from './component/CustomerPicker'
 import { HeldBillsDialog } from './component/HeldBillsDialog'
 import {
     PaymentDialog,
     type PaymentDonationPayload,
     type PaymentEntryPayload,
+    type PaymentPromoPreviewResult,
 } from './component/PaymentDialog'
 import { ProductSearchDialog } from './component/ProductSearchDialog'
 import { calculateCartSummary, formatRupiah, getXsrfToken } from './component/posUtils'
@@ -104,17 +116,29 @@ const Terminal = () => {
 
     // Dialog states
     const [searchOpen, setSearchOpen] = useState(false)
+    const [checkPromoOpen, setCheckPromoOpen] = useState(false)
     const [paymentOpen, setPaymentOpen] = useState(false)
     const [heldOpen, setHeldOpen] = useState(false)
     const [holdPromptOpen, setHoldPromptOpen] = useState(false)
     const [holdLabel, setHoldLabel] = useState('')
     const [pinDialogOpen, setPinDialogOpen] = useState(false)
+    const [customerModalOpen, setCustomerModalOpen] = useState(false)
     const [pinError, setPinError] = useState<string | null>(null)
     const [pendingPayments, setPendingPayments] = useState<PaymentEntryPayload[] | null>(null)
     const [pendingDonation, setPendingDonation] = useState<PaymentDonationPayload | null>(null)
 
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [paymentError, setPaymentError] = useState<string | null>(null)
+    const [serverPricing, setServerPricing] = useState<PosCartCalculationResponse | null>(null)
+
+    // Voucher & Tebus Murah state (mendukung > 1 voucher)
+    const [voucherInput, setVoucherInput] = useState('')
+    const [appliedVouchers, setAppliedVouchers] = useState<
+        Array<{ code: string; name?: string | null; discount_amount: number; reservation_token: string | null }>
+    >([])
+    const [voucherError, setVoucherError] = useState<string | null>(null)
+    const [isApplyingVoucher, setIsApplyingVoucher] = useState(false)
+    const [selectedTebusMurahPromoId, setSelectedTebusMurahPromoId] = useState<number | null>(null)
 
     // Receipt & success state
     const [lastReceipt, setLastReceipt] = useState<PosReceiptData | null>(null)
@@ -135,12 +159,117 @@ const Terminal = () => {
 
     // Auto-focus barcode input on mount and whenever modals close
     useEffect(() => {
-        if (!searchOpen && !paymentOpen && !heldOpen && !holdPromptOpen && !pinDialogOpen && !successOpen) {
+        if (
+            !searchOpen &&
+            !checkPromoOpen &&
+            !paymentOpen &&
+            !heldOpen &&
+            !holdPromptOpen &&
+            !pinDialogOpen &&
+            !successOpen &&
+            !customerModalOpen
+        ) {
             focusBarcode()
         }
-    }, [searchOpen, paymentOpen, heldOpen, holdPromptOpen, pinDialogOpen, successOpen, focusBarcode])
+    }, [
+        searchOpen,
+        checkPromoOpen,
+        paymentOpen,
+        heldOpen,
+        holdPromptOpen,
+        pinDialogOpen,
+        successOpen,
+        customerModalOpen,
+        focusBarcode,
+    ])
 
-    const summary = useMemo(
+    // Evaluasi harga grosir, promo & voucher secara real-time di server saat keranjang / pelanggan berubah
+    useEffect(() => {
+        if (cart.length === 0) {
+            setServerPricing(null)
+            if (appliedVouchers.length > 0) {
+                appliedVouchers.forEach((v) => {
+                    if (v.reservation_token) {
+                        void fetch(PosController.releaseVoucher.url(), {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Accept: 'application/json',
+                                'X-XSRF-TOKEN': getXsrfToken(),
+                            },
+                            body: JSON.stringify({ reservation_token: v.reservation_token }),
+                        }).catch(() => undefined)
+                    }
+                })
+                setAppliedVouchers([])
+            }
+            return
+        }
+
+        const controller = new AbortController()
+        const timer = window.setTimeout(async () => {
+            try {
+                const res = await fetch(cashier.calculateCart.url(), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-XSRF-TOKEN': getXsrfToken(),
+                    },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        customer_id: selectedCustomerId !== 'guest' ? Number(selectedCustomerId) : null,
+                        discount_amount: transactionDiscount,
+                        has_cash_payment: true,
+                        vouchers: appliedVouchers.map((v) => ({
+                            code: v.code,
+                            reservation_token: v.reservation_token,
+                        })),
+                        selected_tebus_murah_promotion_id: selectedTebusMurahPromoId,
+                        items: cart.map((l) => ({
+                            product_id: l.product.id,
+                            product_unit_id: l.product_unit_id,
+                            qty: l.qty,
+                            discount_amount: l.discount_amount,
+                        })),
+                    }),
+                })
+
+                if (!res.ok) return
+                const data = (await res.json()) as PosCartCalculationResponse
+                setServerPricing(data)
+
+                if (appliedVouchers.length > 0 && Array.isArray(data.vouchers)) {
+                    const removed = data.vouchers.filter((v) => v.auto_removed)
+                    if (removed.length > 0) {
+                        const removedCodes = new Set(removed.map((v) => v.code.toUpperCase()))
+                        setAppliedVouchers((prev) =>
+                            prev.filter((v) => !removedCodes.has(v.code.toUpperCase()))
+                        )
+                        const reason =
+                            removed[0].message ?? 'Syarat voucher tidak lagi terpenuhi sehingga dilepas otomatis.'
+                        setVoucherError(reason)
+                        toast.warning(reason)
+                    }
+                }
+            } catch {
+                // Abaikan abort atau error sementara; fallback lokal tetap menjaga UI responsif
+            }
+        }, 120)
+
+        return () => {
+            window.clearTimeout(timer)
+            controller.abort()
+        }
+    }, [
+        cart,
+        selectedCustomerId,
+        transactionDiscount,
+        appliedVouchers,
+        selectedTebusMurahPromoId,
+    ])
+
+    const localSummary = useMemo(
         () =>
             calculateCartSummary(
                 cart,
@@ -151,16 +280,41 @@ const Terminal = () => {
         [cart, transactionDiscount, storeSettings]
     )
 
-    const customerItems = useMemo(
-        () => [
-            { value: 'guest', label: 'Pelanggan Umum' },
-            ...customers.map((c) => ({
-                value: String(c.id),
-                label: c.phone ? `${c.name} (${c.phone})` : c.name,
-            })),
-        ],
-        [customers]
-    )
+    const summary = useMemo(() => {
+        if (serverPricing && serverPricing.items.length === cart.length) {
+            const s = serverPricing.summary
+            return {
+                grossSubtotal: s.gross_subtotal,
+                autoDiscountTotal: s.auto_discount_total,
+                itemDiscountTotal: s.item_discount_total,
+                transactionPromoDiscountTotal: s.transaction_promo_discount_total ?? 0,
+                voucherDiscountTotal: s.voucher_discount_total ?? 0,
+                transactionDiscount: s.transaction_discount,
+                paymentPromoDiscountTotal: s.payment_promo_discount_total ?? 0,
+                cashbackTotal: s.cashback_total ?? 0,
+                manualDiscountTotal: s.manual_discount_total,
+                totalDiscount: s.total_discount,
+                netSubtotal: s.net_subtotal,
+                taxableAmount: s.taxable_amount,
+                taxExemptAmount: s.tax_exempt_amount,
+                taxAmount: s.tax_amount,
+                roundingAmount: s.rounding_amount,
+                grandTotal: s.grand_total,
+                totalItemsQty: s.total_items_qty,
+                hasTaxExemptItems: s.has_tax_exempt_items,
+            }
+        }
+
+        return {
+            ...localSummary,
+            autoDiscountTotal: 0,
+            transactionPromoDiscountTotal: 0,
+            voucherDiscountTotal: 0,
+            paymentPromoDiscountTotal: 0,
+            cashbackTotal: 0,
+            manualDiscountTotal: localSummary.totalDiscount,
+        }
+    }, [serverPricing, cart.length, localSummary])
 
     const getUsedBaseQtyForProduct = useCallback(
         (productId: number, excludeLineId?: string): number =>
@@ -292,12 +446,12 @@ const Terminal = () => {
             prev.map((l) =>
                 l.line_id === lineId
                     ? {
-                          ...l,
-                          product_unit_id: unit ? unit.id : null,
-                          unit_name: unit ? unit.unit_name : l.product.base_unit,
-                          conversion_factor: newFactor,
-                          unit_price: unit ? unit.sell_price : l.product.sell_price,
-                      }
+                        ...l,
+                        product_unit_id: unit ? unit.id : null,
+                        unit_name: unit ? unit.unit_name : l.product.base_unit,
+                        conversion_factor: newFactor,
+                        unit_price: unit ? unit.sell_price : l.product.sell_price,
+                    }
                     : l
             )
         )
@@ -316,6 +470,106 @@ const Terminal = () => {
         )
     }
 
+    const handleApplyVoucher = async (e: React.FormEvent) => {
+        e.preventDefault()
+        const code = voucherInput.trim().toUpperCase().replace(/\s+/g, '')
+        if (!code || cart.length === 0 || isApplyingVoucher) return
+
+        if (appliedVouchers.some((v) => v.code.toUpperCase() === code)) {
+            const msg = `Voucher ${code} sudah terpasang di keranjang.`
+            setVoucherError(msg)
+            toast.warning(msg)
+            return
+        }
+
+        setIsApplyingVoucher(true)
+        setVoucherError(null)
+        try {
+            const res = await fetch(PosController.reserveVoucher.url(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-XSRF-TOKEN': getXsrfToken(),
+                },
+                body: JSON.stringify({
+                    code,
+                    customer_id: selectedCustomerId !== 'guest' ? Number(selectedCustomerId) : null,
+                    discount_amount: transactionDiscount,
+                    has_cash_payment: true,
+                    existing_vouchers: appliedVouchers.map((v) => ({
+                        code: v.code,
+                        reservation_token: v.reservation_token,
+                    })),
+                    items: cart.map((l) => ({
+                        product_id: l.product.id,
+                        product_unit_id: l.product_unit_id,
+                        qty: l.qty,
+                        discount_amount: l.discount_amount,
+                    })),
+                }),
+            })
+
+            const data = (await res.json()) as {
+                valid?: boolean
+                reservation_token?: string
+                message?: string
+                voucher?: { code?: string; name?: string; discount_amount?: number }
+                pricing?: PosCartCalculationResponse
+            }
+
+            if (!res.ok || !data.valid) {
+                const msg = data.message ?? 'Kode voucher tidak valid.'
+                setVoucherError(msg)
+                toast.error(msg)
+                return
+            }
+
+            const appliedCode = data.voucher?.code ?? code
+            setAppliedVouchers((prev) => [
+                ...prev,
+                {
+                    code: appliedCode,
+                    name: data.voucher?.name ?? null,
+                    discount_amount: data.voucher?.discount_amount ?? 0,
+                    reservation_token: data.reservation_token ?? null,
+                },
+            ])
+            setVoucherInput('')
+            setVoucherError(null)
+            if (data.pricing) {
+                setServerPricing(data.pricing)
+            }
+            toast.success(`Voucher ${appliedCode} berhasil dipasang.`)
+        } catch {
+            setVoucherError('Gagal menghubungi server untuk validasi voucher.')
+        } finally {
+            setIsApplyingVoucher(false)
+        }
+    }
+
+    const handleReleaseVoucher = async (codeToRemove: string) => {
+        const target = appliedVouchers.find((v) => v.code === codeToRemove)
+        setAppliedVouchers((prev) => prev.filter((v) => v.code !== codeToRemove))
+        setVoucherError(null)
+
+        if (target?.reservation_token) {
+            try {
+                await fetch(PosController.releaseVoucher.url(), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-XSRF-TOKEN': getXsrfToken(),
+                    },
+                    body: JSON.stringify({ reservation_token: target.reservation_token }),
+                })
+            } catch {
+                // Abaikan error release
+            }
+        }
+    }
+
     const resetCart = useCallback(() => {
         setCart([])
         setSelectedCustomerId('guest')
@@ -325,7 +579,99 @@ const Terminal = () => {
         setPinError(null)
         setPendingPayments(null)
         setPendingDonation(null)
+        setVoucherInput('')
+        setAppliedVouchers([])
+        setVoucherError(null)
+        setSelectedTebusMurahPromoId(null)
     }, [])
+
+    const handleRedeemTebusMurah = async (offer: PosTebusMurahOffer) => {
+        const alreadyInCart = cart.some(
+            (line) => line.product.id === offer.reward_product_id && line.product_unit_id === null
+        )
+
+        if (!alreadyInCart) {
+            try {
+                const res = await fetch(
+                    `${cashier.lookup.url()}?q=${encodeURIComponent(offer.reward_product_barcode)}&limit=5`,
+                    { headers: { Accept: 'application/json' } }
+                )
+                if (res.ok) {
+                    const data = (await res.json()) as { products: PosLookupProduct[] }
+                    const matched = (data.products ?? []).find((p) => p.id === offer.reward_product_id)
+                    if (matched) {
+                        addProductToCart(matched, null)
+                    } else {
+                        toast.error('Produk Tebus Murah tidak ditemukan atau stok kosong.')
+                        return
+                    }
+                }
+            } catch {
+                toast.error('Gagal menambahkan produk Tebus Murah.')
+                return
+            }
+        }
+
+        setSelectedTebusMurahPromoId(offer.promotion_id)
+        toast.success(`Penawaran Tebus Murah "${offer.reward_product_name}" dipilih (maks. 1/struk).`)
+    }
+
+    const handlePreviewPaymentPromo = useCallback(
+        async (
+            payments: Array<{
+                payment_method: string
+                amount: number
+                card_bin?: string | null
+                reference_number?: string | null
+            }>
+        ): Promise<PaymentPromoPreviewResult | null> => {
+            if (cart.length === 0) return null
+
+            try {
+                const res = await fetch(cashier.calculateCart.url(), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-XSRF-TOKEN': getXsrfToken(),
+                    },
+                    body: JSON.stringify({
+                        customer_id: selectedCustomerId !== 'guest' ? Number(selectedCustomerId) : null,
+                        discount_amount: transactionDiscount,
+                        has_cash_payment: payments.some((p) => p.payment_method === 'cash'),
+                        vouchers: appliedVouchers.map((v) => ({
+                            code: v.code,
+                            reservation_token: v.reservation_token,
+                        })),
+                        selected_tebus_murah_promotion_id: selectedTebusMurahPromoId,
+                        items: cart.map((l) => ({
+                            product_id: l.product.id,
+                            product_unit_id: l.product_unit_id,
+                            qty: l.qty,
+                            discount_amount: l.discount_amount,
+                        })),
+                        payments,
+                    }),
+                })
+
+                if (!res.ok) return null
+                const data = (await res.json()) as PosCartCalculationResponse
+                return {
+                    grandTotal: data.summary.grand_total,
+                    paymentPromotion: data.payment_promotion ?? null,
+                }
+            } catch {
+                return null
+            }
+        },
+        [
+            cart,
+            selectedCustomerId,
+            transactionDiscount,
+            appliedVouchers,
+            selectedTebusMurahPromoId,
+        ]
+    )
 
     const executeCheckout = async (
         payments: PaymentEntryPayload[],
@@ -348,6 +694,11 @@ const Terminal = () => {
                     customer_id: selectedCustomerId !== 'guest' ? Number(selectedCustomerId) : null,
                     held_transaction_id: activeHeldId,
                     discount_amount: summary.transactionDiscount,
+                    vouchers: appliedVouchers.map((v) => ({
+                        code: v.code,
+                        reservation_token: v.reservation_token,
+                    })),
+                    selected_tebus_murah_promotion_id: selectedTebusMurahPromoId,
                     donation_product_id: donation?.donation_product_id ?? null,
                     donation_amount: donation?.donation_amount ?? 0,
                     supervisor_pin: supervisorPin ?? null,
@@ -408,7 +759,7 @@ const Terminal = () => {
         donation?: PaymentDonationPayload | null
     ) => {
         const needsPin =
-            summary.totalDiscount > policyRules.manual_discount_pin_threshold && !policyRules.is_privileged
+            summary.manualDiscountTotal > policyRules.manual_discount_pin_threshold && !policyRules.is_privileged
 
         if (needsPin) {
             setPendingPayments(payments)
@@ -543,7 +894,15 @@ const Terminal = () => {
                     setPaymentOpen(true)
                 }
             } else if (e.key === 'Escape') {
-                if (!searchOpen && !paymentOpen && !heldOpen && !holdPromptOpen && !pinDialogOpen && !successOpen) {
+                if (
+                    !searchOpen &&
+                    !checkPromoOpen &&
+                    !paymentOpen &&
+                    !heldOpen &&
+                    !holdPromptOpen &&
+                    !pinDialogOpen &&
+                    !successOpen
+                ) {
                     setBarcodeInput('')
                     focusBarcode()
                 }
@@ -552,7 +911,17 @@ const Terminal = () => {
 
         window.addEventListener('keydown', onKeyDown)
         return () => window.removeEventListener('keydown', onKeyDown)
-    }, [cart.length, searchOpen, paymentOpen, heldOpen, holdPromptOpen, pinDialogOpen, successOpen, focusBarcode])
+    }, [
+        cart.length,
+        searchOpen,
+        checkPromoOpen,
+        paymentOpen,
+        heldOpen,
+        holdPromptOpen,
+        pinDialogOpen,
+        successOpen,
+        focusBarcode,
+    ])
 
     return (
         <>
@@ -588,6 +957,16 @@ const Terminal = () => {
                             type="button"
                             variant="outline"
                             size="sm"
+                            onClick={() => setCheckPromoOpen(true)}
+                            className="h-9 gap-1.5 cursor-pointer"
+                        >
+                            <Sparkles className="h-4 w-4 text-primary" />
+                            Cek Promo
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => setHeldOpen(true)}
                             className="h-9 gap-1.5 cursor-pointer"
                         >
@@ -617,9 +996,9 @@ const Terminal = () => {
                 {/* Main Split Layout */}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
                     {/* Left: Barcode Scanner & Cart Table */}
-                    <div className="lg:col-span-8 space-y-4">
-                        <Card>
-                            <CardContent className="p-4">
+                    <div className="lg:col-span-8 space-y-3">
+                        <Card className="py-0 gap-0">
+                            <CardContent className="p-3">
                                 <form onSubmit={handleBarcodeSubmit} className="flex flex-col gap-2 sm:flex-row">
                                     <div className="relative flex-1">
                                         <Barcode className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -629,14 +1008,14 @@ const Terminal = () => {
                                             onChange={(e) => setBarcodeInput(e.target.value)}
                                             placeholder="Scan barcode produk / satuan atau ketik nama lalu tekan Enter..."
                                             disabled={isScanning}
-                                            className="h-10 pl-9 font-mono text-sm"
+                                            className="h-9 pl-9 font-mono text-sm"
                                         />
                                     </div>
                                     <div className="flex gap-2">
                                         <Button
                                             type="submit"
                                             disabled={isScanning || !barcodeInput.trim()}
-                                            className="h-10 cursor-pointer"
+                                            className="h-9 cursor-pointer"
                                         >
                                             Tambah
                                         </Button>
@@ -644,7 +1023,7 @@ const Terminal = () => {
                                             type="button"
                                             variant="outline"
                                             onClick={() => setSearchOpen(true)}
-                                            className="h-10 gap-1.5 cursor-pointer"
+                                            className="h-9 gap-1.5 cursor-pointer"
                                         >
                                             <Search className="h-4 w-4" />
                                             Cari (F2)
@@ -655,7 +1034,7 @@ const Terminal = () => {
                         </Card>
 
                         <Card className="gap-0 py-0 overflow-hidden">
-                            <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-4 py-2.5">
+                            <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-3.5 py-2">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <ShoppingCart className="h-4 w-4 text-primary shrink-0" />
                                     <h2 className="text-sm font-semibold text-foreground truncate">
@@ -687,23 +1066,33 @@ const Terminal = () => {
                                         </p>
                                     </div>
                                 ) : (
-                                    <table className="table-fixed w-full min-w-[660px] text-sm">
+                                    <table className="table-fixed w-full min-w-[680px] text-sm">
                                         <thead>
                                             <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                                                <th className="w-[34%] px-3 py-2 text-left font-medium">Produk &amp; Barcode</th>
-                                                <th className="w-[17%] px-2 py-2 text-left font-medium">Satuan</th>
+                                                <th className="w-[5%] px-2 py-2 text-center font-medium">No</th>
+                                                <th className="w-[31%] px-3 py-2 text-left font-medium">Produk &amp; Barcode</th>
+                                                <th className="w-[16%] px-2 py-2 text-left font-medium">Satuan</th>
                                                 <th className="w-[16%] px-2 py-2 text-center font-medium">Qty</th>
                                                 <th className="w-[13%] px-2 py-2 text-right font-medium">Diskon (Rp)</th>
                                                 <th className="w-[14%] px-3 py-2 text-right font-medium">Subtotal</th>
-                                                <th className="w-[6%] px-2 py-2 text-right font-medium"></th>
+                                                <th className="w-[5%] px-2 py-2 text-right font-medium"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
-                                            {cart.map((line) => {
-                                                const lineTotal = Math.max(
-                                                    0,
-                                                    line.unit_price * line.qty - line.discount_amount
-                                                )
+                                            {cart.map((line, index) => {
+                                                const pricingLine: PosCartPricingLine | undefined =
+                                                    serverPricing?.items[index]?.product_id === line.product.id &&
+                                                    serverPricing?.items[index]?.product_unit_id === line.product_unit_id
+                                                        ? serverPricing.items[index]
+                                                        : undefined
+                                                const autoDiscount = pricingLine?.auto_discount_amount ?? 0
+                                                const hasAutoPricing =
+                                                    autoDiscount > 0 &&
+                                                    (pricingLine?.pricing_source === 'wholesale_tier' ||
+                                                        pricingLine?.pricing_source === 'promotion')
+                                                const lineTotal = pricingLine
+                                                    ? pricingLine.line_subtotal
+                                                    : Math.max(0, line.unit_price * line.qty - line.discount_amount)
                                                 const matchedUnitObj = line.product_unit_id
                                                     ? line.product.units.find((u) => u.id === line.product_unit_id) ?? null
                                                     : null
@@ -721,6 +1110,9 @@ const Terminal = () => {
 
                                                 return (
                                                     <tr key={line.line_id} className="hover:bg-muted/20">
+                                                        <td className="px-2 py-2.5 align-middle text-center font-mono text-xs text-muted-foreground">
+                                                            {index + 1}
+                                                        </td>
                                                         <td className="px-3 py-2.5 align-middle">
                                                             <div className="flex items-center gap-1.5 min-w-0">
                                                                 <p className="font-medium text-foreground truncate" title={line.product.name}>
@@ -749,10 +1141,43 @@ const Terminal = () => {
                                                                     {displayBarcode}
                                                                 </span>
                                                                 <span>•</span>
-                                                                <span>{formatRupiah(line.unit_price)}</span>
+                                                                {hasAutoPricing && pricingLine ? (
+                                                                    <span className="inline-flex items-center gap-1">
+                                                                        <span className="line-through text-muted-foreground">
+                                                                            {formatRupiah(pricingLine.base_unit_price)}
+                                                                        </span>
+                                                                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                                            {formatRupiah(pricingLine.effective_unit_price)}
+                                                                        </span>
+                                                                    </span>
+                                                                ) : (
+                                                                    <span>{formatRupiah(line.unit_price)}</span>
+                                                                )}
                                                                 <span>•</span>
                                                                 <span>Stok: {line.product.stock} {line.product.base_unit}</span>
                                                             </div>
+                                                            {hasAutoPricing && pricingLine && (
+                                                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className={
+                                                                            pricingLine.pricing_source === 'wholesale_tier'
+                                                                                ? 'h-4 px-1.5 py-0 text-[10px] gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                                                : 'h-4 px-1.5 py-0 text-[10px] gap-1 border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                                                        }
+                                                                    >
+                                                                        {pricingLine.pricing_source === 'wholesale_tier' ? (
+                                                                            <Tag className="h-2.5 w-2.5" />
+                                                                        ) : (
+                                                                            <Sparkles className="h-2.5 w-2.5" />
+                                                                        )}
+                                                                        {pricingLine.badge_label}
+                                                                    </Badge>
+                                                                    <span className="font-mono text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                                        Hemat {formatRupiah(autoDiscount)}
+                                                                    </span>
+                                                                </div>
+                                                            )}
                                                         </td>
                                                         <td className="px-2 py-2.5 align-middle">
                                                             {line.product.units.length > 0 ? (
@@ -862,35 +1287,149 @@ const Terminal = () => {
                     </div>
 
                     {/* Right: Customer, Summary & Checkout Actions */}
-                    <div className="lg:col-span-4 space-y-4">
-                        <Card>
-                            <CardHeader className="border-b py-3 px-4">
-                                <CardTitle className="text-sm font-semibold">Ringkasan Pembayaran</CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-4 space-y-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs">Pelanggan (Opsional)</Label>
-                                    <Select
-                                        value={selectedCustomerId}
-                                        onValueChange={(v) => v && setSelectedCustomerId(v)}
-                                        items={customerItems}
-                                    >
-                                        <SelectTrigger className="w-full h-9">
-                                            <SelectValue>
-                                                {(val) =>
-                                                    customerItems.find((c) => c.value === val)?.label ??
-                                                    'Pelanggan Umum'
-                                                }
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {customerItems.map((c) => (
-                                                <SelectItem key={c.value} value={c.value}>
-                                                    {c.label}
-                                                </SelectItem>
+                    <div className="lg:col-span-4 space-y-3">
+                        <Card className="py-0 gap-0 overflow-hidden">
+                            <div className="flex items-center justify-between border-b bg-muted/20 px-3.5 py-2">
+                                <h2 className="text-sm font-semibold text-foreground">Ringkasan Pembayaran</h2>
+                            </div>
+                            <CardContent className="p-4 space-y-3.5">
+                                <CustomerPicker
+                                    initialCustomers={customers}
+                                    selectedCustomerId={selectedCustomerId}
+                                    onSelectCustomer={setSelectedCustomerId}
+                                    onModalToggle={setCustomerModalOpen}
+                                />
+
+                                {/* Penawaran Tebus Murah (Maks. 1 per struk) */}
+                                {(serverPricing?.tebus_murah_offers?.length ?? 0) > 0 && (
+                                    <div className="rounded-lg border border-amber-300/80 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+                                                <Gift className="h-3.5 w-3.5" />
+                                                Penawaran Tebus Murah (Maks. 1/Struk)
+                                            </span>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            {(serverPricing?.tebus_murah_offers ?? []).map((offer) => (
+                                                <div
+                                                    key={offer.promotion_id}
+                                                    className="flex items-center justify-between gap-2 rounded-md border bg-background/90 px-2.5 py-2"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-medium text-foreground truncate">
+                                                            {offer.reward_product_name}
+                                                        </p>
+                                                        <p className="font-mono text-[11px] text-muted-foreground">
+                                                            <span className="line-through mr-1">
+                                                                {formatRupiah(offer.normal_price)}
+                                                            </span>
+                                                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                                {formatRupiah(offer.special_price)}
+                                                            </span>
+                                                        </p>
+                                                    </div>
+                                                    {offer.is_applied ? (
+                                                        <Badge variant="success" className="text-[10px] shrink-0">
+                                                            Terpasang
+                                                        </Badge>
+                                                    ) : (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => void handleRedeemTebusMurah(offer)}
+                                                            className="h-7 px-2.5 text-xs shrink-0 cursor-pointer"
+                                                        >
+                                                            Tebus
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             ))}
-                                        </SelectContent>
-                                    </Select>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Voucher / Kode Promo (mendukung > 1 voucher) */}
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="voucher-code-input" className="text-xs flex items-center gap-1.5">
+                                        <TicketPercent className="h-3.5 w-3.5 text-primary" />
+                                        Voucher / Kode Promo
+                                        {appliedVouchers.length > 0 && (
+                                            <Badge variant="secondary" className="font-mono text-[10px] h-4 px-1.5">
+                                                {appliedVouchers.length} terpasang
+                                            </Badge>
+                                        )}
+                                    </Label>
+                                    <form onSubmit={handleApplyVoucher} className="flex gap-1.5">
+                                        <Input
+                                            id="voucher-code-input"
+                                            value={voucherInput}
+                                            onChange={(e) => {
+                                                setVoucherInput(e.target.value.toUpperCase())
+                                                if (voucherError) setVoucherError(null)
+                                            }}
+                                            placeholder="Scan / ketik kode voucher..."
+                                            disabled={cart.length === 0 || isApplyingVoucher}
+                                            className="h-9 font-mono text-xs uppercase"
+                                        />
+                                        <Button
+                                            type="submit"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={cart.length === 0 || !voucherInput.trim() || isApplyingVoucher}
+                                            className="h-9 px-3 shrink-0 cursor-pointer"
+                                        >
+                                            {isApplyingVoucher ? '...' : 'Pakai'}
+                                        </Button>
+                                    </form>
+                                    {appliedVouchers.length > 0 && (
+                                        <div className="space-y-1.5 pt-1">
+                                            {appliedVouchers.map((v) => {
+                                                const serverVoucher = serverPricing?.vouchers?.find(
+                                                    (sv) => sv.code.toUpperCase() === v.code.toUpperCase()
+                                                )
+                                                const displayDiscount =
+                                                    serverVoucher?.discount_amount ?? v.discount_amount
+                                                const displayName = serverVoucher?.name ?? v.name
+
+                                                return (
+                                                    <div
+                                                        key={v.code}
+                                                        className="flex items-center justify-between gap-2 rounded-md border border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/40 px-2.5 py-1.5"
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Badge variant="success" className="font-mono text-[10px]">
+                                                                    {v.code}
+                                                                </Badge>
+                                                                <span className="font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                                                    -{formatRupiah(displayDiscount)}
+                                                                </span>
+                                                            </div>
+                                                            {displayName && (
+                                                                <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                                                    {displayName}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => void handleReleaseVoucher(v.code)}
+                                                            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive cursor-pointer"
+                                                            title={`Lepas voucher ${v.code}`}
+                                                        >
+                                                            <X className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                    {voucherError && (
+                                        <p className="text-[11px] text-destructive">{voucherError}</p>
+                                    )}
                                 </div>
 
                                 <div className="space-y-1.5">
@@ -907,7 +1446,7 @@ const Terminal = () => {
                                         onChange={(e) => setTransactionDiscount(Math.max(0, Number(e.target.value) || 0))}
                                         className="h-9 font-mono text-sm"
                                     />
-                                    {summary.totalDiscount > policyRules.manual_discount_pin_threshold &&
+                                    {summary.manualDiscountTotal > policyRules.manual_discount_pin_threshold &&
                                         !policyRules.is_privileged && (
                                             <p className="text-[11px] text-amber-600 dark:text-amber-400">
                                                 Diskon manual memerlukan otorisasi PIN Supervisor saat bayar.
@@ -920,10 +1459,43 @@ const Terminal = () => {
                                         <span className="text-muted-foreground">Subtotal</span>
                                         <span className="font-mono font-medium">{formatRupiah(summary.grossSubtotal)}</span>
                                     </div>
-                                    {summary.totalDiscount > 0 && (
+                                    {summary.autoDiscountTotal > 0 && (
+                                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                            <span>Hemat Grosir / Promo Item</span>
+                                            <span className="font-mono">-{formatRupiah(summary.autoDiscountTotal)}</span>
+                                        </div>
+                                    )}
+                                    {summary.transactionPromoDiscountTotal > 0 && (
+                                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                            <span className="truncate pr-2">
+                                                {serverPricing?.transaction_promotion?.name ?? 'Promo Transaksi / Tebus Murah'}
+                                            </span>
+                                            <span className="font-mono shrink-0">
+                                                -{formatRupiah(summary.transactionPromoDiscountTotal)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {summary.voucherDiscountTotal > 0 && (
+                                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                            <span className="truncate pr-2">
+                                                Voucher
+                                                {appliedVouchers.length > 0
+                                                    ? ` (${appliedVouchers.map((v) => v.code).join(', ')})`
+                                                    : ''}
+                                            </span>
+                                            <span className="font-mono shrink-0">-{formatRupiah(summary.voucherDiscountTotal)}</span>
+                                        </div>
+                                    )}
+                                    {summary.cashbackTotal > 0 && (
+                                        <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400">
+                                            <span>Estimasi Cashback</span>
+                                            <span className="font-mono">+{formatRupiah(summary.cashbackTotal)}</span>
+                                        </div>
+                                    )}
+                                    {summary.manualDiscountTotal > 0 && (
                                         <div className="flex justify-between text-rose-600 dark:text-rose-400">
-                                            <span>Total Diskon</span>
-                                            <span className="font-mono">-{formatRupiah(summary.totalDiscount)}</span>
+                                            <span>Diskon Manual</span>
+                                            <span className="font-mono">-{formatRupiah(summary.manualDiscountTotal)}</span>
                                         </div>
                                     )}
                                     {(storeSettings?.default_tax_rate ?? 0) > 0 && (
@@ -1041,6 +1613,15 @@ const Terminal = () => {
                 onSelectProduct={addProductToCart}
             />
 
+            <CheckPromoDialog
+                open={checkPromoOpen}
+                onOpenChange={setCheckPromoOpen}
+                onAddToCart={(product, unitId) => {
+                    addProductToCart(product, unitId)
+                    toast.success(`${product.name} ditambahkan ke keranjang.`)
+                }}
+            />
+
             <PaymentDialog
                 open={paymentOpen}
                 onOpenChange={setPaymentOpen}
@@ -1050,6 +1631,7 @@ const Terminal = () => {
                 donationProducts={donationProducts}
                 isSubmitting={isSubmitting}
                 errorMessage={paymentError}
+                onPreviewPaymentPromo={handlePreviewPaymentPromo}
                 onSubmitPayment={handlePaymentSubmit}
             />
 

@@ -7,6 +7,7 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductPriceTier;
 use App\Models\ProductUnit;
 use App\Models\StockMovement;
 use App\Models\User;
@@ -218,11 +219,13 @@ class ProductController extends Controller
         Gate::authorize('view', $product);
 
         $canViewStock = $request->user()?->can('viewStock', Product::class) ?? false;
+        $canManagePriceTiers = $request->user()?->can('update', $product) ?? false;
 
-        $product->load(['category', 'units']);
+        $product->load(['category', 'units', 'priceTiers.productUnit']);
 
         return Inertia::render('POS/Product/DetailProduct', [
             'canViewStock' => $canViewStock,
+            'canManagePriceTiers' => $canManagePriceTiers,
             'product' => [
                 'id' => $product->id,
                 'category_id' => $product->category_id,
@@ -237,7 +240,9 @@ class ProductController extends Controller
                 'image' => $product->image ? asset('storage/'.$product->image) : null,
                 'active' => (bool) $product->active,
                 'is_tax_exempt' => (bool) $product->is_tax_exempt,
+                'tax_mode' => $product->effectiveTaxMode()->value,
                 'is_donation' => (bool) $product->is_donation,
+                'is_promo_excluded' => (bool) $product->is_promo_excluded,
                 'created_at' => $product->created_at?->format('d M Y H:i'),
                 'updated_at' => $product->updated_at?->format('d M Y H:i'),
                 'units' => $product->units->map(fn (ProductUnit $unit) => [
@@ -249,6 +254,15 @@ class ProductController extends Controller
                     'sell_price' => $unit->sell_price !== null ? (float) $unit->sell_price : null,
                     'is_default_purchase' => (bool) $unit->is_default_purchase,
                     'is_active' => (bool) $unit->is_active,
+                ])->values()->all(),
+                'price_tiers' => $product->priceTiers->map(fn (ProductPriceTier $tier) => [
+                    'id' => $tier->id,
+                    'product_id' => $tier->product_id,
+                    'product_unit_id' => $tier->product_unit_id,
+                    'unit_name' => $tier->productUnit?->unit_name ?? ($product->base_unit ?: 'pcs'),
+                    'min_qty' => (int) $tier->min_qty,
+                    'unit_price' => (float) $tier->unit_price,
+                    'is_active' => (bool) $tier->is_active,
                 ])->values()->all(),
             ],
             'stockMovements' => Inertia::optional(function () use ($request, $product, $canViewStock) {

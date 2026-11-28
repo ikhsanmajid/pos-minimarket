@@ -39,6 +39,263 @@ export interface PosCartItem {
     discount_amount: number
 }
 
+export interface PosCartPricingLine {
+    index: number
+    product_id: number
+    product_unit_id: number | null
+    qty: number
+    base_unit_price: number
+    effective_unit_price: number
+    line_gross: number
+    auto_discount_amount: number
+    manual_discount_amount: number
+    discount_amount: number
+    allocated_header_discount: number
+    line_subtotal: number
+    line_net_after_header: number
+    free_qty: number
+    pricing_source: 'regular' | 'wholesale_tier' | 'promotion' | string
+    applied_promotion_id: number | null
+    applied_promotion_name: string | null
+    applied_promotion_type: string | null
+    applied_promotion_funding: string | null
+    applied_tier_min_qty: number | null
+    quota_consumed: number
+    badge_label: string | null
+    is_near_expiry_promo?: boolean
+    is_promo_excluded: boolean
+    tax_mode: 'exclusive' | 'inclusive' | 'exempt' | string
+    is_tax_exempt: boolean
+    is_donation: boolean
+}
+
+export interface PosCartPricingSummary {
+    gross_subtotal: number
+    auto_discount_total: number
+    manual_item_discount_total: number
+    item_discount_total: number
+    transaction_promo_discount_total?: number
+    voucher_discount_total?: number
+    transaction_discount: number
+    payment_promo_discount_total?: number
+    cashback_total?: number
+    manual_discount_total: number
+    total_discount: number
+    eligible_subtotal_after_item_auto: number
+    net_subtotal: number
+    taxable_amount: number
+    tax_exempt_amount: number
+    tax_amount: number
+    rounding_amount: number
+    grand_total: number
+    total_items_qty: number
+    has_tax_exempt_items: boolean
+}
+
+export interface PosAppliedVoucherInfo {
+    applied: boolean
+    auto_removed: boolean
+    voucher_id: number | null
+    code: string | null
+    name: string | null
+    type: string | null
+    type_label: string | null
+    funding: string | null
+    min_spend: number
+    discount_amount: number
+    error_code: string | null
+    message: string | null
+}
+
+export interface PosTebusMurahOffer {
+    promotion_id: number
+    name: string
+    funding: string
+    min_purchase_amount: number
+    reward_product_id: number
+    reward_product_name: string
+    reward_product_barcode: string
+    reward_product_unit: string
+    normal_price: number
+    special_price: number
+    savings: number
+    stock: number
+    is_applied: boolean
+}
+
+export interface PosAppliedTransactionPromotion {
+    promotion_id: number
+    code: string | null
+    name: string
+    type: string
+    type_label: string
+    funding: string
+    min_purchase_amount: number
+    discount_amount: number
+    stackable: boolean
+    quota_consumed: number
+}
+
+export interface PosAppliedPaymentPromotion {
+    promotion_id: number
+    code: string | null
+    name: string
+    funding: string
+    payment_method: string
+    payment_bin_prefix: string | null
+    matched_bin: string | null
+    eligible_payment_amount: number
+    discount_amount: number
+    stackable: boolean
+    quota_consumed: number
+}
+
+export interface PosCashbackPromotion {
+    promotion_id: number
+    name: string
+    funding: string
+    min_purchase_amount: number
+    cashback_amount: number
+    quota_consumed: number
+}
+
+export interface PosCartCalculationResponse {
+    evaluated_at: string
+    items: PosCartPricingLine[]
+    summary: PosCartPricingSummary
+    voucher?: PosAppliedVoucherInfo | null
+    vouchers?: PosAppliedVoucherInfo[]
+    voucher_line_allocations?: Record<string, number>
+    transaction_promotion?: PosAppliedTransactionPromotion | null
+    tebus_murah_offers?: PosTebusMurahOffer[]
+    applied_tebus_murah?: {
+        promotion_id: number
+        name: string
+        reward_product_id: number
+        reward_product_name: string
+        normal_price: number
+        special_price: number
+        discount_amount: number
+    } | null
+    cashback_promotions?: PosCashbackPromotion[]
+    payment_promotion?: PosAppliedPaymentPromotion | null
+    promotion_quota_usage: Record<string, number>
+}
+
+export interface VoucherRow {
+    id: number
+    code: string
+    name: string
+    type: string
+    type_label: string
+    type_short_label: string
+    value: number
+    max_discount: number | null
+    min_spend: number
+    valid_from: string
+    valid_until: string
+    valid_from_display: string
+    valid_until_display: string
+    allowed_days: number
+    allowed_hours_start: string | null
+    allowed_hours_end: string | null
+    total_quota: number | null
+    used_count: number
+    per_customer_limit: number | null
+    per_day_limit: number | null
+    store_ids: number[]
+    channel: string
+    member_only: boolean
+    member_tiers: string[]
+    applicable_skus: string[]
+    applicable_products?: Array<{ id: number; name: string; barcode: string }>
+    applicable_categories: number[]
+    excluded_skus: string[]
+    excluded_categories: number[]
+    free_product_id: number | null
+    free_product_name: string | null
+    stackable_with_promo: boolean
+    stackable_with_voucher: boolean
+    funding: string
+    funding_label: string
+    status: string
+    status_label: string
+    computed_status: 'draft' | 'active' | 'paused' | 'expired' | 'exhausted' | string
+    computed_status_label: string
+    creator_name: string
+}
+
+export interface ProductPriceTierRow {
+    id: number
+    product_id: number
+    product_unit_id: number | null
+    unit_name: string
+    min_qty: number
+    unit_price: number
+    is_active: boolean
+}
+
+export interface PromotionRow {
+    id: number
+    code: string | null
+    name: string
+    type: string
+    type_label: string
+    type_short_label: string
+    scope: string
+    scope_label: string
+    funding: string
+    funding_label: string
+    discount_value: number | null
+    max_discount_amount: number | null
+    min_purchase_amount: number
+    buy_qty: number | null
+    get_qty: number | null
+    get_discount_percent: number
+    bundle_price: number | null
+    nth_item?: number | null
+    reward_product_id?: number | null
+    reward_product?: {
+        id: number
+        name: string
+        barcode: string
+        sell_price: number
+    } | null
+    special_price?: number | null
+    payment_method?: string | null
+    payment_bin_prefix?: string | null
+    near_expiry_days?: number | null
+    bundle_items?: Array<{
+        product_id: number
+        product_name: string
+        product_barcode: string
+        required_qty: number
+    }>
+    starts_at: string
+    ends_at: string
+    starts_at_display: string
+    ends_at_display: string
+    days_mask: number
+    time_start: string | null
+    time_end: string | null
+    quota_total: number | null
+    quota_used: number
+    max_qty_per_transaction: number | null
+    max_qty_per_customer_per_day: number | null
+    stackable: boolean
+    exclusive_group: string | null
+    priority: number
+    member_only: boolean
+    is_active: boolean
+    computed_status: 'active' | 'scheduled' | 'expired' | 'inactive' | string
+    creator_name: string
+    product_ids: number[]
+    selected_products?: Array<{ id: number; name: string; barcode: string }>
+    category_ids: number[]
+    products_count: number
+    categories_count: number
+}
+
 export interface PosFinancialAccount {
     id: number
     code: string
@@ -55,8 +312,10 @@ export interface PosPaymentMethodOption {
 
 export interface PosCustomerOption {
     id: number
+    member_code?: string
     name: string
     phone: string | null
+    points?: number
 }
 
 export interface PosHeldItem {
@@ -87,7 +346,11 @@ export interface PosReceiptItem {
     unit_name: string
     qty: number
     unit_price: number
+    effective_unit_price?: number
     discount_amount: number
+    pricing_source?: 'regular' | 'wholesale_tier' | 'promotion' | string
+    applied_promotion_name?: string | null
+    free_qty?: number
     is_tax_exempt?: boolean
     is_donation?: boolean
     subtotal: number
@@ -114,6 +377,23 @@ export interface PosReceiptData {
     customer_name: string | null
     subtotal: number
     discount_amount: number
+    voucher_code?: string | null
+    voucher_name?: string | null
+    voucher_discount_amount?: number
+    transaction_promotions?: Array<{
+        type: string
+        name: string
+        discount_amount: number
+    }>
+    payment_promotion?: {
+        name: string
+        discount_amount: number
+        payment_method?: string | null
+    } | null
+    cashback_promotions?: Array<{
+        name: string
+        cashback_amount: number
+    }>
     tax_amount: number
     rounding_amount: number
     donation_amount?: number
@@ -150,6 +430,10 @@ export interface TransactionDetailLine {
     returnable_qty: number
     unit_price: number
     discount_amount: number
+    pricing_source?: string
+    applied_promotion_name?: string | null
+    allocated_header_discount?: number
+    free_qty?: number
     is_tax_exempt?: boolean
     is_donation?: boolean
     subtotal: number
@@ -194,6 +478,23 @@ export interface TransactionDetailData {
     customer_phone: string | null
     subtotal: number
     discount_amount: number
+    voucher_code?: string | null
+    voucher_name?: string | null
+    voucher_discount_amount?: number
+    transaction_promotions?: Array<{
+        type: string
+        name: string
+        discount_amount: number
+    }>
+    payment_promotion?: {
+        name: string
+        discount_amount: number
+        payment_method?: string | null
+    } | null
+    cashback_promotions?: Array<{
+        name: string
+        cashback_amount: number
+    }>
     tax_amount: number
     rounding_amount: number
     donation_amount?: number
