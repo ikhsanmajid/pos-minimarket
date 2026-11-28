@@ -56,7 +56,7 @@ class Product extends Model
                 'restored' => "Produk {$this->name} dipulihkan.",
                 default => "Produk {$this->name} ({$eventName}).",
             })
-            ->logOnly(['category_id', 'barcode', 'name', 'base_unit', 'buy_price', 'sell_price', 'stock', 'min_stock', 'image', 'active'])
+            ->logOnly(['category_id', 'barcode', 'name', 'base_unit', 'buy_price', 'sell_price', 'min_stock', 'image', 'active'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
     }

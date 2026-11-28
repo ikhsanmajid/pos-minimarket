@@ -265,7 +265,7 @@ export default function ProductTableToolbar({
     ]
 
     return (
-        <div className="mb-4 space-y-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-card p-3.5 shadow-xs sm:p-4">
             <div className="flex flex-wrap items-center gap-2.5">
                 {/* Search Input */}
                 <div className="relative w-full sm:w-64 lg:w-72">

@@ -139,9 +139,9 @@ Semua halaman tabel **WAJIB** menggunakan pola toolbar pencarian yang seragam se
 
 ### 3.1 Struktur & Layout Toolbar
 - **Komponen Terpisah:** Letakkan toolbar pada file terpisah di subfolder `component/<Modul>Search.tsx` (bukan ditulis inline di dalam file page utama).
-- **Tanpa Card Pembungkus:** Dilarang membungkus toolbar dengan card (`rounded-xl border bg-card p-4`). Gunakan kontainer inline langsung di atas `DataTable`:
+- **Wajib Menggunakan Background Kartu (`bg-card`):** Kontainer toolbar pencarian (`*Search.tsx`) wajib memiliki permukaan kartu agar input dan filter jelas terlihat dan tidak menyatu dengan latar halaman:
   ```tsx
-  <div className="mb-4 space-y-3">
+  <div className="mb-4 space-y-3 rounded-lg border bg-card p-3.5 shadow-xs sm:p-4">
       <div className="flex flex-wrap items-center gap-2.5">
           {/* Search Input, Select Filter, Date Input, Urutan, Chip Tabel, Reset */}
       </div>
@@ -280,7 +280,7 @@ Struktur standar dialog detail aktivitas:
 - [ ] Apakah setiap model `LogsActivity` sudah mendefinisikan `setDescriptionForEvent(...)` agar keterangan aktivitas deskriptif dan seragam?
 - [ ] Apakah detail log aktivitas mengikuti format seragam tanpa renderer khusus per modul, dan field baru didaftarkan di `activityLogDetailUtils.ts`?
 - [ ] Apakah logika murni (`*Utils.ts`) dan sub-komponen stateful sudah dipisahkan secara proporsional tanpa *over-splitting*?
-- [ ] Apakah toolbar pencarian dipisah di `component/<Modul>Search.tsx` menggunakan layout inline `flex flex-wrap items-center gap-2.5` (tanpa card pembungkus), tinggi seragam `h-9`, chip sortir tabel, dan tombol `Reset Filter` bergaya `border-dashed`?
+- [ ] Apakah toolbar pencarian dipisah di `component/<Modul>Search.tsx` menggunakan kontainer kartu (`mb-4 space-y-3 rounded-lg border bg-card p-3.5 shadow-xs sm:p-4`) dengan layout `flex flex-wrap items-center gap-2.5`, tinggi seragam `h-9`, chip sortir tabel, dan tombol `Reset Filter` bergaya `border-dashed`?
 - [ ] Apakah semua `<SelectTrigger>` menggunakan `w-full sm:w-auto sm:min-w-[...]` (bukan lebar tetap `sm:w-[...]`) dan `SelectContent` memakai `w-auto min-w-(--anchor-width)` agar label tidak terpotong?
 - [ ] Apakah `<DataTablePagination>` sudah menerima `routeUrl` dan `isLoading`?
 - [ ] Apakah tipe TypeScript lolos verifikasi `npm run types:check` tanpa error?

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\StockMovementType;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
@@ -13,6 +14,7 @@ use App\Services\ProductUnitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -124,10 +126,31 @@ class ProductController extends Controller
 
         $categories = Category::orderBy('name')->get(['id', 'name', 'is_active']);
 
+        $summaryRow = Product::query()
+            ->selectRaw(
+                'COUNT(*) as total_products,
+                COUNT(*) FILTER (WHERE active = true) as active_products,
+                COUNT(*) FILTER (WHERE stock > min_stock) as safe_stock_count,
+                COUNT(*) FILTER (WHERE stock > 0 AND stock <= min_stock) as low_stock_count,
+                COUNT(*) FILTER (WHERE stock <= 0) as out_of_stock_count,
+                (SELECT COUNT(*) FROM product_units WHERE product_units.is_active = true AND EXISTS (SELECT 1 FROM products p WHERE p.id = product_units.product_id AND p.deleted_at IS NULL)) as active_units_count'
+            )
+            ->first();
+
+        $summary = [
+            'total_products' => (int) ($summaryRow->total_products ?? 0),
+            'active_products' => (int) ($summaryRow->active_products ?? 0),
+            'safe_stock_count' => (int) ($summaryRow->safe_stock_count ?? 0),
+            'low_stock_count' => (int) ($summaryRow->low_stock_count ?? 0),
+            'out_of_stock_count' => (int) ($summaryRow->out_of_stock_count ?? 0),
+            'active_units_count' => (int) ($summaryRow->active_units_count ?? 0),
+        ];
+
         return Inertia::render('POS/Product/Product', [
             'products' => $products,
             'filters' => $filters,
             'categories' => $categories,
+            'summary' => $summary,
         ]);
     }
 
@@ -188,12 +211,98 @@ class ProductController extends Controller
             ],
             'stockMovements' => Inertia::optional(function () use ($request, $product) {
                 $perPage = $request->integer('mutation_per_page', 15);
+                $likeOperator = DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
 
-                $paginated = StockMovement::where('product_id', $product->id)
+                $mutationFilters = $request->only([
+                    'mutation_search',
+                    'mutation_type',
+                    'mutation_direction',
+                    'mutation_start_date',
+                    'mutation_end_date',
+                    'mutation_sort',
+                    'mutation_sort_dir',
+                    'mutation_table_sort',
+                    'mutation_table_dir',
+                ]);
+
+                $allowedSorts = ['created_at', 'type', 'stock_before', 'qty_change', 'stock_after', 'unit_cost'];
+
+                $tableSort = $request->input('mutation_table_sort');
+                $tableDirection = strtolower((string) $request->input('mutation_table_dir')) === 'desc' ? 'desc' : 'asc';
+                $hasTableSort = ! empty($tableSort) && in_array($tableSort, $allowedSorts, true);
+
+                $toolbarSort = $request->input('mutation_sort');
+                $toolbarDirection = strtolower((string) $request->input('mutation_sort_dir')) === 'asc' ? 'asc' : 'desc';
+                $hasToolbarSort = ! empty($toolbarSort) && in_array($toolbarSort, $allowedSorts, true);
+
+                $query = StockMovement::where('product_id', $product->id)
                     ->with('creator:id,name')
-                    ->latest('id')
+                    ->when($request->filled('mutation_search'), function ($query) use ($request, $likeOperator): void {
+                        $search = trim((string) $request->input('mutation_search'));
+                        $query->where(function ($q) use ($search, $likeOperator): void {
+                            $q->where('notes', $likeOperator, "%{$search}%")
+                                ->orWhereHas('creator', function ($creatorQuery) use ($search, $likeOperator): void {
+                                    $creatorQuery->where('name', $likeOperator, "%{$search}%");
+                                });
+                        });
+                    })
+                    ->when($request->filled('mutation_type') && $request->input('mutation_type') !== 'all', function ($query) use ($request): void {
+                        $type = (string) $request->input('mutation_type');
+                        $matchingTypes = match ($type) {
+                            StockMovementType::Sale->value, StockMovementType::SaleOut->value => [
+                                StockMovementType::Sale->value,
+                                StockMovementType::SaleOut->value,
+                            ],
+                            StockMovementType::SaleReturn->value, StockMovementType::SaleReturnIn->value => [
+                                StockMovementType::SaleReturn->value,
+                                StockMovementType::SaleReturnIn->value,
+                            ],
+                            default => [$type],
+                        };
+
+                        $query->whereIn('type', $matchingTypes);
+                    })
+                    ->when($request->filled('mutation_direction') && $request->input('mutation_direction') !== 'all', function ($query) use ($request): void {
+                        match ($request->input('mutation_direction')) {
+                            'in' => $query->where('qty_change', '>', 0),
+                            'out' => $query->where('qty_change', '<', 0),
+                            default => null,
+                        };
+                    })
+                    ->when($request->filled('mutation_start_date'), function ($query) use ($request): void {
+                        $query->whereDate('created_at', '>=', (string) $request->input('mutation_start_date'));
+                    })
+                    ->when($request->filled('mutation_end_date'), function ($query) use ($request): void {
+                        $query->whereDate('created_at', '<=', (string) $request->input('mutation_end_date'));
+                    });
+
+                if ($hasTableSort) {
+                    $query->orderBy($tableSort, $tableDirection);
+                }
+
+                if ($hasToolbarSort && (! $hasTableSort || $toolbarSort !== $tableSort)) {
+                    $query->orderBy($toolbarSort, $toolbarDirection);
+                }
+
+                if (! $hasTableSort && ! $hasToolbarSort) {
+                    $query->latest('id');
+                } else {
+                    $query->orderBy('id', 'desc');
+                }
+
+                $paginated = $query
                     ->paginate($perPage, ['*'], 'mutation_page')
                     ->withQueryString();
+
+                $typeOptions = [
+                    ['value' => StockMovementType::PurchaseIn->value, 'label' => StockMovementType::PurchaseIn->label()],
+                    ['value' => StockMovementType::Sale->value, 'label' => StockMovementType::Sale->label()],
+                    ['value' => StockMovementType::SaleVoid->value, 'label' => StockMovementType::SaleVoid->label()],
+                    ['value' => StockMovementType::SaleReturn->value, 'label' => StockMovementType::SaleReturn->label()],
+                    ['value' => StockMovementType::AdjustmentIn->value, 'label' => StockMovementType::AdjustmentIn->label()],
+                    ['value' => StockMovementType::AdjustmentOut->value, 'label' => StockMovementType::AdjustmentOut->label()],
+                    ['value' => StockMovementType::PurchaseReturnOut->value, 'label' => StockMovementType::PurchaseReturnOut->label()],
+                ];
 
                 return [
                     'data' => collect($paginated->items())->map(fn (StockMovement $movement) => [
@@ -208,6 +317,8 @@ class ProductController extends Controller
                         'creator_name' => $movement->creator?->name ?? 'Sistem',
                         'created_at' => $movement->created_at?->format('d M Y H:i:s'),
                     ])->all(),
+                    'filters' => $mutationFilters,
+                    'type_options' => $typeOptions,
                     'current_page' => $paginated->currentPage(),
                     'last_page' => $paginated->lastPage(),
                     'per_page' => $paginated->perPage(),
@@ -218,8 +329,23 @@ class ProductController extends Controller
             }),
             'activities' => Inertia::optional(function () use ($request, $product) {
                 $perPage = $request->integer('per_page', 10);
+                $driver = DB::getDriverName();
 
                 $paginated = Activity::forSubject($product)
+                    ->where(function ($query) use ($driver): void {
+                        $query->whereNull('event')
+                            ->orWhere('event', '!=', 'updated');
+
+                        if ($driver === 'pgsql') {
+                            $query->orWhereRaw(
+                                "((COALESCE(attribute_changes::jsonb -> 'attributes', properties::jsonb -> 'attributes', '{}'::jsonb) - 'stock') <> '{}'::jsonb OR (COALESCE(attribute_changes::jsonb -> 'old', properties::jsonb -> 'old', '{}'::jsonb) - 'stock') <> '{}'::jsonb)"
+                            );
+                        } else {
+                            $query->orWhereRaw(
+                                "(json_remove(COALESCE(json_extract(attribute_changes, '$.attributes'), json_extract(properties, '$.attributes'), '{}'), '$.stock') <> '{}' OR json_remove(COALESCE(json_extract(attribute_changes, '$.old'), json_extract(properties, '$.old'), '{}'), '$.stock') <> '{}')"
+                            );
+                        }
+                    })
                     ->with('causer')
                     ->latest('id')
                     ->paginate($perPage)
@@ -250,8 +376,8 @@ class ProductController extends Controller
                         'event' => $act->event,
                         'causer_name' => $act->causer instanceof User ? $act->causer->name : ($act->causer_id ? 'User #'.$act->causer_id : 'Sistem'),
                         'causer_role' => $act->causer instanceof User ? ($act->causer->role?->label() ?? $act->causer->role?->value) : null,
-                        'attribute_changes' => $act->attribute_changes?->toArray() ?? [],
-                        'properties' => $act->properties?->toArray() ?? [],
+                        'attribute_changes' => $this->stripStockFromActivityPayload($act->attribute_changes?->toArray() ?? []),
+                        'properties' => $this->stripStockFromActivityPayload($act->properties?->toArray() ?? []),
                         'category_map' => $categoryMap,
                         'created_at' => $act->created_at?->format('d M Y H:i:s'),
                         'created_at_human' => $act->created_at?->diffForHumans(),
@@ -378,5 +504,22 @@ class ProductController extends Controller
 
         return redirect()->route('pos.products.index')
             ->with('success', 'Produk berhasil dihapus.');
+    }
+
+    /**
+     * Hapus atribut stock dari payload log aktivitas produk karena perubahan stok dicatat di mutasi stok.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function stripStockFromActivityPayload(array $payload): array
+    {
+        foreach (['attributes', 'old'] as $section) {
+            if (isset($payload[$section]) && is_array($payload[$section])) {
+                unset($payload[$section]['stock']);
+            }
+        }
+
+        return $payload;
     }
 }

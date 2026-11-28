@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             CustomerSeeder::class,
             FinanceSeeder::class,
+            CashRegisterSeeder::class,
         ]);
     }
 }

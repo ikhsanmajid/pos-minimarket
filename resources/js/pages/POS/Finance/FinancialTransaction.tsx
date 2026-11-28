@@ -6,7 +6,8 @@ import DataTablePagination, { type PaginationMeta } from '@/components/dataTable
 import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatDateRangeLabel, formatNumber, formatPercent, formatRupiah } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -16,10 +17,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { Search, X, ArrowDownLeft, ArrowUpRight, Scale } from 'lucide-react'
+import { Search, X, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Scale } from 'lucide-react'
 import type { PageProps } from '@/types'
 import FinancialTransactionController from '@/actions/App/Http/Controllers/FinancialTransactionController'
-import { formatRupiah } from '../PurchaseOrders/component/purchaseOrderUtils'
 
 export interface FinancialTransactionRow {
     id: number
@@ -55,6 +55,9 @@ type FinancialTransactionPageProps = PageProps<{
     transactions: PaginationMeta & { data: FinancialTransactionRow[] }
     filters: Filters
     summary: {
+        total_transactions: number
+        in_count: number
+        out_count: number
         total_in: number
         total_out: number
         net_flow: number
@@ -214,9 +217,8 @@ const FinancialTransactionPage = () => {
                     const isIn = row.original.type === 'in'
                     return (
                         <span
-                            className={`font-mono text-xs font-bold ${
-                                isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                            }`}
+                            className={`font-mono text-xs font-bold ${isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                                }`}
                         >
                             {isIn ? '+' : '-'} {formatRupiah(row.original.amount)}
                         </span>
@@ -271,47 +273,72 @@ const FinancialTransactionPage = () => {
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Total Kas Masuk</p>
-                            <p className="text-lg font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                + {formatRupiah(summary.total_in)}
-                            </p>
-                        </div>
-                        <ArrowDownLeft className="h-8 w-8 text-emerald-500/30" />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Total Kas Keluar</p>
-                            <p className="text-lg font-extrabold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
-                                - {formatRupiah(summary.total_out)}
-                            </p>
-                        </div>
-                        <ArrowUpRight className="h-8 w-8 text-rose-500/30" />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Arus Kas Bersih</p>
-                            <p
-                                className={`text-lg font-extrabold font-mono mt-0.5 ${
-                                    summary.net_flow >= 0
-                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                        : 'text-rose-600 dark:text-rose-400'
-                                }`}
-                            >
-                                {formatRupiah(summary.net_flow)}
-                            </p>
-                        </div>
-                        <Scale className="h-8 w-8 text-primary/30" />
-                    </CardContent>
-                </Card>
-            </div>
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Transaksi"
+                    value={formatNumber(summary.total_transactions)}
+                    icon={ArrowLeftRight}
+                    variant="blue"
+                    subInfo={`${formatNumber(summary.in_count)} masuk • ${formatNumber(summary.out_count)} keluar`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Semua Data')}
+                    isActive={!filters.type || filters.type === 'all'}
+                    onClick={() => {
+                        setType('all')
+                        router.visit(
+                            FinancialTransactionController.index({
+                                mergeQuery: { type: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Total Pemasukan"
+                    value={formatRupiah(summary.total_in)}
+                    icon={ArrowDownLeft}
+                    variant="emerald"
+                    subInfo={`${formatNumber(summary.in_count)} transaksi (${formatPercent(summary.in_count, summary.total_transactions)})`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Kas Masuk')}
+                    isActive={filters.type === 'in'}
+                    onClick={() => {
+                        const next = filters.type === 'in' ? 'all' : 'in'
+                        setType(next)
+                        router.visit(
+                            FinancialTransactionController.index({
+                                mergeQuery: { type: next !== 'all' ? next : undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Arus Kas Bersih (Net)"
+                    value={formatRupiah(summary.net_flow)}
+                    icon={Scale}
+                    variant="amber"
+                    subInfo={summary.net_flow >= 0 ? 'Surplus arus kas' : 'Defisit arus kas'}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Semua Data')}
+                />
+                <SummaryStatCard
+                    title="Total Pengeluaran"
+                    value={formatRupiah(summary.total_out)}
+                    icon={ArrowUpRight}
+                    variant="rose"
+                    subInfo={`${formatNumber(summary.out_count)} transaksi (${formatPercent(summary.out_count, summary.total_transactions)})`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Kas Keluar')}
+                    isActive={filters.type === 'out'}
+                    onClick={() => {
+                        const next = filters.type === 'out' ? 'all' : 'out'
+                        setType(next)
+                        router.visit(
+                            FinancialTransactionController.index({
+                                mergeQuery: { type: next !== 'all' ? next : undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+            </SummaryStatGrid>
 
             {/* Filter Toolbar */}
             <div className="flex flex-wrap items-center gap-2.5">

@@ -6,7 +6,8 @@ import DataTablePagination, { type PaginationMeta } from '@/components/dataTable
 import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatRupiah } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import {
     Select,
@@ -38,7 +39,6 @@ import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import FinancialAccountController from '@/actions/App/Http/Controllers/FinancialAccountController'
 import { DialogFinancialAccount } from './component/DialogFinancialAccount'
-import { formatRupiah } from '../PurchaseOrders/component/purchaseOrderUtils'
 
 export interface FinancialAccountRow {
     id: number
@@ -71,6 +71,12 @@ type FinancialAccountPageProps = PageProps<{
     accounts: PaginationMeta & { data: FinancialAccountRow[] }
     filters: Filters
     summary: {
+        total_accounts: number
+        active_accounts: number
+        inactive_accounts: number
+        cash_count: number
+        bank_count: number
+        ewallet_count: number
         total_balance: number
         cash_balance: number
         bank_balance: number
@@ -324,46 +330,83 @@ const FinancialAccountPage = () => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Total Saldo Aktif</p>
-                            <p className="text-lg font-extrabold font-mono text-primary mt-0.5">
-                                {formatRupiah(summary.total_balance)}
-                            </p>
-                        </div>
-                        <Wallet className="h-8 w-8 text-primary/30" />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Kas Tunai</p>
-                            <p className="text-lg font-bold font-mono mt-0.5">{formatRupiah(summary.cash_balance)}</p>
-                        </div>
-                        <Wallet className="h-8 w-8 text-emerald-500/30" />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Rekening Bank</p>
-                            <p className="text-lg font-bold font-mono mt-0.5">{formatRupiah(summary.bank_balance)}</p>
-                        </div>
-                        <Landmark className="h-8 w-8 text-blue-500/30" />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">E-Wallet</p>
-                            <p className="text-lg font-bold font-mono mt-0.5">{formatRupiah(summary.ewallet_balance)}</p>
-                        </div>
-                        <Smartphone className="h-8 w-8 text-purple-500/30" />
-                    </CardContent>
-                </Card>
-            </div>
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Saldo Semua Akun"
+                    value={formatRupiah(summary.total_balance)}
+                    icon={Wallet}
+                    variant="blue"
+                    subInfo={`${formatNumber(summary.active_accounts)} dari ${formatNumber(summary.total_accounts)} akun aktif`}
+                    periodLabel="Aktif"
+                    isActive={!filters.type || filters.type === 'all'}
+                    onClick={() => {
+                        setType('all')
+                        router.visit(
+                            FinancialAccountController.index({
+                                mergeQuery: { type: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Saldo Kas / Tunai"
+                    value={formatRupiah(summary.cash_balance)}
+                    icon={Wallet}
+                    variant="emerald"
+                    subInfo={`${formatNumber(summary.cash_count)} akun kas aktif`}
+                    periodLabel="Tunai"
+                    isActive={filters.type === 'cash'}
+                    onClick={() => {
+                        const next = filters.type === 'cash' ? 'all' : 'cash'
+                        setType(next)
+                        router.visit(
+                            FinancialAccountController.index({
+                                mergeQuery: { type: next !== 'all' ? next : undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Saldo Bank / Transfer"
+                    value={formatRupiah(summary.bank_balance)}
+                    icon={Landmark}
+                    variant="amber"
+                    subInfo={`${formatNumber(summary.bank_count)} rekening bank aktif`}
+                    periodLabel="Bank"
+                    isActive={filters.type === 'bank'}
+                    onClick={() => {
+                        const next = filters.type === 'bank' ? 'all' : 'bank'
+                        setType(next)
+                        router.visit(
+                            FinancialAccountController.index({
+                                mergeQuery: { type: next !== 'all' ? next : undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Saldo E-Wallet / QRIS"
+                    value={formatRupiah(summary.ewallet_balance)}
+                    icon={Smartphone}
+                    variant="rose"
+                    subInfo={`${formatNumber(summary.ewallet_count)} dompet digital aktif`}
+                    periodLabel="E-Wallet"
+                    isActive={filters.type === 'ewallet'}
+                    onClick={() => {
+                        const next = filters.type === 'ewallet' ? 'all' : 'ewallet'
+                        setType(next)
+                        router.visit(
+                            FinancialAccountController.index({
+                                mergeQuery: { type: next !== 'all' ? next : undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+            </SummaryStatGrid>
 
             {/* Filter Toolbar */}
             <div className="flex flex-wrap items-center gap-2.5">

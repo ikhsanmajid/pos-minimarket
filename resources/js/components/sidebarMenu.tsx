@@ -22,6 +22,7 @@ import financeAccounts from "@/routes/pos/finance/accounts"
 import financePayables from "@/routes/pos/finance/payables"
 import financeTransactions from "@/routes/pos/finance/transactions"
 import shifts from "@/routes/pos/shifts"
+import cashRegisters from "@/routes/pos/cash-registers"
 import cashier from "@/routes/pos/cashier"
 import transactions from "@/routes/pos/transactions"
 import settings from "@/routes/pos/settings"
@@ -60,7 +61,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             title: "Kasir POS",
             url: "#",
             icon: <ShoppingCart />,
-            isActive: url.startsWith('/pos/cashier') || url.startsWith('/pos/shifts') || url.startsWith('/pos/transactions'),
+            isActive:
+                url.startsWith('/pos/cashier') ||
+                url.startsWith('/pos/shifts') ||
+                url.startsWith('/pos/transactions') ||
+                url.startsWith('/pos/cash-registers'),
             roles: ['admin', 'cashier', 'supervisor'],
             items: [
                 {
@@ -82,6 +87,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     title: "Riwayat Shift",
                     url: shifts.history.url(),
                     roles: ['admin', 'cashier', 'supervisor'],
+                },
+                {
+                    title: "Kasir Fisik",
+                    url: cashRegisters.index.url(),
+                    roles: ['admin', 'supervisor'],
                 },
             ],
         },
@@ -162,11 +172,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {
                     title: "Log Aktifitas",
                     url: "/pos/activity-logs",
-                    roles: ['admin', 'supervisor'],
-                },
-                {
-                    title: "Sesi Shift",
-                    url: shifts.history.url(),
                     roles: ['admin', 'supervisor'],
                 },
             ],

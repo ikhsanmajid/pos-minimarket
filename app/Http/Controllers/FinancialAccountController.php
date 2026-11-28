@@ -92,12 +92,40 @@ class FinancialAccountController extends Controller
                 'created_at' => $acc->created_at?->format('d M Y'),
             ]);
 
-        $activeAccounts = FinancialAccount::where('is_active', true)->get(['type', 'current_balance']);
+        $summaryRow = FinancialAccount::query()
+            ->selectRaw(
+                'COUNT(*) as total_accounts,
+                COUNT(*) FILTER (WHERE is_active = true) as active_accounts,
+                COUNT(*) FILTER (WHERE is_active = false) as inactive_accounts,
+                COUNT(*) FILTER (WHERE is_active = true AND type = ?) as cash_count,
+                COUNT(*) FILTER (WHERE is_active = true AND type = ?) as bank_count,
+                COUNT(*) FILTER (WHERE is_active = true AND type = ?) as ewallet_count,
+                COALESCE(SUM(current_balance) FILTER (WHERE is_active = true), 0) as total_balance,
+                COALESCE(SUM(current_balance) FILTER (WHERE is_active = true AND type = ?), 0) as cash_balance,
+                COALESCE(SUM(current_balance) FILTER (WHERE is_active = true AND type = ?), 0) as bank_balance,
+                COALESCE(SUM(current_balance) FILTER (WHERE is_active = true AND type = ?), 0) as ewallet_balance',
+                [
+                    FinancialAccountType::Cash->value,
+                    FinancialAccountType::Bank->value,
+                    FinancialAccountType::Ewallet->value,
+                    FinancialAccountType::Cash->value,
+                    FinancialAccountType::Bank->value,
+                    FinancialAccountType::Ewallet->value,
+                ]
+            )
+            ->first();
+
         $summary = [
-            'total_balance' => (float) $activeAccounts->sum('current_balance'),
-            'cash_balance' => (float) $activeAccounts->where('type', FinancialAccountType::Cash)->sum('current_balance'),
-            'bank_balance' => (float) $activeAccounts->where('type', FinancialAccountType::Bank)->sum('current_balance'),
-            'ewallet_balance' => (float) $activeAccounts->where('type', FinancialAccountType::Ewallet)->sum('current_balance'),
+            'total_accounts' => (int) ($summaryRow->total_accounts ?? 0),
+            'active_accounts' => (int) ($summaryRow->active_accounts ?? 0),
+            'inactive_accounts' => (int) ($summaryRow->inactive_accounts ?? 0),
+            'cash_count' => (int) ($summaryRow->cash_count ?? 0),
+            'bank_count' => (int) ($summaryRow->bank_count ?? 0),
+            'ewallet_count' => (int) ($summaryRow->ewallet_count ?? 0),
+            'total_balance' => round((float) ($summaryRow->total_balance ?? 0), 2),
+            'cash_balance' => round((float) ($summaryRow->cash_balance ?? 0), 2),
+            'bank_balance' => round((float) ($summaryRow->bank_balance ?? 0), 2),
+            'ewallet_balance' => round((float) ($summaryRow->ewallet_balance ?? 0), 2),
         ];
 
         return Inertia::render('POS/Finance/FinancialAccount', [

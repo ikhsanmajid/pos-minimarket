@@ -8,6 +8,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\ShiftCashMovementType;
 use App\Enums\TransactionStatus;
 use App\Enums\UserRoles;
+use App\Models\CashRegister;
 use App\Models\CashierShift;
 use App\Models\SalesReturn;
 use App\Models\ShiftCashMovement;
@@ -90,7 +91,7 @@ class CashierShiftService
     /**
      * Membuka sesi shift baru secara atomik dengan penguncian baris user agar tidak terjadi double-open.
      *
-     * @param  array{register_name: string, starting_cash: float|int|string}  $data
+     * @param  array{cash_register_id?: int|string|null, register_name?: string|null, starting_cash: float|int|string}  $data
      */
     public function openShift(User $actor, array $data): CashierShift
     {
@@ -109,11 +110,43 @@ class CashierShiftService
                 ]);
             }
 
+            $cashRegisterId = ! empty($data['cash_register_id']) ? (int) $data['cash_register_id'] : null;
+            $registerName = trim((string) ($data['register_name'] ?? '')) ?: 'Kasir 1';
+
+            if ($cashRegisterId !== null) {
+                $register = CashRegister::query()
+                    ->where('id', $cashRegisterId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $register || ! $register->is_active) {
+                    throw ValidationException::withMessages([
+                        'cash_register_id' => 'Kasir fisik yang dipilih tidak aktif atau sudah dihapus.',
+                    ]);
+                }
+
+                $occupiedShift = CashierShift::query()
+                    ->with('user:id,name')
+                    ->where('cash_register_id', $register->id)
+                    ->where('status', CashierShiftStatus::Open->value)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($occupiedShift) {
+                    $cashierName = $occupiedShift->user?->name ?? 'Kasir lain';
+                    throw ValidationException::withMessages([
+                        'cash_register_id' => "Kasir fisik {$register->name} sedang digunakan oleh {$cashierName} ({$occupiedShift->shift_number}).",
+                    ]);
+                }
+
+                $registerName = $register->name;
+            }
+
             $startingCash = round(max(0, (float) $data['starting_cash']), 2);
-            $registerName = trim($data['register_name']) ?: 'Kasir 1';
 
             $shift = CashierShift::create([
                 'user_id' => $actor->id,
+                'cash_register_id' => $cashRegisterId,
                 'register_name' => $registerName,
                 'status' => CashierShiftStatus::Open,
                 'opened_at' => now(),
@@ -126,6 +159,7 @@ class CashierShiftService
                 ->causedBy($actor)
                 ->withProperties([
                     'shift_number' => $shift->shift_number,
+                    'cash_register_id' => $shift->cash_register_id,
                     'register_name' => $shift->register_name,
                     'starting_cash' => $startingCash,
                 ])

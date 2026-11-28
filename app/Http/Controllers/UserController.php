@@ -92,9 +92,38 @@ class UserController extends Controller
                 'created_at' => $user->created_at?->format('d M Y'),
             ]);
 
+        $summaryRow = User::query()
+            ->selectRaw(
+                'COUNT(*) as total_users,
+                COUNT(*) FILTER (WHERE is_active = true) as active_users,
+                COUNT(*) FILTER (WHERE is_active = false) as inactive_users,
+                COUNT(*) FILTER (WHERE role IN (?, ?)) as admin_supervisor_count,
+                COUNT(*) FILTER (WHERE role = ?) as cashier_count,
+                COUNT(*) FILTER (WHERE role = ?) as warehouse_count,
+                COUNT(DISTINCT role) FILTER (WHERE is_active = true) as active_roles_count',
+                [
+                    UserRoles::Admin->value,
+                    UserRoles::Supervisor->value,
+                    UserRoles::Cashier->value,
+                    UserRoles::Warehouse->value,
+                ]
+            )
+            ->first();
+
+        $summary = [
+            'total_users' => (int) ($summaryRow->total_users ?? 0),
+            'active_users' => (int) ($summaryRow->active_users ?? 0),
+            'inactive_users' => (int) ($summaryRow->inactive_users ?? 0),
+            'admin_supervisor_count' => (int) ($summaryRow->admin_supervisor_count ?? 0),
+            'cashier_count' => (int) ($summaryRow->cashier_count ?? 0),
+            'warehouse_count' => (int) ($summaryRow->warehouse_count ?? 0),
+            'active_roles_count' => (int) ($summaryRow->active_roles_count ?? 0),
+        ];
+
         return Inertia::render('POS/Users/Users', [
             'users' => $users,
             'filters' => $filters,
+            'summary' => $summary,
             'roles' => collect(UserRoles::cases())->map(fn (UserRoles $r) => [
                 'value' => $r->value,
                 'label' => $r->label(),

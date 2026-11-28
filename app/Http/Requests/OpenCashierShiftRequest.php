@@ -17,7 +17,8 @@ class OpenCashierShiftRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'register_name' => ['required', 'string', 'max:50'],
+            'cash_register_id' => ['nullable', 'integer', 'exists:cash_registers,id'],
+            'register_name' => ['required_without:cash_register_id', 'nullable', 'string', 'max:50'],
             'starting_cash' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
         ];
     }
@@ -28,7 +29,8 @@ class OpenCashierShiftRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'register_name.required' => 'Nama / nomor kasir wajib diisi.',
+            'cash_register_id.exists' => 'Kasir fisik yang dipilih tidak ditemukan.',
+            'register_name.required_without' => 'Kasir fisik wajib dipilih atau diisi.',
             'starting_cash.required' => 'Modal awal laci wajib diisi.',
             'starting_cash.numeric' => 'Modal awal laci harus berupa angka.',
             'starting_cash.min' => 'Modal awal laci tidak boleh bernilai negatif.',

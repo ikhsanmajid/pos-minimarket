@@ -154,11 +154,57 @@ class PurchaseOrderController extends Controller
             ]);
 
         $suppliers = Supplier::orderBy('name')->get(['id', 'name', 'code', 'is_active']);
-        $pendingApprovalCount = PurchaseOrder::where('status', PurchaseOrderStatus::PendingApproval)->count();
+
+        $summaryRow = PurchaseOrder::query()
+            ->when($request->filled('start_date'), function ($query) use ($request): void {
+                $query->whereDate('order_date', '>=', (string) $request->input('start_date'));
+            })
+            ->when($request->filled('end_date'), function ($query) use ($request): void {
+                $query->whereDate('order_date', '<=', (string) $request->input('end_date'));
+            })
+            ->selectRaw(
+                'COUNT(*) as total_orders,
+                COALESCE(SUM(total_amount), 0) as total_amount,
+                COUNT(*) FILTER (WHERE status = ? AND receiving_status = ?) as completed_orders,
+                COUNT(*) FILTER (WHERE status IN (?, ?) OR (status = ? AND receiving_status IN (?, ?))) as in_progress_orders,
+                COUNT(*) FILTER (WHERE status = ?) as pending_approval_count,
+                COUNT(*) FILTER (WHERE status IN (?, ?)) as rejected_or_cancelled_orders,
+                COUNT(*) FILTER (WHERE status = ?) as rejected_orders,
+                COUNT(*) FILTER (WHERE status = ?) as cancelled_orders',
+                [
+                    PurchaseOrderStatus::Approved->value,
+                    ReceivingStatus::Received->value,
+                    PurchaseOrderStatus::Draft->value,
+                    PurchaseOrderStatus::PendingApproval->value,
+                    PurchaseOrderStatus::Approved->value,
+                    ReceivingStatus::Unreceived->value,
+                    ReceivingStatus::Partial->value,
+                    PurchaseOrderStatus::PendingApproval->value,
+                    PurchaseOrderStatus::Rejected->value,
+                    PurchaseOrderStatus::Cancelled->value,
+                    PurchaseOrderStatus::Rejected->value,
+                    PurchaseOrderStatus::Cancelled->value,
+                ]
+            )
+            ->first();
+
+        $pendingApprovalCount = (int) ($summaryRow->pending_approval_count ?? 0);
+
+        $summary = [
+            'total_orders' => (int) ($summaryRow->total_orders ?? 0),
+            'total_amount' => round((float) ($summaryRow->total_amount ?? 0), 2),
+            'completed_orders' => (int) ($summaryRow->completed_orders ?? 0),
+            'in_progress_orders' => (int) ($summaryRow->in_progress_orders ?? 0),
+            'pending_approval_count' => $pendingApprovalCount,
+            'rejected_or_cancelled_orders' => (int) ($summaryRow->rejected_or_cancelled_orders ?? 0),
+            'rejected_orders' => (int) ($summaryRow->rejected_orders ?? 0),
+            'cancelled_orders' => (int) ($summaryRow->cancelled_orders ?? 0),
+        ];
 
         return Inertia::render('POS/PurchaseOrders/PurchaseOrder', [
             'purchaseOrders' => $purchaseOrders,
             'filters' => $filters,
+            'summary' => $summary,
             'suppliers' => $suppliers,
             'pendingApprovalCount' => $pendingApprovalCount,
             'statuses' => collect(PurchaseOrderStatus::cases())->map(fn ($s) => [

@@ -3,10 +3,12 @@ import { Link, router, usePage } from '@inertiajs/react'
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout'
 import { DataTable, type DataTableColumn } from '@/components/dataTable'
 import { Badge } from '@/components/ui/badge'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatPercent } from '@/lib/utils'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
-import { MapPin, Phone, Building2 } from 'lucide-react'
+import { MapPin, Phone, Building2, CheckCircle2, PauseCircle, FileWarning } from 'lucide-react'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import SupplierTableToolbar, { type SupplierFilters } from './component/SupplierSearch'
 import { DialogAddSupplier } from './component/DialogAddSupplier'
@@ -42,6 +44,12 @@ interface PaginatedSuppliers extends PaginationMeta {
 type SupplierPageProps = PageProps<{
     suppliers: PaginatedSuppliers
     filters: SupplierFilters
+    summary: {
+        total_suppliers: number
+        active_suppliers: number
+        inactive_suppliers: number
+        with_active_po_or_debt_count: number
+    }
 }>
 
 function getColumns({
@@ -245,9 +253,26 @@ function getColumns({
 }
 
 export function Supplier() {
-    const { suppliers, filters } = usePage<SupplierPageProps>().props
+    const { suppliers, filters, summary } = usePage<SupplierPageProps>().props
     const { user, flash } = useAuth()
     const [isLoading, setIsLoading] = useState(false)
+
+    const handleFilterStatus = (status?: string) => {
+        const nextStatus = status && filters.status === status ? undefined : status
+        router.visit(
+            SupplierController.index({
+                mergeQuery: {
+                    status: nextStatus,
+                    page: 1,
+                },
+            }),
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            }
+        )
+    }
 
     const userRole = (user?.role as string) || ''
     const canCreate = ['admin', 'supervisor', 'warehouse'].includes(userRole)
@@ -337,6 +362,47 @@ export function Supplier() {
                     <DialogAddSupplier storeUrl={SupplierController.store.url()} />
                 )}
             </div>
+
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Supplier"
+                    value={formatNumber(summary.total_suppliers)}
+                    icon={Building2}
+                    variant="blue"
+                    subInfo="Seluruh mitra terdaftar"
+                    periodLabel="Semua Data"
+                    isActive={!filters.status || filters.status === 'all'}
+                    onClick={() => handleFilterStatus(undefined)}
+                />
+                <SummaryStatCard
+                    title="Supplier Aktif"
+                    value={formatNumber(summary.active_suppliers)}
+                    icon={CheckCircle2}
+                    variant="emerald"
+                    subInfo={`${formatPercent(summary.active_suppliers, summary.total_suppliers)} siap menerima PO`}
+                    periodLabel="Aktif"
+                    isActive={filters.status === 'active'}
+                    onClick={() => handleFilterStatus('active')}
+                />
+                <SummaryStatCard
+                    title="Supplier Nonaktif"
+                    value={formatNumber(summary.inactive_suppliers)}
+                    icon={PauseCircle}
+                    variant="amber"
+                    subInfo="Tidak aktif untuk PO baru"
+                    periodLabel="Nonaktif"
+                    isActive={filters.status === 'inactive'}
+                    onClick={() => handleFilterStatus('inactive')}
+                />
+                <SummaryStatCard
+                    title="Hutang / PO Berjalan"
+                    value={formatNumber(summary.with_active_po_or_debt_count)}
+                    icon={FileWarning}
+                    variant="rose"
+                    subInfo="Supplier perlu tindak lanjut"
+                    periodLabel="Aktif"
+                />
+            </SummaryStatGrid>
 
             <SupplierTableToolbar
                 filters={filters}

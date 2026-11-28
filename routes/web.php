@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountPayableController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CashRegisterController;
 use App\Http\Controllers\CashierShiftController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FinancialAccountController;
@@ -64,6 +65,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/{cashierShift}/movements', [CashierShiftController::class, 'storeMovement'])->name('movements.store');
             Route::post('/{cashierShift}/close', [CashierShiftController::class, 'close'])->name('close');
         });
+
+        // Daftar Kasir Fisik (Mesin Kasir)
+        Route::resource('cash-registers', CashRegisterController::class)->only(['index', 'store', 'update', 'destroy']);
 
         // Product
         Route::prefix('/products')->name('products.')->group(function () {

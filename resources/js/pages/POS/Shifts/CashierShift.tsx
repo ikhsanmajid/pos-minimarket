@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatRupiah } from '@/lib/utils'
 import {
     ArrowDownToLine,
     ArrowUpFromLine,
@@ -24,11 +25,10 @@ import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import shifts from '@/routes/pos/shifts'
 import cashier from '@/routes/pos/cashier'
-import { OpenShiftDialog } from './component/OpenShiftDialog'
+import { OpenShiftDialog, type CashRegisterOption } from './component/OpenShiftDialog'
 import { ShiftCashMovementDialog } from './component/ShiftCashMovementDialog'
 import { CloseShiftDialog } from './component/CloseShiftDialog'
 import {
-    formatRupiah,
     getMovementTypeBadgeClass,
     getVarianceBadgeMeta,
     type FinancialAccountSelectOption,
@@ -84,6 +84,7 @@ type CashierShiftPageProps = PageProps<{
     openShiftsStore: OpenShiftStoreRow[]
     recentOwnShifts: RecentOwnShiftRow[]
     financialAccounts: FinancialAccountSelectOption[]
+    cashRegisters: CashRegisterOption[]
     denominations: number[]
     policyRules: ShiftPolicyRules
 }>
@@ -94,6 +95,7 @@ const CashierShiftPage = () => {
         openShiftsStore = [],
         recentOwnShifts = [],
         financialAccounts = [],
+        cashRegisters = [],
         denominations = [],
         policyRules,
     } = usePage<CashierShiftPageProps>().props
@@ -480,7 +482,12 @@ const CashierShiftPage = () => {
             )}
 
             {/* Modals */}
-            <OpenShiftDialog open={openDialog} onOpenChange={setOpenDialog} />
+            <OpenShiftDialog
+                open={openDialog}
+                onOpenChange={setOpenDialog}
+                cashRegisters={cashRegisters}
+                canManageRegisters={policyRules?.is_privileged ?? false}
+            />
 
             {activeShiftDetail && (
                 <>

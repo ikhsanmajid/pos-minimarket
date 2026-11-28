@@ -150,9 +150,45 @@ class TransactionController extends Controller
                 ->all()
             : [];
 
+        $summaryRow = Transaction::query()
+            ->when(! $canViewAll, fn ($q) => $q->where('user_id', $user->id))
+            ->when($request->filled('start_date'), function ($q) use ($request): void {
+                $q->whereDate('created_at', '>=', (string) $request->input('start_date'));
+            })
+            ->when($request->filled('end_date'), function ($q) use ($request): void {
+                $q->whereDate('created_at', '<=', (string) $request->input('end_date'));
+            })
+            ->selectRaw(
+                'COUNT(*) as total_transactions,
+                COUNT(*) FILTER (WHERE status = ?) as completed_count,
+                COUNT(*) FILTER (WHERE status IN (?, ?)) as refunded_count,
+                COUNT(*) FILTER (WHERE status = ?) as voided_count,
+                COALESCE(SUM(grand_total) FILTER (WHERE status != ?), 0) as total_sales,
+                COALESCE(SUM(grand_total) FILTER (WHERE status = ?), 0) as voided_amount',
+                [
+                    TransactionStatus::Completed->value,
+                    TransactionStatus::PartiallyRefunded->value,
+                    TransactionStatus::Refunded->value,
+                    TransactionStatus::Voided->value,
+                    TransactionStatus::Voided->value,
+                    TransactionStatus::Voided->value,
+                ]
+            )
+            ->first();
+
+        $summary = [
+            'total_transactions' => (int) ($summaryRow->total_transactions ?? 0),
+            'completed_count' => (int) ($summaryRow->completed_count ?? 0),
+            'refunded_count' => (int) ($summaryRow->refunded_count ?? 0),
+            'voided_count' => (int) ($summaryRow->voided_count ?? 0),
+            'total_sales' => round((float) ($summaryRow->total_sales ?? 0), 2),
+            'voided_amount' => round((float) ($summaryRow->voided_amount ?? 0), 2),
+        ];
+
         return Inertia::render('POS/Transactions/Transaction', [
             'transactions' => $transactions,
             'filters' => $filters,
+            'summary' => $summary,
             'cashiers' => $cashiers,
             'canViewAll' => $canViewAll,
             'statusOptions' => TransactionStatus::options(),

@@ -3,6 +3,9 @@ import { router, usePage } from '@inertiajs/react'
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout'
 import { DataTable, type DataTableColumn } from '@/components/dataTable'
 import { Badge } from '@/components/ui/badge'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatPercent } from '@/lib/utils'
+import { ShieldCheck, UserCheck, Users as UsersIcon, UserX } from 'lucide-react'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
@@ -232,13 +235,39 @@ const getColumns = ({ from, currentUserId, roles, filters, onSort }: GetColumnsO
 type UserPageProps = PageProps<{
     users: PaginatedUsers
     filters: UserFilters
+    summary: {
+        total_users: number
+        active_users: number
+        inactive_users: number
+        admin_supervisor_count: number
+        cashier_count: number
+        warehouse_count: number
+        active_roles_count: number
+    }
     roles: RoleOption[]
 }>
 
 const UsersPage = () => {
-    const { users, filters, roles } = usePage<UserPageProps>().props
+    const { users, filters, summary, roles } = usePage<UserPageProps>().props
     const { flash, user: currentUser } = useAuth()
     const [isLoading, setIsLoading] = useState(false)
+
+    const handleFilterActive = (isActive?: string) => {
+        const nextVal = isActive && String(filters.is_active) === isActive ? undefined : isActive
+        router.visit(
+            index({
+                mergeQuery: {
+                    is_active: nextVal,
+                    page: 1,
+                },
+            }),
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            }
+        )
+    }
 
     const handleSort = (field: string) => {
         // Jika kolom ini sudah dipilih di toolbar, tidak bisa disortir di header tabel
@@ -325,6 +354,47 @@ const UsersPage = () => {
                 </div>
                 <DialogAddUser roles={roles} storeUrl={store.url()} />
             </div>
+
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total User"
+                    value={formatNumber(summary.total_users)}
+                    icon={UsersIcon}
+                    variant="blue"
+                    subInfo={`${formatNumber(summary.active_roles_count)} role aktif`}
+                    periodLabel="Semua Data"
+                    isActive={filters.is_active === undefined || filters.is_active === 'all'}
+                    onClick={() => handleFilterActive(undefined)}
+                />
+                <SummaryStatCard
+                    title="User Aktif"
+                    value={formatNumber(summary.active_users)}
+                    icon={UserCheck}
+                    variant="emerald"
+                    subInfo={`${formatPercent(summary.active_users, summary.total_users)} dari total user`}
+                    periodLabel="Aktif"
+                    isActive={String(filters.is_active) === 'true' || String(filters.is_active) === '1'}
+                    onClick={() => handleFilterActive('true')}
+                />
+                <SummaryStatCard
+                    title="Admin & Supervisor"
+                    value={formatNumber(summary.admin_supervisor_count)}
+                    icon={ShieldCheck}
+                    variant="amber"
+                    subInfo={`Kasir: ${formatNumber(summary.cashier_count)} • Gudang: ${formatNumber(summary.warehouse_count)}`}
+                    periodLabel="Otorisasi"
+                />
+                <SummaryStatCard
+                    title="User Nonaktif"
+                    value={formatNumber(summary.inactive_users)}
+                    icon={UserX}
+                    variant="rose"
+                    subInfo="Akses login dinonaktifkan"
+                    periodLabel="Nonaktif"
+                    isActive={String(filters.is_active) === 'false' || String(filters.is_active) === '0'}
+                    onClick={() => handleFilterActive('false')}
+                />
+            </SummaryStatGrid>
 
             <UserTableToolbar filters={filters} roles={roles} routeUrl={index} isLoading={isLoading} />
 

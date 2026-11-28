@@ -51,9 +51,9 @@ const fieldLabels: Record<string, string> = {
     name: 'Nama Produk',
     barcode: 'Barcode',
     category_id: 'Kategori Produk',
+    base_unit: 'Satuan Dasar',
     buy_price: 'Harga Beli (HPP)',
     sell_price: 'Harga Jual',
-    stock: 'Stok',
     min_stock: 'Minimum Stok',
     active: 'Status Aktif',
     image: 'Foto Produk',
@@ -260,7 +260,9 @@ export function RiwayatPerubahanProduct({
                     const properties = row.properties || {}
                     const oldData = changes.old || properties.old || {}
                     const newData = changes.attributes || properties.attributes || {}
-                    const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]))
+                    const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)])).filter(
+                        (key) => key !== 'stock'
+                    )
 
                     if (row.event === 'created') {
                         return (
@@ -329,7 +331,9 @@ export function RiwayatPerubahanProduct({
         const properties = activity.properties || {}
         const oldData = changes.old || properties.old || {}
         const newData = changes.attributes || properties.attributes || {}
-        const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]))
+        const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)])).filter(
+            (key) => key !== 'stock'
+        )
 
         if (allKeys.length > 0) {
             return (

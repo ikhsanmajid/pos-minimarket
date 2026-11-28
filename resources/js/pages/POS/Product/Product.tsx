@@ -3,8 +3,10 @@ import { router, usePage } from '@inertiajs/react'
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout'
 import { DataTable, DataTableColumn } from '@/components/dataTable'
 import { Badge } from '@/components/ui/badge'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatPercent } from '@/lib/utils'
 import type { PageProps } from '@/types'
-import { Package } from 'lucide-react'
+import { AlertTriangle, Package, PackageCheck, PackageX } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
 import ProductController from '@/actions/App/Http/Controllers/ProductController'
@@ -296,12 +298,37 @@ type ProductPageProps = PageProps<{
     products: PaginatedProducts
     filters: ProductFilters
     categories: Category[]
+    summary: {
+        total_products: number
+        active_products: number
+        safe_stock_count: number
+        low_stock_count: number
+        out_of_stock_count: number
+        active_units_count: number
+    }
 }>
 
 const ProductPage = () => {
-    const { products, filters, categories = [] } = usePage<ProductPageProps>().props
+    const { products, filters, categories = [], summary } = usePage<ProductPageProps>().props
     const { flash, user } = useAuth()
     const [isLoading, setIsLoading] = useState(false)
+
+    const handleFilterStockStatus = (stockStatus?: string) => {
+        const nextStatus = stockStatus && filters.stock_status === stockStatus ? undefined : stockStatus
+        router.visit(
+            ProductController.index({
+                mergeQuery: {
+                    stock_status: nextStatus,
+                    page: 1,
+                },
+            }),
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            }
+        )
+    }
 
     const canEdit = user?.role === 'admin' || user?.role === 'warehouse'
     const canDelete = user?.role === 'admin'
@@ -394,6 +421,49 @@ const ProductPage = () => {
                     />
                 )}
             </div>
+
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Produk"
+                    value={formatNumber(summary.total_products)}
+                    icon={Package}
+                    variant="blue"
+                    subInfo={`${formatPercent(summary.active_products, summary.total_products)} aktif • ${formatNumber(summary.active_units_count)} UOM`}
+                    periodLabel="Semua Data"
+                    isActive={!filters.stock_status || filters.stock_status === 'all'}
+                    onClick={() => handleFilterStockStatus(undefined)}
+                />
+                <SummaryStatCard
+                    title="Stok Aman"
+                    value={formatNumber(summary.safe_stock_count)}
+                    icon={PackageCheck}
+                    variant="emerald"
+                    subInfo={`${formatPercent(summary.safe_stock_count, summary.total_products)} dari total produk`}
+                    periodLabel="> Min. Stok"
+                    isActive={filters.stock_status === 'in_stock'}
+                    onClick={() => handleFilterStockStatus('in_stock')}
+                />
+                <SummaryStatCard
+                    title="Stok Hampir Habis"
+                    value={formatNumber(summary.low_stock_count)}
+                    icon={AlertTriangle}
+                    variant="amber"
+                    subInfo="Perlu restock segera"
+                    periodLabel="≤ Min. Stok"
+                    isActive={filters.stock_status === 'low_stock'}
+                    onClick={() => handleFilterStockStatus('low_stock')}
+                />
+                <SummaryStatCard
+                    title="Stok Habis"
+                    value={formatNumber(summary.out_of_stock_count)}
+                    icon={PackageX}
+                    variant="rose"
+                    subInfo="Segera buat order PO"
+                    periodLabel="Stok 0"
+                    isActive={filters.stock_status === 'out_of_stock'}
+                    onClick={() => handleFilterStockStatus('out_of_stock')}
+                />
+            </SummaryStatGrid>
 
             <ProductTableToolbar
                 filters={filters}
