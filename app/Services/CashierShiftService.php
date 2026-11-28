@@ -6,13 +6,14 @@ use App\Enums\ActivityLogCategory;
 use App\Enums\CashierShiftStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\ShiftCashMovementType;
+use App\Enums\TransactionStatus;
 use App\Enums\UserRoles;
 use App\Models\CashierShift;
+use App\Models\SalesReturn;
 use App\Models\ShiftCashMovement;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class CashierShiftService
@@ -70,6 +71,7 @@ class CashierShiftService
     public function __construct(
         public FinanceService $financeService,
         public StoreSettingService $storeSettingService,
+        public SupervisorPinService $supervisorPinService,
     ) {}
 
     public function getVarianceTolerance(): float
@@ -253,50 +255,111 @@ class CashierShiftService
      */
     public function calculateShiftTotals(CashierShift $shift): array
     {
-        $completedRows = Transaction::query()
+        $transactions = Transaction::query()
             ->where('cashier_shift_id', $shift->id)
-            ->whereIn('status', self::COMPLETED_TRANSACTION_STATUSES)
-            ->selectRaw('payment_method, COUNT(*) as tx_count, COALESCE(SUM(grand_total), 0) as total_amount')
-            ->groupBy('payment_method')
+            ->where('status', '!=', TransactionStatus::Voided->value)
+            ->with('payments')
             ->get();
 
         $totalCashSales = 0.0;
         $totalNonCashSales = 0.0;
         $totalTransactions = 0;
-        $paymentBreakdown = [];
+        $totalRefunds = 0.0;
+        $totalCashRefunds = 0.0;
 
-        foreach ($completedRows as $row) {
-            $methodValue = strtolower((string) $row->payment_method);
-            $count = (int) $row->tx_count;
-            $amount = round((float) $row->total_amount, 2);
+        /** @var array<string, array{method: string, label: string, count: int, total: float}> $breakdownMap */
+        $breakdownMap = [];
 
-            $totalTransactions += $count;
+        foreach ($transactions as $tx) {
+            $statusValue = $tx->status instanceof TransactionStatus ? $tx->status->value : strtolower((string) $tx->status);
 
-            if ($methodValue === PaymentMethod::Cash->value) {
-                $totalCashSales = round($totalCashSales + $amount, 2);
-            } else {
-                $totalNonCashSales = round($totalNonCashSales + $amount, 2);
+            if ($tx->payments->isNotEmpty()) {
+                $totalTransactions++;
+                $remainingChange = round((float) ($tx->change_amount ?? 0), 2);
+                $countedMethodsForTx = [];
+
+                foreach ($tx->payments as $payment) {
+                    $methodValue = $payment->payment_method->value;
+                    $netAmount = round((float) $payment->amount, 2);
+
+                    if ($payment->payment_method === PaymentMethod::Cash && $remainingChange > 0) {
+                        $deduct = min($netAmount, $remainingChange);
+                        $netAmount = round($netAmount - $deduct, 2);
+                        $remainingChange = round($remainingChange - $deduct, 2);
+                    }
+
+                    if ($payment->payment_method === PaymentMethod::Cash) {
+                        $totalCashSales = round($totalCashSales + $netAmount, 2);
+                    } else {
+                        $totalNonCashSales = round($totalNonCashSales + $netAmount, 2);
+                    }
+
+                    if (! isset($breakdownMap[$methodValue])) {
+                        $breakdownMap[$methodValue] = [
+                            'method' => $methodValue,
+                            'label' => $payment->payment_method->label(),
+                            'count' => 0,
+                            'total' => 0.0,
+                        ];
+                    }
+
+                    if (! isset($countedMethodsForTx[$methodValue])) {
+                        $breakdownMap[$methodValue]['count']++;
+                        $countedMethodsForTx[$methodValue] = true;
+                    }
+
+                    $breakdownMap[$methodValue]['total'] = round($breakdownMap[$methodValue]['total'] + $netAmount, 2);
+                }
+
+                continue;
             }
 
-            $enum = PaymentMethod::tryFrom($methodValue);
-            $paymentBreakdown[] = [
-                'method' => $methodValue,
-                'label' => $enum ? $enum->label() : ucfirst($methodValue),
-                'count' => $count,
-                'total' => $amount,
-            ];
+            // Fallback untuk data transaksi legacy tanpa tabel transaction_payments
+            $methodValue = strtolower((string) $tx->payment_method);
+            $amount = round((float) $tx->grand_total, 2);
+
+            if (in_array($statusValue, self::COMPLETED_TRANSACTION_STATUSES, true)) {
+                $totalTransactions++;
+
+                if ($methodValue === PaymentMethod::Cash->value) {
+                    $totalCashSales = round($totalCashSales + $amount, 2);
+                } else {
+                    $totalNonCashSales = round($totalNonCashSales + $amount, 2);
+                }
+
+                $enum = PaymentMethod::tryFrom($methodValue);
+                if (! isset($breakdownMap[$methodValue])) {
+                    $breakdownMap[$methodValue] = [
+                        'method' => $methodValue,
+                        'label' => $enum ? $enum->label() : ucfirst($methodValue),
+                        'count' => 0,
+                        'total' => 0.0,
+                    ];
+                }
+                $breakdownMap[$methodValue]['count']++;
+                $breakdownMap[$methodValue]['total'] = round($breakdownMap[$methodValue]['total'] + $amount, 2);
+            } elseif (in_array($statusValue, self::REFUNDED_TRANSACTION_STATUSES, true)) {
+                $totalRefunds = round($totalRefunds + $amount, 2);
+                if ($methodValue === PaymentMethod::Cash->value) {
+                    $totalCashRefunds = round($totalCashRefunds + $amount, 2);
+                }
+            }
         }
 
-        $totalRefunds = round((float) Transaction::query()
+        // Tambahkan total retur dari tabel sales_returns yang diproses pada shift ini
+        $shiftReturns = SalesReturn::query()
             ->where('cashier_shift_id', $shift->id)
-            ->whereIn('status', self::REFUNDED_TRANSACTION_STATUSES)
-            ->sum('grand_total'), 2);
+            ->get(['refund_method', 'total_refund_amount']);
 
-        $totalCashRefunds = round((float) Transaction::query()
-            ->where('cashier_shift_id', $shift->id)
-            ->whereIn('status', self::REFUNDED_TRANSACTION_STATUSES)
-            ->where('payment_method', PaymentMethod::Cash->value)
-            ->sum('grand_total'), 2);
+        foreach ($shiftReturns as $ret) {
+            $retAmount = round((float) $ret->total_refund_amount, 2);
+            $totalRefunds = round($totalRefunds + $retAmount, 2);
+            if ($ret->refund_method === PaymentMethod::Cash) {
+                $totalCashRefunds = round($totalCashRefunds + $retAmount, 2);
+            }
+        }
+
+        $paymentBreakdown = array_values($breakdownMap);
 
         $movementSums = ShiftCashMovement::query()
             ->where('cashier_shift_id', $shift->id)
@@ -443,10 +506,18 @@ class CashierShiftService
             // Setoran tunai bersih di luar modal awal (karena cash_drop sudah tercatat saat terjadi)
             $netCashDeposit = max(0.0, round($actualCash - $totals['starting_cash'], 2));
 
+            // Hanya setor non-tunai untuk transaksi legacy yang belum memiliki baris transaction_payments (anti double-counting)
+            $legacyNonCashSales = round((float) Transaction::query()
+                ->where('cashier_shift_id', $lockedShift->id)
+                ->whereIn('status', self::COMPLETED_TRANSACTION_STATUSES)
+                ->where('payment_method', '!=', PaymentMethod::Cash->value)
+                ->doesntHave('payments')
+                ->sum('grand_total'), 2);
+
             $syncResult = $this->financeService->syncShiftClosing(
                 shift: $lockedShift,
                 netCashDeposit: $netCashDeposit,
-                nonCashSales: $totals['total_non_cash_sales'],
+                nonCashSales: $legacyNonCashSales,
                 actor: $actor,
                 cashDepositAccountId: ! empty($data['cash_deposit_account_id']) ? (int) $data['cash_deposit_account_id'] : null,
                 nonCashDepositAccountId: ! empty($data['non_cash_deposit_account_id']) ? (int) $data['non_cash_deposit_account_id'] : null
@@ -495,29 +566,7 @@ class CashierShiftService
      */
     public function verifySupervisorPin(?string $pin, ?string $missingMessage = null): User
     {
-        $normalizedPin = trim((string) $pin);
-
-        if ($normalizedPin === '') {
-            throw ValidationException::withMessages([
-                'supervisor_pin' => $missingMessage ?? 'PIN otorisasi Admin / Supervisor wajib diisi untuk tindakan ini.',
-            ]);
-        }
-
-        $supervisors = User::query()
-            ->whereIn('role', [UserRoles::Admin->value, UserRoles::Supervisor->value])
-            ->where('is_active', true)
-            ->whereNotNull('pin')
-            ->get(['id', 'name', 'role', 'pin']);
-
-        foreach ($supervisors as $supervisor) {
-            if (! empty($supervisor->pin) && Hash::check($normalizedPin, $supervisor->pin)) {
-                return $supervisor;
-            }
-        }
-
-        throw ValidationException::withMessages([
-            'supervisor_pin' => 'PIN Supervisor / Admin tidak valid atau belum diatur.',
-        ]);
+        return $this->supervisorPinService->verify($pin, $missingMessage);
     }
 
     /**

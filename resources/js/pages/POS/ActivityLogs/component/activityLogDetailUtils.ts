@@ -125,6 +125,22 @@ const fieldLabels: Record<string, string> = {
     default_tax_rate: 'Tarif PPN Default (%)',
     rounding_mode: 'Mode Pembulatan Kasir',
     shift_variance_tolerance: 'Toleransi Selisih Kas Shift',
+    invoice_number: 'No. Invoice',
+    return_number: 'No. Retur',
+    grand_total: 'Grand Total',
+    rounding_amount: 'Pembulatan',
+    change_amount: 'Kembalian',
+    void_reason: 'Alasan Void',
+    voided_by: 'Di-void Oleh',
+    voided_at: 'Waktu Void',
+    discount_approved_by: 'Persetujuan Diskon',
+    refund_method: 'Metode Refund',
+    total_refund_amount: 'Total Refund',
+    returned_items: 'Rincian Barang Diretur',
+    is_restockable: 'Kondisi Stok Retur',
+    subtotal_refund: 'Subtotal Refund',
+    qty: 'Qty',
+    base_qty: 'Qty Satuan Dasar',
 }
 
 const CURRENCY_FIELDS = new Set([
@@ -158,6 +174,11 @@ const CURRENCY_FIELDS = new Set([
     'cash_deposited',
     'non_cash_deposited',
     'shift_variance_tolerance',
+    'grand_total',
+    'rounding_amount',
+    'change_amount',
+    'total_refund_amount',
+    'subtotal_refund',
 ])
 
 const STATUS_LABELS: Record<string, string> = {
@@ -186,6 +207,10 @@ const STATUS_LABELS: Record<string, string> = {
     down_100: 'Bulatkan ke Bawah (Rp 100)',
     up_100: 'Bulatkan ke Atas (Rp 100)',
     nearest_500: 'Bulatkan ke Rp 500 Terdekat',
+    completed: 'Selesai',
+    voided: 'Dibatalkan (Void)',
+    partially_refunded: 'Retur Sebagian',
+    refunded: 'Retur Penuh',
 }
 
 export const isPlainObject = (val: unknown): val is Record<string, unknown> =>

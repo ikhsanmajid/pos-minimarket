@@ -10,9 +10,11 @@ use App\Models\PayablePayment;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderReceipt;
+use App\Models\SalesReturn;
 use App\Models\ShiftCashMovement;
 use App\Models\StoreSetting;
 use App\Models\Supplier;
+use App\Models\Transaction;
 use App\Models\User;
 
 enum ActivityLogCategory: string
@@ -78,6 +80,7 @@ enum ActivityLogCategory: string
             self::Product => Product::class,
             self::User => User::class,
             self::Category => Category::class,
+            self::Transaction => Transaction::class,
             self::CashierShift => CashierShift::class,
             self::Supplier => Supplier::class,
             self::PurchaseOrder => PurchaseOrder::class,
@@ -115,6 +118,13 @@ enum ActivityLogCategory: string
 
         if ($baseName === class_basename(PurchaseOrderReceipt::class)) {
             return self::PurchaseOrder;
+        }
+
+        if (in_array($baseName, [
+            class_basename(Transaction::class),
+            class_basename(SalesReturn::class),
+        ], true)) {
+            return self::Transaction;
         }
 
         foreach (self::cases() as $case) {

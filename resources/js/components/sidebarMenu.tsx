@@ -23,6 +23,7 @@ import financePayables from "@/routes/pos/finance/payables"
 import financeTransactions from "@/routes/pos/finance/transactions"
 import shifts from "@/routes/pos/shifts"
 import cashier from "@/routes/pos/cashier"
+import transactions from "@/routes/pos/transactions"
 import settings from "@/routes/pos/settings"
 
 interface NavSubItem {
@@ -65,6 +66,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {
                     title: "Transaksi Kasir",
                     url: cashier.index.url(),
+                    roles: ['admin', 'cashier', 'supervisor'],
+                },
+                {
+                    title: "Riwayat Transaksi",
+                    url: transactions.index.url(),
                     roles: ['admin', 'cashier', 'supervisor'],
                 },
                 {

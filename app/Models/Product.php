@@ -75,6 +75,7 @@ class Product extends Model
         return $this->belongsTo(Category::class);
     }
 
+    /** @return HasMany<ProductUnit, $this> */
     public function units(): HasMany
     {
         return $this->hasMany(ProductUnit::class)->orderBy('conversion_factor');
