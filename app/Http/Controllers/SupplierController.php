@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PaymentStatus;
+use App\Enums\PurchaseOrderStatus;
+use App\Enums\ReceivingStatus;
 use App\Http\Requests\StoreSupplierRequest;
 use App\Http\Requests\UpdateSupplierRequest;
 use App\Models\Supplier;
@@ -96,9 +99,48 @@ class SupplierController extends Controller
                 'created_at' => $s->created_at?->format('d M Y H:i'),
             ]);
 
+        $summaryRow = Supplier::query()
+            ->selectRaw(
+                'COUNT(*) as total_suppliers,
+                COUNT(*) FILTER (WHERE is_active = true) as active_suppliers,
+                COUNT(*) FILTER (WHERE is_active = false) as inactive_suppliers,
+                COUNT(*) FILTER (WHERE
+                    EXISTS (
+                        SELECT 1 FROM account_payables ap
+                        WHERE ap.supplier_id = suppliers.id
+                          AND ap.deleted_at IS NULL
+                          AND ap.status != ?
+                          AND ap.remaining_amount > 0
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM purchase_orders po
+                        WHERE po.supplier_id = suppliers.id
+                          AND po.deleted_at IS NULL
+                          AND po.status IN (?, ?, ?)
+                          AND po.receiving_status != ?
+                    )
+                ) as with_active_po_or_debt_count',
+                [
+                    PaymentStatus::Paid->value,
+                    PurchaseOrderStatus::Draft->value,
+                    PurchaseOrderStatus::PendingApproval->value,
+                    PurchaseOrderStatus::Approved->value,
+                    ReceivingStatus::Received->value,
+                ]
+            )
+            ->first();
+
+        $summary = [
+            'total_suppliers' => (int) ($summaryRow->total_suppliers ?? 0),
+            'active_suppliers' => (int) ($summaryRow->active_suppliers ?? 0),
+            'inactive_suppliers' => (int) ($summaryRow->inactive_suppliers ?? 0),
+            'with_active_po_or_debt_count' => (int) ($summaryRow->with_active_po_or_debt_count ?? 0),
+        ];
+
         return Inertia::render('POS/Suppliers/Supplier', [
             'suppliers' => $suppliers,
             'filters' => $filters,
+            'summary' => $summary,
         ]);
     }
 

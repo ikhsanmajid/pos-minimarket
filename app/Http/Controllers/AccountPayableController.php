@@ -113,18 +113,47 @@ class AccountPayableController extends Controller
                 'can_pay' => $user ? $user->can('recordPayment', $ap) : false,
             ]);
 
-        $openPayables = AccountPayable::where('status', '!=', PaymentStatus::Paid->value)->get(['remaining_amount', 'due_date']);
+        $summaryRow = AccountPayable::query()
+            ->selectRaw(
+                'COUNT(*) as total_count,
+                COALESCE(SUM(total_amount), 0) as total_amount,
+                COALESCE(SUM(paid_amount), 0) as paid_amount,
+                COUNT(*) FILTER (WHERE status = ?) as paid_count,
+                COALESCE(SUM(remaining_amount) FILTER (WHERE status != ?), 0) as total_outstanding,
+                COUNT(*) FILTER (WHERE status != ?) as unpaid_count,
+                COALESCE(SUM(remaining_amount) FILTER (WHERE status != ? AND remaining_amount > 0 AND due_date IS NOT NULL AND due_date < ?), 0) as overdue_amount,
+                COUNT(*) FILTER (WHERE status != ? AND remaining_amount > 0 AND due_date IS NOT NULL AND due_date < ?) as overdue_count,
+                COALESCE(SUM(remaining_amount) FILTER (WHERE status != ? AND remaining_amount > 0 AND due_date IS NOT NULL AND due_date >= ? AND due_date <= ?), 0) as due_soon_amount,
+                COUNT(*) FILTER (WHERE status != ? AND remaining_amount > 0 AND due_date IS NOT NULL AND due_date >= ? AND due_date <= ?) as due_soon_count',
+                [
+                    PaymentStatus::Paid->value,
+                    PaymentStatus::Paid->value,
+                    PaymentStatus::Paid->value,
+                    PaymentStatus::Paid->value,
+                    $today,
+                    PaymentStatus::Paid->value,
+                    $today,
+                    PaymentStatus::Paid->value,
+                    $today,
+                    $nextWeek,
+                    PaymentStatus::Paid->value,
+                    $today,
+                    $nextWeek,
+                ]
+            )
+            ->first();
+
         $summary = [
-            'total_outstanding' => (float) $openPayables->sum('remaining_amount'),
-            'overdue_amount' => (float) $openPayables
-                ->filter(fn (AccountPayable $ap) => $ap->due_date !== null && $ap->due_date->toDateString() < $today)
-                ->sum('remaining_amount'),
-            'overdue_count' => $openPayables
-                ->filter(fn (AccountPayable $ap) => $ap->due_date !== null && $ap->due_date->toDateString() < $today)
-                ->count(),
-            'due_soon_amount' => (float) $openPayables
-                ->filter(fn (AccountPayable $ap) => $ap->due_date !== null && $ap->due_date->toDateString() >= $today && $ap->due_date->toDateString() <= $nextWeek)
-                ->sum('remaining_amount'),
+            'total_count' => (int) ($summaryRow->total_count ?? 0),
+            'total_amount' => round((float) ($summaryRow->total_amount ?? 0), 2),
+            'paid_amount' => round((float) ($summaryRow->paid_amount ?? 0), 2),
+            'paid_count' => (int) ($summaryRow->paid_count ?? 0),
+            'total_outstanding' => round((float) ($summaryRow->total_outstanding ?? 0), 2),
+            'unpaid_count' => (int) ($summaryRow->unpaid_count ?? 0),
+            'overdue_amount' => round((float) ($summaryRow->overdue_amount ?? 0), 2),
+            'overdue_count' => (int) ($summaryRow->overdue_count ?? 0),
+            'due_soon_amount' => round((float) ($summaryRow->due_soon_amount ?? 0), 2),
+            'due_soon_count' => (int) ($summaryRow->due_soon_count ?? 0),
         ];
 
         $financialAccounts = FinancialAccount::where('is_active', true)

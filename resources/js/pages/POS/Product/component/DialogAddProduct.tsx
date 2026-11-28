@@ -57,6 +57,8 @@ export function DialogAddProduct({
         min_stock: '',
         image: null as File | null,
         active: true,
+        is_tax_exempt: false,
+        is_donation: false,
         units: [] as ProductUnitFormRow[],
     })
 
@@ -415,6 +417,55 @@ export function DialogAddProduct({
                                 onChange={(nextUnits) => setData('units', nextUnits)}
                                 errors={errors as Record<string, string | undefined>}
                             />
+
+                            {/* Produk Donasi */}
+                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="add-donation" className="text-sm font-medium cursor-pointer">
+                                        Produk Donasi (Kembalian Kasir)
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {data.is_donation
+                                            ? 'Dapat dipilih saat kembalian kasir didonasikan. Otomatis bebas PPN & tidak memotong stok.'
+                                            : 'Aktifkan jika produk ini adalah program donasi kembalian pelanggan.'}
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="add-donation"
+                                    checked={data.is_donation}
+                                    onCheckedChange={(checked) => {
+                                        setData((prev) => ({
+                                            ...prev,
+                                            is_donation: checked,
+                                            is_tax_exempt: checked ? true : prev.is_tax_exempt,
+                                            buy_price: checked && !prev.buy_price ? '0' : prev.buy_price,
+                                            sell_price: checked && !prev.sell_price ? '0' : prev.sell_price,
+                                            stock: checked && !prev.stock ? '0' : prev.stock,
+                                            min_stock: checked && !prev.min_stock ? '0' : prev.min_stock,
+                                        }))
+                                    }}
+                                />
+                            </div>
+
+                            {/* Skema Pajak PPN */}
+                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="add-tax-exempt" className="text-sm font-medium cursor-pointer">
+                                        Produk Bebas PPN
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {data.is_tax_exempt
+                                            ? 'Produk bebas PPN (0%) dan tidak dikenakan pajak di kasir POS'
+                                            : 'Produk dikenakan tarif PPN default toko saat transaksi kasir'}
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="add-tax-exempt"
+                                    checked={data.is_tax_exempt}
+                                    disabled={data.is_donation}
+                                    onCheckedChange={(checked) => setData('is_tax_exempt', checked)}
+                                />
+                            </div>
 
                             {/* Status Etalase */}
                             <div className="flex items-center justify-between rounded-lg border border-border p-3">

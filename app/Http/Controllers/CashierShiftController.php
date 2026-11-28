@@ -8,6 +8,7 @@ use App\Enums\UserRoles;
 use App\Http\Requests\CloseCashierShiftRequest;
 use App\Http\Requests\OpenCashierShiftRequest;
 use App\Http\Requests\StoreShiftCashMovementRequest;
+use App\Models\CashRegister;
 use App\Models\CashierShift;
 use App\Models\FinancialAccount;
 use App\Models\ShiftCashMovement;
@@ -143,11 +144,32 @@ class CashierShiftController extends Controller
             ->values()
             ->all();
 
+        $cashRegisters = CashRegister::query()
+            ->where('is_active', true)
+            ->with(['activeShift.user:id,name'])
+            ->orderBy('code')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (CashRegister $register): array => [
+                'id' => $register->id,
+                'code' => $register->code,
+                'name' => $register->name,
+                'location' => $register->location,
+                'is_in_use' => $register->activeShift !== null,
+                'active_shift_number' => $register->activeShift?->shift_number,
+                'active_cashier_name' => $register->activeShift?->user?->name,
+            ])
+            ->values()
+            ->all();
+
+        $canViewAll = $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]);
+
         return Inertia::render('POS/Shifts/CashierShift', [
             'activeShiftDetail' => $activeShiftPayload,
             'openShiftsStore' => $openShiftsStore,
             'recentOwnShifts' => $recentOwnShifts,
             'financialAccounts' => $financialAccounts,
+            'cashRegisters' => $cashRegisters,
             'movementTypes' => collect(ShiftCashMovementType::cases())->map(fn (ShiftCashMovementType $t): array => [
                 'value' => $t->value,
                 'label' => $t->label(),
@@ -157,8 +179,8 @@ class CashierShiftController extends Controller
             'policyRules' => [
                 'cash_out_pin_threshold' => CashierShiftService::CASH_OUT_PIN_THRESHOLD,
                 'variance_pin_threshold' => $this->shiftService->getVarianceTolerance(),
-                'is_privileged' => $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]),
-                'can_view_all_history' => $user->hasRoles([UserRoles::Admin, UserRoles::Supervisor]),
+                'is_privileged' => $canViewAll,
+                'can_view_all_history' => $canViewAll,
             ],
         ]);
     }
@@ -290,9 +312,64 @@ class CashierShiftController extends Controller
         return Inertia::render('POS/Shifts/ShiftHistory', [
             'shifts' => $shifts,
             'filters' => $filters,
+            'summary' => $this->buildShiftSummary(
+                $user,
+                $canViewAll,
+                $request->filled('start_date') ? (string) $request->input('start_date') : null,
+                $request->filled('end_date') ? (string) $request->input('end_date') : null,
+            ),
             'cashiers' => $cashiers,
             'canViewAll' => $canViewAll,
         ]);
+    }
+
+    /**
+     * Agregasi ringkasan sesi shift dalam 1 query tunggal (mematuhi blind closing & isolasi role).
+     *
+     * @return array{
+     *     total_shifts: int,
+     *     open_shifts: int,
+     *     normal_closed_shifts: int,
+     *     variance_shifts: int,
+     *     total_shift_sales: float,
+     *     total_variance_amount: float
+     * }
+     */
+    private function buildShiftSummary(
+        User $user,
+        bool $canViewAll,
+        ?string $startDate = null,
+        ?string $endDate = null,
+    ): array {
+        $row = CashierShift::query()
+            ->when(! $canViewAll, fn ($q) => $q->where('user_id', $user->id))
+            ->when($startDate, fn ($q) => $q->whereDate('opened_at', '>=', $startDate))
+            ->when($endDate, fn ($q) => $q->whereDate('opened_at', '<=', $endDate))
+            ->selectRaw(
+                'COUNT(*) as total_shifts,
+                COUNT(*) FILTER (WHERE status = ?) as open_shifts,
+                COUNT(*) FILTER (WHERE status = ? AND COALESCE(cash_variance, 0) = 0) as normal_closed_shifts,
+                COUNT(*) FILTER (WHERE status = ? AND cash_variance IS NOT NULL AND cash_variance != 0) as variance_shifts,
+                COALESCE(SUM(total_cash_sales + total_non_cash_sales) FILTER (WHERE status = ?), 0) as total_shift_sales,
+                COALESCE(SUM(ABS(cash_variance)) FILTER (WHERE status = ? AND cash_variance IS NOT NULL AND cash_variance != 0), 0) as total_variance_amount',
+                [
+                    CashierShiftStatus::Open->value,
+                    CashierShiftStatus::Closed->value,
+                    CashierShiftStatus::Closed->value,
+                    CashierShiftStatus::Closed->value,
+                    CashierShiftStatus::Closed->value,
+                ]
+            )
+            ->first();
+
+        return [
+            'total_shifts' => (int) ($row->total_shifts ?? 0),
+            'open_shifts' => (int) ($row->open_shifts ?? 0),
+            'normal_closed_shifts' => (int) ($row->normal_closed_shifts ?? 0),
+            'variance_shifts' => (int) ($row->variance_shifts ?? 0),
+            'total_shift_sales' => round((float) ($row->total_shift_sales ?? 0), 2),
+            'total_variance_amount' => round((float) ($row->total_variance_amount ?? 0), 2),
+        ];
     }
 
     /**

@@ -48,9 +48,14 @@ class UpdateProductRequest extends FormRequest
             }
         }
 
+        $isDonation = filter_var($this->input('is_donation', false), FILTER_VALIDATE_BOOLEAN);
+        $isTaxExempt = $isDonation || filter_var($this->input('is_tax_exempt', false), FILTER_VALIDATE_BOOLEAN);
+
         $mergeData = [
             'base_unit' => $baseUnit !== '' ? $baseUnit : 'pcs',
             'active' => filter_var($this->input('active', true), FILTER_VALIDATE_BOOLEAN),
+            'is_tax_exempt' => $isTaxExempt,
+            'is_donation' => $isDonation,
             'units_present' => $unitsPresent,
         ];
 
@@ -79,6 +84,8 @@ class UpdateProductRequest extends FormRequest
             'stock' => ['required', 'integer', 'min:0'],
             'min_stock' => ['required', 'integer', 'min:0'],
             'active' => ['required', 'boolean'],
+            'is_tax_exempt' => ['required', 'boolean'],
+            'is_donation' => ['required', 'boolean'],
             'image' => ['nullable', 'image', 'max:2048'],
             'units_present' => ['nullable', 'boolean'],
             'units' => ['nullable', 'array'],

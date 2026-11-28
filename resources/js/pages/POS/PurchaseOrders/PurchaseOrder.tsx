@@ -4,10 +4,12 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout'
 import { DataTable, type DataTableColumn } from '@/components/dataTable'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatDateRangeLabel, formatNumber, formatPercent } from '@/lib/utils'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
-import { Plus, Lock, ShieldAlert } from 'lucide-react'
+import { Plus, Lock, ShieldAlert, ClipboardList, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import DataTablePagination, { type PaginationMeta } from '@/components/dataTablePagination'
 import PurchaseOrderTableToolbar, { type PurchaseOrderFilters } from './component/PurchaseOrderSearch'
 import { PurchaseOrderActionsCell } from './component/PurchaseOrderActionsCell'
@@ -61,6 +63,16 @@ interface PaginatedPurchaseOrders extends PaginationMeta {
 type PurchaseOrderPageProps = PageProps<{
     purchaseOrders: PaginatedPurchaseOrders
     filters: PurchaseOrderFilters
+    summary: {
+        total_orders: number
+        total_amount: number
+        completed_orders: number
+        in_progress_orders: number
+        pending_approval_count: number
+        rejected_or_cancelled_orders: number
+        rejected_orders: number
+        cancelled_orders: number
+    }
     suppliers: { id: number; name: string; code: string | null; is_active: boolean }[]
     pendingApprovalCount: number
     statuses: { value: string; label: string }[]
@@ -274,6 +286,7 @@ const PurchaseOrderPage: PurchaseOrderComponent = () => {
     const {
         purchaseOrders,
         filters,
+        summary,
         suppliers = [],
         pendingApprovalCount = 0,
         statuses = [],
@@ -392,6 +405,80 @@ const PurchaseOrderPage: PurchaseOrderComponent = () => {
                     />
                 )}
             </div>
+
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Purchase Order"
+                    value={formatNumber(summary.total_orders)}
+                    icon={ClipboardList}
+                    variant="blue"
+                    subInfo={`Nilai total: ${formatRupiah(summary.total_amount)}`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Semua Data')}
+                    isActive={!filters.status && !filters.receiving_status}
+                    onClick={() => {
+                        router.visit(
+                            PurchaseOrderController.index({
+                                mergeQuery: { status: undefined, receiving_status: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="PO Diterima Penuh"
+                    value={formatNumber(summary.completed_orders)}
+                    icon={CheckCircle2}
+                    variant="emerald"
+                    subInfo={`${formatPercent(summary.completed_orders, summary.total_orders)} penyelesaian`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Selesai')}
+                    isActive={filters.receiving_status === 'received'}
+                    onClick={() => {
+                        const next = filters.receiving_status === 'received' ? undefined : 'received'
+                        router.visit(
+                            PurchaseOrderController.index({
+                                mergeQuery: { receiving_status: next, status: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Menunggu ACC / Proses"
+                    value={formatNumber(summary.in_progress_orders)}
+                    icon={Clock}
+                    variant="amber"
+                    subInfo={`${formatNumber(summary.pending_approval_count)} menunggu approval Admin`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Berjalan')}
+                    isActive={filters.status === 'pending_approval'}
+                    onClick={() => {
+                        const next = filters.status === 'pending_approval' ? undefined : 'pending_approval'
+                        router.visit(
+                            PurchaseOrderController.index({
+                                mergeQuery: { status: next, receiving_status: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Ditolak / Dibatalkan"
+                    value={formatNumber(summary.rejected_or_cancelled_orders)}
+                    icon={XCircle}
+                    variant="rose"
+                    subInfo={`${formatNumber(summary.rejected_orders)} ditolak • ${formatNumber(summary.cancelled_orders)} dibatalkan`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Batal/Tolak')}
+                    isActive={filters.status === 'rejected'}
+                    onClick={() => {
+                        const next = filters.status === 'rejected' ? undefined : 'rejected'
+                        router.visit(
+                            PurchaseOrderController.index({
+                                mergeQuery: { status: next, receiving_status: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+            </SummaryStatGrid>
 
             {pendingApprovalCount > 0 && (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-4 py-3 text-xs">

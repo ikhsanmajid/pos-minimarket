@@ -3,7 +3,10 @@ import { Link } from '@inertiajs/react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatRupiah } from '@/lib/utils'
 import {
+    Banknote,
     CheckCircle2,
     Clock,
     History,
@@ -17,7 +20,7 @@ import cashier from '@/routes/pos/cashier'
 import shifts from '@/routes/pos/shifts'
 import { OpenShiftDialog } from '../../Shifts/component/OpenShiftDialog'
 import { getVarianceBadgeMeta } from '../../Shifts/component/shiftUtils'
-import { formatRupiah, type CashierDashboardData } from './dashboardUtils'
+import type { CashierDashboardData } from './dashboardUtils'
 
 export function CashierDashboard({
     userName,
@@ -28,6 +31,7 @@ export function CashierDashboard({
 }) {
     const [openDialog, setOpenDialog] = useState(false)
     const activeShift = cashierData.myShift
+    const varianceShiftsCount = cashierData.myRecentShifts.filter((s) => s.cash_variance !== 0).length
 
     return (
         <div className="space-y-6">
@@ -40,96 +44,116 @@ export function CashierDashboard({
                 </p>
             </div>
 
-            {/* Hero Shift Readiness Card + Today Counter */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-                <Card
-                    className={`lg:col-span-8 ${
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Status Shift Saya"
+                    value={activeShift ? activeShift.register_name : 'Belum Buka'}
+                    icon={Monitor}
+                    variant="blue"
+                    subInfo={activeShift ? activeShift.shift_number : 'Buka shift untuk mulai bertugas'}
+                    periodLabel={activeShift ? 'Aktif' : 'Nonaktif'}
+                    href={shifts.index.url()}
+                />
+                <SummaryStatCard
+                    title="Transaksi Hari Ini"
+                    value={`${formatNumber(cashierData.myTodayTransactionsCount)} trx`}
+                    icon={Receipt}
+                    variant="emerald"
+                    subInfo={
                         activeShift
-                            ? 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-950/20'
-                            : 'border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20'
-                    }`}
-                >
-                    <CardContent className="p-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                        {activeShift ? (
-                            <>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <Badge variant="success" className="gap-1">
-                                            <CheckCircle2 className="h-3 w-3" /> Shift Aktif
-                                        </Badge>
-                                        <span className="font-mono text-sm font-bold text-primary">
-                                            {activeShift.shift_number}
-                                        </span>
-                                        <Badge variant="outline" className="gap-1">
-                                            <Monitor className="h-3 w-3" /> {activeShift.register_name}
-                                        </Badge>
-                                    </div>
-                                    <h2 className="text-lg font-bold text-foreground">
-                                        Laci Kasir Terbuka & Siap Melayani
-                                    </h2>
-                                    <p className="text-xs text-muted-foreground">
-                                        Dibuka pada <strong className="text-foreground">{activeShift.opened_at}</strong> ({activeShift.opened_at_human}) • Modal Awal:{' '}
-                                        <strong className="font-mono text-foreground">{formatRupiah(activeShift.starting_cash)}</strong>
-                                    </p>
-                                </div>
+                            ? `${formatNumber(activeShift.transactions_count)} trx pada shift aktif`
+                            : 'Total transaksi selesai hari ini'
+                    }
+                    periodLabel="Hari Ini"
+                />
+                <SummaryStatCard
+                    title="Modal Awal Laci"
+                    value={activeShift ? formatRupiah(activeShift.starting_cash) : formatRupiah(0)}
+                    icon={Banknote}
+                    variant="amber"
+                    subInfo={activeShift ? `Dibuka ${activeShift.opened_at_human}` : 'Belum ada shift aktif'}
+                    periodLabel="Laci Kasir"
+                />
+                <SummaryStatCard
+                    title="Riwayat Shift Terakhir"
+                    value={`${formatNumber(cashierData.myRecentShifts.length)} shift`}
+                    icon={History}
+                    variant="rose"
+                    subInfo={`${formatNumber(varianceShiftsCount)} shift berselisih kas`}
+                    periodLabel="5 Terakhir"
+                    href={shifts.history.url()}
+                />
+            </SummaryStatGrid>
 
-                                <div className="flex flex-wrap gap-2 shrink-0">
-                                    <Link href={cashier.index.url()}>
-                                        <Button className="gap-2 cursor-pointer">
-                                            <ShoppingCart className="h-4 w-4" />
-                                            Lanjut ke Kasir
-                                        </Button>
-                                    </Link>
-                                    <Link href={shifts.index.url()}>
-                                        <Button variant="outline" className="gap-2 cursor-pointer">
-                                            <Lock className="h-4 w-4" />
-                                            Kelola / Tutup Shift
-                                        </Button>
-                                    </Link>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div className="space-y-2">
-                                    <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-300">
-                                        Belum Bertugas
+            {/* Hero Shift Readiness Card */}
+            <Card
+                className={
+                    activeShift
+                        ? 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-950/20'
+                        : 'border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20'
+                }
+            >
+                <CardContent className="p-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    {activeShift ? (
+                        <>
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="success" className="gap-1">
+                                        <CheckCircle2 className="h-3 w-3" /> Shift Aktif
                                     </Badge>
-                                    <h2 className="text-lg font-bold text-foreground">
-                                        Anda Belum Membuka Sesi Shift
-                                    </h2>
-                                    <p className="text-xs text-muted-foreground max-w-lg">
-                                        Buka sesi shift terlebih dahulu dengan memasukkan modal awal laci kasir agar dapat memproses transaksi POS.
-                                    </p>
+                                    <span className="font-mono text-sm font-bold text-primary">
+                                        {activeShift.shift_number}
+                                    </span>
+                                    <Badge variant="outline" className="gap-1">
+                                        <Monitor className="h-3 w-3" /> {activeShift.register_name}
+                                    </Badge>
                                 </div>
+                                <h2 className="text-lg font-bold text-foreground">
+                                    Laci Kasir Terbuka & Siap Melayani
+                                </h2>
+                                <p className="text-xs text-muted-foreground">
+                                    Dibuka pada <strong className="text-foreground">{activeShift.opened_at}</strong> ({activeShift.opened_at_human}) • Modal Awal:{' '}
+                                    <strong className="font-mono text-foreground">{formatRupiah(activeShift.starting_cash)}</strong>
+                                </p>
+                            </div>
 
-                                <Button size="lg" onClick={() => setOpenDialog(true)} className="gap-2 shrink-0 cursor-pointer">
-                                    <PlayCircle className="h-4 w-4" />
-                                    Buka Shift Sekarang
-                                </Button>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                                <Link href={cashier.index.url()}>
+                                    <Button className="gap-2 cursor-pointer">
+                                        <ShoppingCart className="h-4 w-4" />
+                                        Lanjut ke Kasir
+                                    </Button>
+                                </Link>
+                                <Link href={shifts.index.url()}>
+                                    <Button variant="outline" className="gap-2 cursor-pointer">
+                                        <Lock className="h-4 w-4" />
+                                        Kelola / Tutup Shift
+                                    </Button>
+                                </Link>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="space-y-2">
+                                <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-300">
+                                    Belum Bertugas
+                                </Badge>
+                                <h2 className="text-lg font-bold text-foreground">
+                                    Anda Belum Membuka Sesi Shift
+                                </h2>
+                                <p className="text-xs text-muted-foreground max-w-lg">
+                                    Buka sesi shift terlebih dahulu dengan memasukkan modal awal laci kasir agar dapat memproses transaksi POS.
+                                </p>
+                            </div>
 
-                <Card className="lg:col-span-4 flex flex-col justify-between">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="flex items-center justify-between text-xs">
-                            <span>Transaksi Pribadi Hari Ini</span>
-                            <Receipt className="h-4 w-4 text-primary" />
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-1">
-                        <p className="font-mono text-3xl font-bold text-foreground">
-                            {cashierData.myTodayTransactionsCount}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                            {activeShift
-                                ? `${activeShift.transactions_count} transaksi pada shift aktif ini`
-                                : 'Total transaksi selesai hari ini'}
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
+                            <Button size="lg" onClick={() => setOpenDialog(true)} className="gap-2 shrink-0 cursor-pointer">
+                                <PlayCircle className="h-4 w-4" />
+                                Buka Shift Sekarang
+                            </Button>
+                        </>
+                    )}
+                </CardContent>
+            </Card>
 
             {/* 5 Riwayat Shift Terakhir Milik Sendiri */}
             <Card>
@@ -209,7 +233,11 @@ export function CashierDashboard({
                 </CardContent>
             </Card>
 
-            <OpenShiftDialog open={openDialog} onOpenChange={setOpenDialog} />
+            <OpenShiftDialog
+                open={openDialog}
+                onOpenChange={setOpenDialog}
+                cashRegisters={cashierData.cashRegisters ?? []}
+            />
         </div>
     )
 }

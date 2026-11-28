@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatRupiah } from '@/lib/utils'
 import {
     Activity,
-    ArrowDownRight,
-    ArrowUpRight,
     Calendar,
     CircleDollarSign,
     Clock,
@@ -21,7 +21,6 @@ import dashboard from '@/routes/pos/dashboard'
 import shifts from '@/routes/pos/shifts'
 import activityLogs from '@/routes/pos/activity-logs'
 import {
-    formatRupiah,
     type ActionableAlertsData,
     type ActiveShiftSnapshot,
     type PaymentCompositionData,
@@ -189,101 +188,52 @@ export function AdminDashboard({
             )}
 
             {/* 4 KPI Cards */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <Card>
-                    <CardContent className="p-5 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">
-                                Penjualan Bersih
-                            </span>
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                                <TrendingUp className="h-4 w-4" />
-                            </div>
-                        </div>
-                        <p className="font-mono text-xl font-bold text-foreground">
-                            {formatRupiah(kpis.net_sales.value)}
-                        </p>
-                        <div className="flex items-center justify-between text-xs">
-                            <GrowthPill value={kpis.net_sales.growth_pct} />
-                            <span className="text-muted-foreground">
-                                {kpis.net_sales.transactions_count} trx • Avg {formatRupiah(kpis.net_sales.avg_basket_size)}
-                            </span>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">
-                                Estimasi Laba Kotor
-                            </span>
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                                <CircleDollarSign className="h-4 w-4" />
-                            </div>
-                        </div>
-                        <p className="font-mono text-xl font-bold text-foreground">
-                            {formatRupiah(kpis.gross_profit.value)}
-                        </p>
-                        <div className="flex items-center justify-between text-xs">
-                            <GrowthPill value={kpis.gross_profit.growth_pct} />
-                            <span className="text-muted-foreground">
-                                Margin <strong className="text-foreground">{kpis.gross_profit.margin_pct}%</strong>
-                            </span>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">
-                                Total Saldo Kas & Bank
-                            </span>
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
-                                <Wallet className="h-4 w-4" />
-                            </div>
-                        </div>
-                        <p className="font-mono text-xl font-bold text-foreground">
-                            {formatRupiah(kpis.cash_bank_balance.total)}
-                        </p>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Kas: {formatRupiah(kpis.cash_bank_balance.cash_total)}</span>
-                            <span>Bank: {formatRupiah(kpis.cash_bank_balance.bank_total)}</span>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">
-                                Hutang Dagang Aktif (AP)
-                            </span>
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                                <FileWarning className="h-4 w-4" />
-                            </div>
-                        </div>
-                        <p className="font-mono text-xl font-bold text-foreground">
-                            {formatRupiah(kpis.active_payables.total_remaining)}
-                        </p>
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">
-                                {kpis.active_payables.unpaid_count} tagihan aktif
-                            </span>
-                            {kpis.active_payables.due_soon_count > 0 ? (
-                                <Badge variant="destructive" className="text-[10px]">
-                                    {kpis.active_payables.due_soon_count} jatuh tempo ≤7H
-                                </Badge>
-                            ) : (
-                                <Badge variant="success" className="text-[10px]">
-                                    Aman
-                                </Badge>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Penjualan Bersih"
+                    value={formatRupiah(kpis.net_sales.value)}
+                    icon={TrendingUp}
+                    variant="blue"
+                    subInfo={`${formatNumber(kpis.net_sales.transactions_count)} trx • Avg ${formatRupiah(kpis.net_sales.avg_basket_size)}${
+                        kpis.net_sales.growth_pct !== null
+                            ? ` (${kpis.net_sales.growth_pct >= 0 ? '+' : ''}${kpis.net_sales.growth_pct}%)`
+                            : ''
+                    }`}
+                    periodLabel={period.label}
+                />
+                <SummaryStatCard
+                    title="Estimasi Laba Kotor"
+                    value={formatRupiah(kpis.gross_profit.value)}
+                    icon={CircleDollarSign}
+                    variant="emerald"
+                    subInfo={`Margin ${kpis.gross_profit.margin_pct}%${
+                        kpis.gross_profit.growth_pct !== null
+                            ? ` • ${kpis.gross_profit.growth_pct >= 0 ? '+' : ''}${kpis.gross_profit.growth_pct}%`
+                            : ''
+                    }`}
+                    periodLabel={period.label}
+                />
+                <SummaryStatCard
+                    title="Total Saldo Kas & Bank"
+                    value={formatRupiah(kpis.cash_bank_balance.total)}
+                    icon={Wallet}
+                    variant="amber"
+                    subInfo={`Kas ${formatRupiah(kpis.cash_bank_balance.cash_total)} • Bank ${formatRupiah(kpis.cash_bank_balance.bank_total)}`}
+                    periodLabel={`${formatNumber(kpis.cash_bank_balance.accounts_count)} Akun`}
+                />
+                <SummaryStatCard
+                    title="Hutang Dagang Aktif (AP)"
+                    value={formatRupiah(kpis.active_payables.total_remaining)}
+                    icon={FileWarning}
+                    variant="rose"
+                    subInfo={
+                        kpis.active_payables.due_soon_count > 0
+                            ? `${formatNumber(kpis.active_payables.unpaid_count)} tagihan • ${formatNumber(kpis.active_payables.due_soon_count)} jatuh tempo ≤7H`
+                            : `${formatNumber(kpis.active_payables.unpaid_count)} tagihan aktif • Aman`
+                    }
+                    periodLabel={kpis.active_payables.overdue_count > 0 ? `${kpis.active_payables.overdue_count} Overdue` : 'Aktif'}
+                />
+            </SummaryStatGrid>
 
             {/* Charts Row (8 cols + 4 cols) */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -442,23 +392,5 @@ export function AdminDashboard({
                 </Card>
             </div>
         </div>
-    )
-}
-
-function GrowthPill({ value }: { value: number | null }) {
-    if (value === null) {
-        return <span className="text-muted-foreground">-</span>
-    }
-    const positive = value >= 0
-    return (
-        <span
-            className={`inline-flex items-center gap-0.5 font-mono font-semibold ${
-                positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-            }`}
-        >
-            {positive ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-            {positive ? '+' : ''}
-            {value}%
-        </span>
     )
 }

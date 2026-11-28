@@ -9,6 +9,7 @@ use App\Http\Requests\HoldTransactionRequest;
 use App\Models\Customer;
 use App\Models\FinancialAccount;
 use App\Models\HeldTransaction;
+use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
 use App\Models\TransactionPayment;
@@ -78,6 +79,21 @@ class PosController extends Controller
             ->values()
             ->all();
 
+        $donationProducts = Product::query()
+            ->where('active', true)
+            ->where('is_donation', true)
+            ->orderBy('name')
+            ->get(['id', 'barcode', 'name', 'base_unit', 'sell_price'])
+            ->map(fn (Product $p): array => [
+                'id' => $p->id,
+                'barcode' => $p->barcode,
+                'name' => $p->name,
+                'base_unit' => $p->base_unit ?: 'pcs',
+                'sell_price' => (float) $p->sell_price,
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('POS/Cashier/Terminal', [
             'shiftSummary' => $activeShift ? [
                 'id' => $activeShift->id,
@@ -92,6 +108,7 @@ class PosController extends Controller
             'financialAccounts' => $financialAccounts,
             'paymentMethods' => $paymentMethods,
             'customers' => $customers,
+            'donationProducts' => $donationProducts,
             'heldTransactions' => $this->posTransactionService->listHeld($user),
             'policyRules' => [
                 'manual_discount_pin_threshold' => PosTransactionService::MANUAL_DISCOUNT_PIN_THRESHOLD,
@@ -234,6 +251,7 @@ class PosController extends Controller
             'discount_amount' => (float) $transaction->discount_amount,
             'tax_amount' => (float) $transaction->tax_amount,
             'rounding_amount' => (float) $transaction->rounding_amount,
+            'donation_amount' => (float) $transaction->donation_amount,
             'grand_total' => (float) $transaction->grand_total,
             'paid_amount' => (float) $transaction->paid_amount,
             'change_amount' => (float) ($transaction->change_amount ?? 0),
@@ -244,6 +262,8 @@ class PosController extends Controller
                 'qty' => $d->qty > 0 ? $d->qty : (int) $d->quantity,
                 'unit_price' => (float) ((float) $d->unit_price > 0 ? $d->unit_price : $d->sell_price),
                 'discount_amount' => (float) $d->discount_amount,
+                'is_tax_exempt' => (bool) $d->is_tax_exempt,
+                'is_donation' => (bool) $d->is_donation,
                 'subtotal' => (float) $d->subtotal,
             ])->values()->all(),
             'payments' => $transaction->payments->map(fn (TransactionPayment $p): array => [

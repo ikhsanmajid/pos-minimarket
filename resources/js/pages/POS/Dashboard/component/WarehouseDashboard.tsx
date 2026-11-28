@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber } from '@/lib/utils'
 import {
     AlertTriangle,
     ArrowRight,
@@ -58,57 +60,44 @@ export function WarehouseDashboard({ kpis, warehouseWidgets }: WarehouseDashboar
             </div>
 
             {/* 4 Warehouse KPI Cards */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Total SKU Aktif</span>
-                            <Boxes className="h-4 w-4 text-primary" />
-                        </div>
-                        <p className="font-mono text-2xl font-bold">{kpis.active_sku_count}</p>
-                        <p className="text-xs text-muted-foreground">Produk terdaftar aktif</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>SKU Stok Kritis</span>
-                            <PackageMinus className="h-4 w-4 text-rose-600" />
-                        </div>
-                        <p className="font-mono text-2xl font-bold text-rose-600 dark:text-rose-400">
-                            {kpis.low_stock_count}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Stok ≤ minimum stok</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>PO Siap Diterima (LPB)</span>
-                            <PackageCheck className="h-4 w-4 text-emerald-600" />
-                        </div>
-                        <p className="font-mono text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                            {kpis.po_ready_receive_count}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Status approved / partial</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>PO Ditolak (Revisi)</span>
-                            <XCircle className="h-4 w-4 text-amber-600" />
-                        </div>
-                        <p className="font-mono text-2xl font-bold text-amber-600 dark:text-amber-400">
-                            {kpis.po_rejected_count}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Perlu diperbaiki & ajukan ulang</p>
-                    </CardContent>
-                </Card>
-            </div>
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total SKU Aktif"
+                    value={formatNumber(kpis.active_sku_count)}
+                    icon={Boxes}
+                    variant="blue"
+                    subInfo="Produk terdaftar aktif"
+                    periodLabel="Aktif"
+                    href={products.index.url()}
+                />
+                <SummaryStatCard
+                    title="PO Siap Diterima (LPB)"
+                    value={formatNumber(kpis.po_ready_receive_count)}
+                    icon={PackageCheck}
+                    variant="emerald"
+                    subInfo="Status approved / partial"
+                    periodLabel="Siap LPB"
+                    href={purchaseOrders.index.url({ query: { status: 'approved' } })}
+                />
+                <SummaryStatCard
+                    title="PO Ditolak (Revisi)"
+                    value={formatNumber(kpis.po_rejected_count)}
+                    icon={XCircle}
+                    variant="amber"
+                    subInfo="Perlu diperbaiki & ajukan ulang"
+                    periodLabel="Revisi"
+                    href={purchaseOrders.index.url({ query: { status: 'rejected' } })}
+                />
+                <SummaryStatCard
+                    title="SKU Stok Kritis"
+                    value={formatNumber(kpis.low_stock_count)}
+                    icon={PackageMinus}
+                    variant="rose"
+                    subInfo="Stok ≤ minimum stok"
+                    periodLabel="Restock"
+                    href={products.index.url({ query: { stock_status: 'low_stock' } })}
+                />
+            </SummaryStatGrid>
 
             {/* Stock Movement Chart + Rejected POs */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

@@ -25,6 +25,8 @@ use Spatie\Activitylog\Support\LogOptions;
     'min_stock',
     'image',
     'active',
+    'is_tax_exempt',
+    'is_donation',
 ])]
 class Product extends Model
 {
@@ -32,12 +34,16 @@ class Product extends Model
 
     protected $attributes = [
         'base_unit' => 'pcs',
+        'is_tax_exempt' => false,
+        'is_donation' => false,
     ];
 
     protected function casts(): array
     {
         return [
             'active' => 'boolean',
+            'is_tax_exempt' => 'boolean',
+            'is_donation' => 'boolean',
             'buy_price' => 'decimal:2',
             'sell_price' => 'decimal:2',
             'stock' => 'integer',
@@ -56,7 +62,7 @@ class Product extends Model
                 'restored' => "Produk {$this->name} dipulihkan.",
                 default => "Produk {$this->name} ({$eventName}).",
             })
-            ->logOnly(['category_id', 'barcode', 'name', 'base_unit', 'buy_price', 'sell_price', 'stock', 'min_stock', 'image', 'active'])
+            ->logOnly(['category_id', 'barcode', 'name', 'base_unit', 'buy_price', 'sell_price', 'min_stock', 'image', 'active', 'is_tax_exempt', 'is_donation'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges();
     }

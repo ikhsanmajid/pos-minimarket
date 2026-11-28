@@ -56,6 +56,14 @@ export function CheckoutSuccessDialog({
                             <span className="text-muted-foreground">Total Tagihan</span>
                             <span className="font-mono font-semibold">{formatRupiah(receipt.grand_total)}</span>
                         </div>
+                        {(receipt.donation_amount ?? 0) > 0 && (
+                            <div className="flex justify-between text-pink-600 dark:text-pink-400">
+                                <span>Termasuk Donasi</span>
+                                <span className="font-mono font-semibold">
+                                    {formatRupiah(receipt.donation_amount)}
+                                </span>
+                            </div>
+                        )}
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Total Bayar</span>
                             <span className="font-mono font-semibold">{formatRupiah(receipt.paid_amount)}</span>

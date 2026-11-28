@@ -90,9 +90,28 @@ class CategoryController extends Controller
                 'created_at' => $category->created_at?->format('d M Y'),
             ]);
 
+        $summaryRow = Category::query()
+            ->selectRaw(
+                'COUNT(*) as total_categories,
+                COUNT(*) FILTER (WHERE is_active = true) as active_categories,
+                COUNT(*) FILTER (WHERE is_active = false) as inactive_categories,
+                COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM products WHERE products.category_id = categories.id AND products.deleted_at IS NULL)) as empty_categories,
+                (SELECT COUNT(*) FROM products WHERE products.category_id IS NOT NULL AND products.deleted_at IS NULL) as categorized_products_count'
+            )
+            ->first();
+
+        $summary = [
+            'total_categories' => (int) ($summaryRow->total_categories ?? 0),
+            'active_categories' => (int) ($summaryRow->active_categories ?? 0),
+            'inactive_categories' => (int) ($summaryRow->inactive_categories ?? 0),
+            'empty_categories' => (int) ($summaryRow->empty_categories ?? 0),
+            'categorized_products_count' => (int) ($summaryRow->categorized_products_count ?? 0),
+        ];
+
         return Inertia::render('POS/Categories/Category', [
             'categories' => $categories,
             'filters' => $filters,
+            'summary' => $summary,
         ]);
     }
 

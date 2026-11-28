@@ -23,6 +23,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property string $discount_amount
  * @property string $tax_amount
  * @property string $rounding_amount
+ * @property string $donation_amount
  * @property string $total_amount
  * @property string|null $discount
  * @property string $grand_total
@@ -48,6 +49,7 @@ use Spatie\Activitylog\Support\LogOptions;
     'discount_amount',
     'tax_amount',
     'rounding_amount',
+    'donation_amount',
     'total_amount',
     'discount',
     'grand_total',
@@ -83,6 +85,7 @@ class Transaction extends Model
             'discount_amount' => 'decimal:2',
             'tax_amount' => 'decimal:2',
             'rounding_amount' => 'decimal:2',
+            'donation_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'discount' => 'decimal:2',
             'grand_total' => 'decimal:2',
@@ -112,6 +115,7 @@ class Transaction extends Model
                 'discount_amount',
                 'tax_amount',
                 'rounding_amount',
+                'donation_amount',
                 'grand_total',
                 'paid_amount',
                 'change_amount',

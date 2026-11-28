@@ -3,10 +3,11 @@ import { Link } from '@inertiajs/react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatRupiah } from '@/lib/utils'
 import { Activity, Clock, Receipt, Scale, TrendingUp } from 'lucide-react'
 import shifts from '@/routes/pos/shifts'
 import {
-    formatRupiah,
     type ActionableAlertsData,
     type ActiveShiftSnapshot,
     type RecentActivityItem,
@@ -52,55 +53,42 @@ export function SupervisorDashboard({
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Omzet Hari Ini</span>
-                            <TrendingUp className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <p className="font-mono text-xl font-bold">{formatRupiah(kpis.today_sales.value)}</p>
-                        <p className="text-xs text-muted-foreground">
-                            vs Kemarin: {formatRupiah(kpis.today_sales.previous)}
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Transaksi Hari Ini</span>
-                            <Receipt className="h-4 w-4 text-emerald-600" />
-                        </div>
-                        <p className="font-mono text-xl font-bold">{kpis.today_transactions.count} trx</p>
-                        <p className="text-xs text-muted-foreground">
-                            Rata-rata: {formatRupiah(kpis.today_transactions.avg_basket_size)}
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Shift Sedang Aktif</span>
-                            <Clock className="h-4 w-4 text-primary" />
-                        </div>
-                        <p className="font-mono text-xl font-bold">{kpis.active_shifts_count} shift</p>
-                        <p className="text-xs text-muted-foreground">Kasir sedang bertugas</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="p-5 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>Selisih Shift (7 Hari)</span>
-                            <Scale className="h-4 w-4 text-amber-600" />
-                        </div>
-                        <p className="font-mono text-xl font-bold">{kpis.shift_anomalies_count} shift</p>
-                        <p className="text-xs text-muted-foreground">Memerlukan verifikasi</p>
-                    </CardContent>
-                </Card>
-            </div>
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Omzet Hari Ini"
+                    value={formatRupiah(kpis.today_sales.value)}
+                    icon={TrendingUp}
+                    variant="blue"
+                    subInfo={`vs Kemarin: ${formatRupiah(kpis.today_sales.previous)}`}
+                    periodLabel="Hari Ini"
+                />
+                <SummaryStatCard
+                    title="Transaksi Hari Ini"
+                    value={`${formatNumber(kpis.today_transactions.count)} trx`}
+                    icon={Receipt}
+                    variant="emerald"
+                    subInfo={`Rata-rata: ${formatRupiah(kpis.today_transactions.avg_basket_size)}`}
+                    periodLabel="Hari Ini"
+                />
+                <SummaryStatCard
+                    title="Shift Sedang Aktif"
+                    value={`${formatNumber(kpis.active_shifts_count)} shift`}
+                    icon={Clock}
+                    variant="amber"
+                    subInfo="Kasir sedang bertugas"
+                    periodLabel="Aktif"
+                    href={shifts.index.url()}
+                />
+                <SummaryStatCard
+                    title="Selisih Shift (7 Hari)"
+                    value={`${formatNumber(kpis.shift_anomalies_count)} shift`}
+                    icon={Scale}
+                    variant="rose"
+                    subInfo="Memerlukan verifikasi"
+                    periodLabel="7 Hari"
+                    href={shifts.history.url({ query: { has_variance: 1 } })}
+                />
+            </SummaryStatGrid>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                 <div className="lg:col-span-8">

@@ -3,6 +3,7 @@ import { Link, router, usePage } from '@inertiajs/react'
 import {
     AlertTriangle,
     ArrowLeft,
+    Heart,
     History,
     Printer,
     ReceiptText,
@@ -231,9 +232,27 @@ const DetailTransaction = () => {
                                             {transaction.details.map((line) => (
                                                 <tr key={line.id}>
                                                     <td className="px-4 py-3">
-                                                        <p className="font-medium text-foreground truncate">
-                                                            {line.product_name}
-                                                        </p>
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <p className="font-medium text-foreground truncate">
+                                                                {line.product_name}
+                                                            </p>
+                                                            {line.is_donation ? (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="h-4 px-1.5 py-0 text-[10px] gap-0.5 shrink-0 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/60 dark:text-pink-300"
+                                                                >
+                                                                    <Heart className="h-2.5 w-2.5" />
+                                                                    Donasi
+                                                                </Badge>
+                                                            ) : line.is_tax_exempt ? (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="h-4 px-1.5 py-0 text-[10px] shrink-0 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                                                >
+                                                                    Bebas PPN
+                                                                </Badge>
+                                                            ) : null}
+                                                        </div>
                                                         <p className="font-mono text-[11px] text-muted-foreground">
                                                             {line.product_barcode}
                                                             {line.returned_qty > 0 && (
@@ -351,6 +370,14 @@ const DetailTransaction = () => {
                                             <span className="font-mono">
                                                 {transaction.rounding_amount > 0 ? '+' : ''}
                                                 {formatRupiah(transaction.rounding_amount)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {(transaction.donation_amount ?? 0) > 0 && (
+                                        <div className="flex justify-between text-pink-600 dark:text-pink-400">
+                                            <span>Donasi</span>
+                                            <span className="font-mono">
+                                                {formatRupiah(transaction.donation_amount)}
                                             </span>
                                         </div>
                                     )}

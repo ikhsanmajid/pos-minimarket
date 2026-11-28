@@ -19,6 +19,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * @property int $id
  * @property string $shift_number
  * @property int $user_id
+ * @property int|null $cash_register_id
  * @property string $register_name
  * @property CashierShiftStatus $status
  * @property Carbon $opened_at
@@ -42,6 +43,7 @@ use Spatie\Activitylog\Support\LogOptions;
 #[Fillable([
     'shift_number',
     'user_id',
+    'cash_register_id',
     'register_name',
     'status',
     'opened_at',
@@ -149,6 +151,12 @@ class CashierShift extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class)->withTrashed();
+    }
+
+    /** @return BelongsTo<CashRegister, $this> */
+    public function cashRegister(): BelongsTo
+    {
+        return $this->belongsTo(CashRegister::class)->withTrashed();
     }
 
     /** @return BelongsTo<User, $this> */

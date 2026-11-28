@@ -182,6 +182,7 @@ it('isolates sensitive financial data from supervisor, warehouse, and cashier ro
             ->where('dashboardRole', 'cashier')
             ->where('cashierData.myTodayTransactionsCount', 1)
             ->has('cashierData.myShift')
+            ->has('cashierData.cashRegisters')
             ->missing('kpis')
             ->missing('salesTrend')
             ->missing('paymentComposition')

@@ -75,130 +75,130 @@ const getColumns = ({
     onSort,
     onSelect,
 }: GetColumnsOptions): DataTableColumn<ActivityRow>[] => [
-    {
-        id: 'no',
-        header: 'No',
-        cell: (info) => (from ?? 1) + info.row.index,
-        size: 55,
-    },
-    {
-        accessorKey: 'created_at',
-        header: () => (
-            <DataTableSortHeader
-                label="Waktu"
-                field="created_at"
-                tableSort={filters.table_sort}
-                tableDirection={filters.table_direction}
-                toolbarSort={filters.sort}
-                toolbarDirection={filters.direction}
-                onSort={onSort}
-            />
-        ),
-        cell: (info) => {
-            const row = info.row.original
-            return (
-                <div className="flex flex-col py-0.5">
-                    <span className="font-mono text-xs font-medium text-foreground">{row.created_at}</span>
-                    <span className="text-[11px] text-muted-foreground">{row.created_at_human}</span>
-                </div>
-            )
+        {
+            id: 'no',
+            header: 'No',
+            cell: (info) => (from ?? 1) + info.row.index,
+            size: 55,
         },
-        size: 170,
-    },
-    {
-        accessorKey: 'causer_name',
-        header: 'Pengguna',
-        cell: (info) => {
-            const row = info.row.original
-            return (
-                <div className="flex flex-col py-0.5 min-w-0">
-                    <span className="font-medium text-foreground text-sm truncate">{row.causer_name}</span>
-                    {row.causer_role && (
-                        <span className="text-xs text-muted-foreground truncate">{row.causer_role}</span>
-                    )}
-                </div>
-            )
-        },
-        size: 165,
-    },
-    {
-        accessorKey: 'subject_type',
-        header: 'Modul / Objek',
-        cell: (info) => {
-            const row = info.row.original
-            if (!row.subject_type) {
+        {
+            accessorKey: 'created_at',
+            header: () => (
+                <DataTableSortHeader
+                    label="Waktu"
+                    field="created_at"
+                    tableSort={filters.table_sort}
+                    tableDirection={filters.table_direction}
+                    toolbarSort={filters.sort}
+                    toolbarDirection={filters.direction}
+                    onSort={onSort}
+                />
+            ),
+            cell: (info) => {
+                const row = info.row.original
                 return (
-                    <Badge variant="outline" className="text-xs">
-                        {row.log_name_label ?? row.log_name}
-                    </Badge>
+                    <div className="flex flex-col py-0.5">
+                        <span className="font-mono text-xs font-medium text-foreground">{row.created_at}</span>
+                        <span className="text-[11px] text-muted-foreground">{row.created_at_human}</span>
+                    </div>
                 )
-            }
-            return (
-                <div className="flex items-center gap-1.5 min-w-0">
-                    <Badge variant="outline" className="text-xs font-semibold shrink-0">
-                        {row.subject_type}
-                    </Badge>
-                    {row.subject_id && (
-                        <span className="text-xs text-muted-foreground font-mono truncate">#{row.subject_id}</span>
-                    )}
-                </div>
-            )
+            },
+            size: 170,
         },
-        size: 170,
-    },
-    {
-        accessorKey: 'description',
-        header: () => (
-            <DataTableSortHeader
-                label="Aktivitas"
-                field="description"
-                tableSort={filters.table_sort}
-                tableDirection={filters.table_direction}
-                toolbarSort={filters.sort}
-                toolbarDirection={filters.direction}
-                onSort={onSort}
-            />
-        ),
-        cell: (info) => {
-            const row = info.row.original
-            const eventCls = row.event ? eventBadgeClass[row.event] ?? '' : ''
-            return (
-                <div className="flex items-center gap-2 py-0.5 min-w-0">
-                    {row.event && (
-                        <Badge className={`text-[10px] uppercase font-bold px-1.5 py-0 shrink-0 ${eventCls}`}>
-                            {row.event}
+        {
+            accessorKey: 'causer_name',
+            header: 'Pengguna',
+            cell: (info) => {
+                const row = info.row.original
+                return (
+                    <div className="flex flex-col py-0.5 min-w-0">
+                        <span className="font-medium text-foreground text-sm truncate">{row.causer_name}</span>
+                        {row.causer_role && (
+                            <span className="text-xs text-muted-foreground truncate">{row.causer_role}</span>
+                        )}
+                    </div>
+                )
+            },
+            size: 165,
+        },
+        {
+            accessorKey: 'subject_type',
+            header: 'Modul / Objek',
+            cell: (info) => {
+                const row = info.row.original
+                if (!row.subject_type) {
+                    return (
+                        <Badge variant="outline" className="text-xs">
+                            {row.log_name_label ?? row.log_name}
                         </Badge>
-                    )}
-                    <span className="text-sm font-medium text-foreground whitespace-normal line-clamp-2">
-                        {row.description}
-                    </span>
-                </div>
-            )
+                    )
+                }
+                return (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <Badge variant="outline" className="text-xs font-semibold shrink-0">
+                            {row.subject_type}
+                        </Badge>
+                        {row.subject_id && (
+                            <span className="text-xs text-muted-foreground font-mono truncate">#{row.subject_id}</span>
+                        )}
+                    </div>
+                )
+            },
+            size: 170,
         },
-        size: 430,
-    },
-    {
-        id: 'actions',
-        header: () => <span className="text-right block w-full pr-2">Aksi</span>,
-        cell: (info) => {
-            const row = info.row.original
-            return (
-                <div className="flex justify-end pr-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onSelect(row)}
-                        className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                        <Eye className="h-3.5 w-3.5" />
-                        Detail
-                    </Button>
-                </div>
-            )
+        {
+            accessorKey: 'description',
+            header: () => (
+                <DataTableSortHeader
+                    label="Aktivitas"
+                    field="description"
+                    tableSort={filters.table_sort}
+                    tableDirection={filters.table_direction}
+                    toolbarSort={filters.sort}
+                    toolbarDirection={filters.direction}
+                    onSort={onSort}
+                />
+            ),
+            cell: (info) => {
+                const row = info.row.original
+                const eventCls = row.event ? eventBadgeClass[row.event] ?? '' : ''
+                return (
+                    <div className="flex items-center gap-2 py-0.5 min-w-0">
+                        {row.event && (
+                            <Badge className={`text-[10px] uppercase font-bold px-1.5 py-0 shrink-0 ${eventCls}`}>
+                                {row.event}
+                            </Badge>
+                        )}
+                        <span className="text-sm font-medium text-foreground whitespace-normal line-clamp-2">
+                            {row.description}
+                        </span>
+                    </div>
+                )
+            },
+            size: 430,
         },
-        size: 90,
-    },
-]
+        {
+            id: 'actions',
+            header: () => <span className="text-right block w-full pr-2">Aksi</span>,
+            cell: (info) => {
+                const row = info.row.original
+                return (
+                    <div className="flex justify-end pr-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onSelect(row)}
+                            className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                            <Eye className="h-3.5 w-3.5" />
+                            Detail
+                        </Button>
+                    </div>
+                )
+            },
+            size: 90,
+        },
+    ]
 
 // ---------------------------------------------------------------------------
 // Page Component

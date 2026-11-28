@@ -3,6 +3,7 @@
 namespace App\Enums;
 
 use App\Models\AccountPayable;
+use App\Models\CashRegister;
 use App\Models\CashierShift;
 use App\Models\Category;
 use App\Models\FinancialAccount;
@@ -12,6 +13,8 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderReceipt;
 use App\Models\SalesReturn;
 use App\Models\ShiftCashMovement;
+use App\Models\StockAdjustment;
+use App\Models\StockOpname;
 use App\Models\StoreSetting;
 use App\Models\Supplier;
 use App\Models\Transaction;
@@ -25,9 +28,12 @@ enum ActivityLogCategory: string
     case Category = 'category';
     case Transaction = 'transaction';
     case CashierShift = 'cashier_shift';
+    case CashRegister = 'cash_register';
     case Supplier = 'supplier';
     case PurchaseOrder = 'purchase_order';
     case Finance = 'finance';
+    case StockAdjustment = 'stock_adjustment';
+    case StockOpname = 'stock_opname';
     case StoreSetting = 'store_setting';
     case Default = 'default';
 
@@ -43,9 +49,12 @@ enum ActivityLogCategory: string
             self::Category => 'Kategori Produk',
             self::Transaction => 'Transaksi Penjualan',
             self::CashierShift => 'Sesi Shift Kasir',
+            self::CashRegister => 'Kasir Fisik (Mesin Kasir)',
             self::Supplier => 'Pemasok / Supplier',
             self::PurchaseOrder => 'Purchase Order (Pengadaan)',
             self::Finance => 'Keuangan & Hutang Dagang',
+            self::StockAdjustment => 'Penyesuaian Stok (Adjustment)',
+            self::StockOpname => 'Stock Opname (Audit Stok)',
             self::StoreSetting => 'Pengaturan Toko',
             self::Default => 'Master Data (Lainnya)',
         };
@@ -63,9 +72,12 @@ enum ActivityLogCategory: string
             self::Category => 'Kategori',
             self::Transaction => 'Transaksi',
             self::CashierShift => 'Sesi Shift',
+            self::CashRegister => 'Kasir Fisik',
             self::Supplier => 'Supplier',
             self::PurchaseOrder => 'Purchase Order',
             self::Finance => 'Keuangan',
+            self::StockAdjustment => 'Stock Adjustment',
+            self::StockOpname => 'Stock Opname',
             self::StoreSetting => 'Pengaturan Toko',
             self::Default => 'Master Data',
         };
@@ -82,9 +94,12 @@ enum ActivityLogCategory: string
             self::Category => Category::class,
             self::Transaction => Transaction::class,
             self::CashierShift => CashierShift::class,
+            self::CashRegister => CashRegister::class,
             self::Supplier => Supplier::class,
             self::PurchaseOrder => PurchaseOrder::class,
             self::Finance => FinancialAccount::class,
+            self::StockAdjustment => StockAdjustment::class,
+            self::StockOpname => StockOpname::class,
             self::StoreSetting => StoreSetting::class,
             default => null,
         };

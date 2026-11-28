@@ -17,6 +17,7 @@ import SelectKategoriProduct, { type CategoryOption } from './SelectKategoriProd
 export interface ProductFilters {
     search?: string
     status?: string
+    tax_status?: string
     category_id?: string
     stock_status?: string
     sort?: string
@@ -31,6 +32,7 @@ const TABLE_SORT_LABELS: Record<string, string> = {
     buy_price: 'Harga Beli',
     sell_price: 'Harga Jual',
     stock: 'Stok',
+    is_tax_exempt: 'Status PPN',
     active: 'Status',
 }
 
@@ -39,6 +41,7 @@ interface ProductTableToolbarProps {
     categories: Category[]
     routeUrl: (options?: RouteQueryOptions) => RouteDefinition<'get'>
     isLoading?: boolean
+    canViewStock?: boolean
 }
 
 export default function ProductTableToolbar({
@@ -46,9 +49,11 @@ export default function ProductTableToolbar({
     categories,
     routeUrl,
     isLoading = false,
+    canViewStock = true,
 }: ProductTableToolbarProps) {
     const [search, setSearch] = React.useState(filters.search ?? '')
     const [status, setStatus] = React.useState(filters.status ?? 'all')
+    const [taxStatus, setTaxStatus] = React.useState(filters.tax_status ?? 'all')
     const [categoryId, setCategoryId] = React.useState(filters.category_id ?? 'all')
     const [stockStatus, setStockStatus] = React.useState(filters.stock_status ?? 'all')
     const isFirstRender = React.useRef(true)
@@ -56,8 +61,9 @@ export default function ProductTableToolbar({
     React.useEffect(() => {
         setCategoryId(filters.category_id ?? 'all')
         setStatus(filters.status ?? 'all')
+        setTaxStatus(filters.tax_status ?? 'all')
         setStockStatus(filters.stock_status ?? 'all')
-    }, [filters.category_id, filters.status, filters.stock_status])
+    }, [filters.category_id, filters.status, filters.tax_status, filters.stock_status])
 
     // Debounce search 300ms
     React.useEffect(() => {
@@ -76,11 +82,13 @@ export default function ProductTableToolbar({
     const applyFilters = (overrides: {
         searchVal?: string
         statusVal?: string
+        taxVal?: string
         categoryVal?: string
         stockVal?: string
     } = {}) => {
         const sVal = overrides.searchVal !== undefined ? overrides.searchVal : search
         const stVal = overrides.statusVal !== undefined ? overrides.statusVal : status
+        const txVal = overrides.taxVal !== undefined ? overrides.taxVal : taxStatus
         const catVal = overrides.categoryVal !== undefined ? overrides.categoryVal : categoryId
         const stockVal = overrides.stockVal !== undefined ? overrides.stockVal : stockStatus
 
@@ -89,6 +97,7 @@ export default function ProductTableToolbar({
                 mergeQuery: {
                     search: sVal || undefined,
                     status: stVal !== 'all' ? stVal : undefined,
+                    tax_status: txVal !== 'all' ? txVal : undefined,
                     category_id: catVal !== 'all' ? catVal : undefined,
                     stock_status: stockVal !== 'all' ? stockVal : undefined,
                     page: 1,
@@ -112,6 +121,12 @@ export default function ProductTableToolbar({
         if (val == null) return
         setStatus(val)
         applyFilters({ statusVal: val })
+    }
+
+    const handleTaxStatusChange = (val: string | null) => {
+        if (val == null) return
+        setTaxStatus(val)
+        applyFilters({ taxVal: val })
     }
 
     const handleStockStatusChange = (val: string | null) => {
@@ -161,6 +176,7 @@ export default function ProductTableToolbar({
         isFirstRender.current = true
         setSearch('')
         setStatus('all')
+        setTaxStatus('all')
         setCategoryId('all')
         setStockStatus('all')
 
@@ -169,6 +185,7 @@ export default function ProductTableToolbar({
                 mergeQuery: {
                     search: undefined,
                     status: undefined,
+                    tax_status: undefined,
                     category_id: undefined,
                     stock_status: undefined,
                     sort: undefined,
@@ -212,6 +229,7 @@ export default function ProductTableToolbar({
     const hasActiveFilters =
         Boolean(search) ||
         status !== 'all' ||
+        taxStatus !== 'all' ||
         categoryId !== 'all' ||
         stockStatus !== 'all' ||
         isSorted ||
@@ -220,6 +238,7 @@ export default function ProductTableToolbar({
     const activeFilterCount = [
         Boolean(search),
         status !== 'all',
+        taxStatus !== 'all',
         categoryId !== 'all',
         stockStatus !== 'all',
         isSorted,
@@ -235,8 +254,12 @@ export default function ProductTableToolbar({
         { value: 'sell_price_desc', label: 'Harga Jual (Termahal)' },
         { value: 'buy_price_asc', label: 'Harga Beli (Termurah)' },
         { value: 'buy_price_desc', label: 'Harga Beli (Termahal)' },
-        { value: 'stock_asc', label: 'Stok (Terendah)' },
-        { value: 'stock_desc', label: 'Stok (Tertinggi)' },
+        ...(canViewStock
+            ? [
+                  { value: 'stock_asc', label: 'Stok (Terendah)' },
+                  { value: 'stock_desc', label: 'Stok (Tertinggi)' },
+              ]
+            : []),
         { value: 'active_desc', label: 'Status (Aktif Dulu)' },
         { value: 'active_asc', label: 'Status (Nonaktif Dulu)' },
         { value: 'created_at_desc', label: 'Terbaru Ditambahkan' },
@@ -256,6 +279,14 @@ export default function ProductTableToolbar({
         { value: 'inactive', label: 'Nonaktif' },
     ]
 
+    // Tax status items
+    const taxStatusItems = [
+        { value: 'all', label: 'Semua PPN' },
+        { value: 'taxable', label: 'Kena PPN' },
+        { value: 'exempt', label: 'Bebas PPN' },
+        { value: 'donation', label: 'Produk Donasi' },
+    ]
+
     // Stock status items
     const stockStatusItems = [
         { value: 'all', label: 'Semua Stok' },
@@ -265,7 +296,7 @@ export default function ProductTableToolbar({
     ]
 
     return (
-        <div className="mb-4 space-y-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-card p-3.5 shadow-xs sm:p-4">
             <div className="flex flex-wrap items-center gap-2.5">
                 {/* Search Input */}
                 <div className="relative w-full sm:w-64 lg:w-72">
@@ -324,26 +355,49 @@ export default function ProductTableToolbar({
                     </SelectContent>
                 </Select>
 
-                {/* Filter Status Stok */}
+                {/* Filter Status PPN */}
                 <Select
-                    items={stockStatusItems}
-                    value={stockStatus}
-                    onValueChange={handleStockStatusChange}
+                    items={taxStatusItems}
+                    value={taxStatus}
+                    onValueChange={handleTaxStatusChange}
                     disabled={isLoading}
                 >
-                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[145px] h-9">
-                        <SelectValue placeholder="Semua Stok">
-                            {(val) => stockStatusItems.find((s) => s.value === val)?.label}
+                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[135px] h-9">
+                        <SelectValue placeholder="Semua PPN">
+                            {(val) => taxStatusItems.find((t) => t.value === val)?.label}
                         </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                        {stockStatusItems.map((item) => (
+                        {taxStatusItems.map((item) => (
                             <SelectItem key={item.value} value={item.value}>
                                 {item.label}
                             </SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
+
+                {/* Filter Status Stok */}
+                {canViewStock && (
+                    <Select
+                        items={stockStatusItems}
+                        value={stockStatus}
+                        onValueChange={handleStockStatusChange}
+                        disabled={isLoading}
+                    >
+                        <SelectTrigger className="w-full sm:w-auto sm:min-w-[145px] h-9">
+                            <SelectValue placeholder="Semua Stok">
+                                {(val) => stockStatusItems.find((s) => s.value === val)?.label}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {stockStatusItems.map((item) => (
+                                <SelectItem key={item.value} value={item.value}>
+                                    {item.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
 
                 {/* Filter Urutan */}
                 <Select

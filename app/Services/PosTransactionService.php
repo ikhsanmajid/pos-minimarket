@@ -46,6 +46,8 @@ class PosTransactionService
      *     sell_price: float,
      *     stock: int,
      *     image: string|null,
+     *     is_tax_exempt: bool,
+     *     is_donation: bool,
      *     matched_unit_id: int|null,
      *     units: array<int, array{id: int, unit_name: string, conversion_factor: int, barcode: string|null, sell_price: float}>
      * }>
@@ -140,6 +142,8 @@ class PosTransactionService
      *     customer_id?: int|null,
      *     held_transaction_id?: int|null,
      *     discount_amount?: float|int|string|null,
+     *     donation_product_id?: int|null,
+     *     donation_amount?: float|int|string|null,
      *     supervisor_pin?: string|null,
      *     items: array<int, array{product_id: int, product_unit_id?: int|null, qty: int, discount_amount?: float|int|string|null}>,
      *     payments: array<int, array{payment_method: string, financial_account_id: int, amount: float|int|string, reference_number?: string|null}>
@@ -198,6 +202,9 @@ class PosTransactionService
             $accumulatedBaseQty = [];
             $grossSubtotal = 0.0;
             $totalItemDiscount = 0.0;
+            $taxableLineSubtotal = 0.0;
+            $taxExemptLineSubtotal = 0.0;
+            $cartDonationTotal = 0.0;
 
             foreach ($data['items'] as $index => $line) {
                 $productId = (int) $line['product_id'];
@@ -237,7 +244,10 @@ class PosTransactionService
                 }
 
                 $baseQty = $qty * $conversionFactor;
-                $accumulatedBaseQty[$productId] = ($accumulatedBaseQty[$productId] ?? 0) + $baseQty;
+                $isDonation = (bool) $product->is_donation;
+                if (! $isDonation) {
+                    $accumulatedBaseQty[$productId] = ($accumulatedBaseQty[$productId] ?? 0) + $baseQty;
+                }
 
                 $lineGross = round($unitPrice * $qty, 2);
                 $itemDiscount = round(max(0.0, (float) ($line['discount_amount'] ?? 0)), 2);
@@ -251,6 +261,17 @@ class PosTransactionService
                 $grossSubtotal = round($grossSubtotal + $lineGross, 2);
                 $totalItemDiscount = round($totalItemDiscount + $itemDiscount, 2);
 
+                $isTaxExempt = $isDonation || (bool) $product->is_tax_exempt;
+                if ($isTaxExempt) {
+                    $taxExemptLineSubtotal = round($taxExemptLineSubtotal + $lineSubtotal, 2);
+                } else {
+                    $taxableLineSubtotal = round($taxableLineSubtotal + $lineSubtotal, 2);
+                }
+
+                if ($isDonation) {
+                    $cartDonationTotal = round($cartDonationTotal + $lineSubtotal, 2);
+                }
+
                 $resolvedLines[] = [
                     'product' => $product,
                     'product_unit_id' => $productUnitId,
@@ -259,8 +280,10 @@ class PosTransactionService
                     'qty' => $qty,
                     'base_qty' => $baseQty,
                     'unit_price' => $unitPrice,
-                    'cost_price_snapshot' => round((float) $product->buy_price, 2),
+                    'cost_price_snapshot' => $isDonation ? 0.0 : round((float) $product->buy_price, 2),
                     'discount_amount' => $itemDiscount,
+                    'is_tax_exempt' => $isTaxExempt,
+                    'is_donation' => $isDonation,
                     'subtotal' => $lineSubtotal,
                 ];
             }
@@ -306,12 +329,18 @@ class PosTransactionService
                 }
             }
 
-            // 5. Kalkulasi PPN & Pembulatan dari StoreSetting
+            // 5. Kalkulasi PPN & Pembulatan dari StoreSetting (hanya atas item kena PPN)
             $storeSetting = $this->storeSettingService->get();
             $taxRate = max(0.0, (float) $storeSetting->default_tax_rate);
-            $taxableAmount = round(max(0.0, $grossSubtotal - $totalDiscount), 2);
+            $subtotalAfterItemDiscounts = round(max(0.0, $grossSubtotal - $totalItemDiscount), 2);
+            $netSubtotal = round(max(0.0, $grossSubtotal - $totalDiscount), 2);
+            $taxableTransactionDiscount = ($subtotalAfterItemDiscounts > 0.0 && $taxableLineSubtotal > 0.0)
+                ? round($transactionDiscount * ($taxableLineSubtotal / $subtotalAfterItemDiscounts), 2)
+                : 0.0;
+            $taxableAmount = round(max(0.0, $taxableLineSubtotal - $taxableTransactionDiscount), 2);
+            $taxExemptAmount = round(max(0.0, $netSubtotal - $taxableAmount), 2);
             $taxAmount = round($taxableAmount * ($taxRate / 100), 2);
-            $beforeRounding = round($taxableAmount + $taxAmount, 2);
+            $beforeRounding = round($netSubtotal + $taxAmount, 2);
 
             $roundingResult = $this->applyRounding($beforeRounding, $storeSetting->rounding_mode);
             $grandTotal = $roundingResult['rounded'];
@@ -362,6 +391,55 @@ class PosTransactionService
                 ]);
             }
 
+            $rawChangeAmount = round(max(0.0, $paidAmount - $grandTotal), 2);
+            $changeDonationAmount = round(max(0.0, (float) ($data['donation_amount'] ?? 0)), 2);
+
+            if ($changeDonationAmount > 0.0) {
+                if ($changeDonationAmount > $rawChangeAmount) {
+                    throw ValidationException::withMessages([
+                        'donation_amount' => sprintf(
+                            'Nominal donasi kembalian (Rp %s) tidak boleh melebihi uang kembalian (Rp %s).',
+                            number_format($changeDonationAmount, 0, ',', '.'),
+                            number_format($rawChangeAmount, 0, ',', '.')
+                        ),
+                    ]);
+                }
+
+                $donationProductId = isset($data['donation_product_id']) ? (int) $data['donation_product_id'] : null;
+                /** @var Product|null $donationProduct */
+                $donationProduct = $donationProductId !== null
+                    ? Product::query()
+                        ->where('id', $donationProductId)
+                        ->where('active', true)
+                        ->where('is_donation', true)
+                        ->first()
+                    : null;
+
+                if (! $donationProduct instanceof Product) {
+                    throw ValidationException::withMessages([
+                        'donation_product_id' => 'Pilih produk donasi aktif yang valid untuk menyalurkan kembalian.',
+                    ]);
+                }
+
+                $resolvedLines[] = [
+                    'product' => $donationProduct,
+                    'product_unit_id' => null,
+                    'unit_name_snapshot' => $donationProduct->base_unit ?: 'pcs',
+                    'conversion_factor' => 1,
+                    'qty' => 1,
+                    'base_qty' => 1,
+                    'unit_price' => $changeDonationAmount,
+                    'cost_price_snapshot' => 0.0,
+                    'discount_amount' => 0.0,
+                    'is_tax_exempt' => true,
+                    'is_donation' => true,
+                    'subtotal' => $changeDonationAmount,
+                ];
+
+                $grandTotal = round($grandTotal + $changeDonationAmount, 2);
+            }
+
+            $totalDonationAmount = round($cartDonationTotal + $changeDonationAmount, 2);
             $changeAmount = round(max(0.0, $paidAmount - $grandTotal), 2);
 
             $uniqueMethods = array_values(array_unique(array_map(
@@ -383,6 +461,7 @@ class PosTransactionService
                 'discount_amount' => $totalDiscount,
                 'tax_amount' => $taxAmount,
                 'rounding_amount' => $roundingAmount,
+                'donation_amount' => $totalDonationAmount,
                 'total_amount' => $grossSubtotal,
                 'discount' => $totalDiscount,
                 'grand_total' => $grandTotal,
@@ -412,27 +491,31 @@ class PosTransactionService
                     'unit_price' => $line['unit_price'],
                     'cost_price_snapshot' => $line['cost_price_snapshot'],
                     'discount_amount' => $line['discount_amount'],
+                    'is_tax_exempt' => $line['is_tax_exempt'],
+                    'is_donation' => $line['is_donation'],
                     'quantity' => (string) $line['base_qty'],
                     'buy_price' => $line['cost_price_snapshot'],
                     'sell_price' => $line['unit_price'],
                     'subtotal' => $line['subtotal'],
                 ]);
 
-                $product->stock = $stockAfter;
-                $product->save();
+                if (! $line['is_donation']) {
+                    $product->stock = $stockAfter;
+                    $product->save();
 
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'type' => StockMovementType::Sale,
-                    'reference_type' => Transaction::class,
-                    'reference_id' => $transaction->id,
-                    'stock_before' => $stockBefore,
-                    'qty_change' => -$line['base_qty'],
-                    'stock_after' => $stockAfter,
-                    'unit_cost' => $line['cost_price_snapshot'],
-                    'notes' => "Penjualan POS {$invoiceNumber} ({$line['qty']} {$line['unit_name_snapshot']})",
-                    'created_by' => $actor->id,
-                ]);
+                    StockMovement::create([
+                        'product_id' => $product->id,
+                        'type' => StockMovementType::Sale,
+                        'reference_type' => Transaction::class,
+                        'reference_id' => $transaction->id,
+                        'stock_before' => $stockBefore,
+                        'qty_change' => -$line['base_qty'],
+                        'stock_after' => $stockAfter,
+                        'unit_cost' => $line['cost_price_snapshot'],
+                        'notes' => "Penjualan POS {$invoiceNumber} ({$line['qty']} {$line['unit_name_snapshot']})",
+                        'created_by' => $actor->id,
+                    ]);
+                }
             }
 
             // 10. Simpan TransactionPayment & posting ke FinanceService (netto tunai dikurangi change_amount)
@@ -477,8 +560,11 @@ class PosTransactionService
                     'items_count' => count($resolvedLines),
                     'subtotal' => $grossSubtotal,
                     'discount_amount' => $totalDiscount,
+                    'taxable_amount' => $taxableAmount,
+                    'tax_exempt_amount' => $taxExemptAmount,
                     'tax_amount' => $taxAmount,
                     'rounding_amount' => $roundingAmount,
+                    'donation_amount' => $totalDonationAmount,
                     'grand_total' => $grandTotal,
                     'paid_amount' => $paidAmount,
                     'change_amount' => $changeAmount,
@@ -540,9 +626,13 @@ class PosTransactionService
                 ->keyBy('id');
 
             foreach ($lockedTx->details as $detail) {
+                if ($detail->is_donation) {
+                    continue;
+                }
+
                 /** @var Product|null $product */
                 $product = $lockedProducts->get($detail->product_id);
-                if (! $product instanceof Product) {
+                if (! $product instanceof Product || $product->is_donation) {
                     continue;
                 }
 
@@ -784,6 +874,8 @@ class PosTransactionService
      *     sell_price: float,
      *     stock: int,
      *     image: string|null,
+     *     is_tax_exempt: bool,
+     *     is_donation: bool,
      *     matched_unit_id: int|null,
      *     units: array<int, array{id: int, unit_name: string, conversion_factor: int, barcode: string|null, sell_price: float}>
      * }
@@ -798,6 +890,8 @@ class PosTransactionService
             'sell_price' => round((float) $product->sell_price, 2),
             'stock' => (int) $product->stock,
             'image' => $product->image,
+            'is_tax_exempt' => (bool) $product->is_tax_exempt,
+            'is_donation' => (bool) $product->is_donation,
             'matched_unit_id' => $matchedUnitId,
             'units' => $product->units->map(fn (ProductUnit $unit): array => [
                 'id' => $unit->id,

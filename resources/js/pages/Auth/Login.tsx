@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { useForm, Head } from '@inertiajs/react';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircleIcon } from 'lucide-react';
+import { Head, useForm } from '@inertiajs/react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { AlertCircleIcon, Eye, EyeOff, Lock, User } from 'lucide-react';
+import { CashierIllustration } from './components/CashierIllustration';
 
 export default function Login() {
     const [loginMessageError, setLoginMessageError] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     const { data, setData, post, processing, errors } = useForm({
         email: '',
@@ -23,7 +26,7 @@ export default function Login() {
                 } else if (errs.error) {
                     setLoginMessageError(errs.error);
                 }
-            }
+            },
         });
     };
 
@@ -31,95 +34,144 @@ export default function Login() {
         <>
             <Head title="Login Kasir - POS Minimarket" />
 
-            {/* Container utama: bg-background & text-foreground menyesuaikan Dark/Light mode */}
-            <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4 transition-colors">
-                <div className="max-w-md w-full bg-card text-card-foreground rounded-2xl shadow-xl p-8 border border-border">
-                    {/* Header Logo */}
-                    <div className="text-center mb-8">
-                        <div className="w-16 h-16 bg-blue-600 text-white text-2xl font-bold flex items-center justify-center rounded-2xl mx-auto mb-3 shadow-lg shadow-blue-500/20">
-                            POS
-                        </div>
-                        <h2 className="text-2xl font-bold">Selamat Datang Kembali</h2>
-                        <p className="text-sm text-muted-foreground mt-1">Masuk ke sistem kasir minimarket</p>
-                    </div>
+            <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-white px-6 py-10 text-foreground transition-colors dark:bg-background">
+                {/* Cashier illustration flush to the right-bottom edge */}
+                <div className="pointer-events-none absolute right-0 bottom-0 z-0 hidden select-none md:block md:w-[440px] lg:w-[560px] xl:w-[660px]">
+                    <CashierIllustration className="block h-auto w-full" />
+                </div>
 
-                    {/* Alert Error */}
-                    {loginMessageError && (
-                        <Alert variant="destructive" className="mb-6">
-                            <AlertCircleIcon className="h-4 w-4" />
-                            <AlertTitle>Login Gagal!</AlertTitle>
-                            <AlertDescription>{loginMessageError}</AlertDescription>
-                        </Alert>
-                    )}
+                {/* Centered Brand Header + Floating Login Card */}
+                <div className="relative z-10 w-full max-w-[390px]">
+                    {/* Brand Header */}
+                    <header className="mb-8 text-left">
+                        <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl dark:text-foreground">
+                            POS Minimarket
+                        </h1>
+                        <p className="mt-1 text-sm font-medium text-slate-600 sm:text-[15px] dark:text-muted-foreground">
+                            Sistem kasir &amp; manajemen minimarket
+                        </p>
+                    </header>
 
-                    {/* Form Login */}
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        {/* Input Email */}
-                        <div>
-                            <label className="block text-sm font-semibold mb-1">
-                                Email Kasir
-                            </label>
-                            <input
-                                type="email"
-                                value={data.email}
-                                onChange={(e) => setData('email', e.target.value)}
-                                placeholder="kasir1@minimarket.com"
-                                className={`w-full px-4 py-3 rounded-xl border bg-background text-foreground ${errors.email ? 'border-red-500' : 'border-input'
-                                    } focus:ring-2 focus:ring-blue-500 focus:outline-none transition text-sm`}
-                                required
-                                autoFocus
-                            />
-                            {errors.email && (
-                                <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+                    {/* Floating Login Card */}
+                    <main>
+                        <div className="rounded-2xl border border-slate-100/90 bg-white/95 p-8 shadow-[0_24px_60px_-15px_rgba(15,23,42,0.12)] backdrop-blur-xs sm:p-9 dark:border-border dark:bg-card/95 dark:shadow-2xl">
+                            <h2 className="mb-6 text-2xl font-extrabold tracking-tight text-slate-950 dark:text-foreground">
+                                Login
+                            </h2>
+
+                            {/* Alert Error */}
+                            {loginMessageError && (
+                                <Alert variant="destructive" className="mb-5">
+                                    <AlertCircleIcon className="h-4 w-4" />
+                                    <AlertTitle>Login Gagal!</AlertTitle>
+                                    <AlertDescription>{loginMessageError}</AlertDescription>
+                                </Alert>
                             )}
+
+                            {/* Form Login */}
+                            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                                {/* Input Email */}
+                                <div>
+                                    <label htmlFor="email" className="sr-only">
+                                        Email Kasir
+                                    </label>
+                                    <div
+                                        className={`flex items-center overflow-hidden rounded-lg border bg-white transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:bg-background ${
+                                            errors.email
+                                                ? 'border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20'
+                                                : 'border-slate-200 dark:border-input'
+                                        }`}
+                                    >
+                                        <span className="flex h-12 w-12 shrink-0 items-center justify-center border-r border-slate-100 text-slate-500 dark:border-border dark:text-slate-400">
+                                            <User className="h-4.5 w-4.5 fill-slate-500/20 text-slate-600 dark:fill-slate-400/20 dark:text-slate-300" />
+                                        </span>
+                                        <input
+                                            id="email"
+                                            type="email"
+                                            value={data.email}
+                                            onChange={(e) => setData('email', e.target.value)}
+                                            placeholder="Email Address"
+                                            autoComplete="email"
+                                            className="h-12 w-full bg-transparent px-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-foreground dark:placeholder:text-muted-foreground"
+                                            required
+                                            autoFocus
+                                        />
+                                    </div>
+                                    {errors.email && (
+                                        <p className="mt-1.5 text-xs text-red-500">{errors.email}</p>
+                                    )}
+                                </div>
+
+                                {/* Input Password */}
+                                <div>
+                                    <label htmlFor="password" className="sr-only">
+                                        Password
+                                    </label>
+                                    <div
+                                        className={`flex items-center overflow-hidden rounded-lg border bg-white transition-all focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:bg-background ${
+                                            errors.password
+                                                ? 'border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20'
+                                                : 'border-slate-200 dark:border-input'
+                                        }`}
+                                    >
+                                        <span className="flex h-12 w-12 shrink-0 items-center justify-center border-r border-slate-100 dark:border-border">
+                                            <Lock className="h-4.5 w-4.5 fill-amber-500/25 text-amber-600 dark:fill-amber-400/20 dark:text-amber-400" />
+                                        </span>
+                                        <input
+                                            id="password"
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={data.password}
+                                            onChange={(e) => setData('password', e.target.value)}
+                                            placeholder="Password"
+                                            autoComplete="current-password"
+                                            className="h-12 w-full bg-transparent px-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-foreground dark:placeholder:text-muted-foreground"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword((prev) => !prev)}
+                                            aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                                            className="flex h-12 w-10 shrink-0 cursor-pointer items-center justify-center text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+                                        >
+                                            {showPassword ? (
+                                                <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                                <Eye className="h-4 w-4" />
+                                            )}
+                                        </button>
+                                    </div>
+                                    {errors.password && (
+                                        <p className="mt-1.5 text-xs text-red-500">{errors.password}</p>
+                                    )}
+                                </div>
+
+                                {/* Remember Me Switch */}
+                                <div className="flex items-center gap-3 pt-1">
+                                    <label
+                                        htmlFor="remember"
+                                        className="cursor-pointer select-none text-xs font-medium text-slate-700 dark:text-muted-foreground"
+                                    >
+                                        Ingat saya
+                                    </label>
+                                    <Switch
+                                        id="remember"
+                                        checked={data.remember}
+                                        onCheckedChange={(checked) => setData('remember', checked)}
+                                        className="cursor-pointer data-checked:bg-emerald-500 dark:data-checked:bg-emerald-500"
+                                    />
+                                </div>
+
+                                {/* Submit Button */}
+                                <button
+                                    type="submit"
+                                    disabled={processing}
+                                    className="mt-2 h-12 w-full cursor-pointer rounded-lg bg-gradient-to-r from-[#2e7cf6] to-[#1a66f5] text-sm font-semibold text-white shadow-[0_12px_24px_-6px_rgba(37,99,235,0.5)] transition-all duration-150 hover:from-[#2370eb] hover:to-[#135ae0] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {processing ? 'Memproses...' : 'Log in'}
+                                </button>
+                            </form>
                         </div>
-
-                        {/* Input Password */}
-                        <div>
-                            <label className="block text-sm font-semibold mb-1">
-                                Password
-                            </label>
-                            <input
-                                type="password"
-                                value={data.password}
-                                onChange={(e) => setData('password', e.target.value)}
-                                placeholder="••••••••"
-                                className={`w-full px-4 py-3 rounded-xl border bg-background text-foreground ${errors.password ? 'border-red-500' : 'border-input'
-                                    } focus:ring-2 focus:ring-blue-500 focus:outline-none transition text-sm`}
-                                required
-                            />
-                            {errors.password && (
-                                <p className="text-red-500 text-xs mt-1">{errors.password}</p>
-                            )}
-                        </div>
-
-                        {/* Checkbox Remember Me */}
-                        <div className="flex items-center justify-between text-sm">
-                            <label className="flex items-center text-muted-foreground cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={data.remember}
-                                    onChange={(e) => setData('remember', e.target.checked)}
-                                    className="rounded border-input text-blue-600 focus:ring-blue-500 mr-2 bg-background"
-                                />
-                                Ingat saya
-                            </label>
-                        </div>
-
-                        {/* Submit Button */}
-                        <button
-                            type="submit"
-                            disabled={processing}
-                            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition duration-200 disabled:opacity-50"
-                        >
-                            {processing ? 'Memproses...' : 'Masuk ke Kasir'}
-                        </button>
-                    </form>
-
-                    {/* Footer Info */}
-                    <div className="mt-8 pt-6 border-t border-border text-center text-xs text-muted-foreground">
-                        Sistem Informasi POS Minimarket &copy; {new Date().getFullYear()}
-                    </div>
+                    </main>
                 </div>
             </div>
         </>

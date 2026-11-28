@@ -66,8 +66,30 @@ class FinancialTransactionController extends Controller
                 $query->whereDate('transaction_date', '<=', $date);
             });
 
-        $totalIn = (float) (clone $baseQuery)->where('type', FinancialTransactionType::In->value)->sum('amount');
-        $totalOut = (float) (clone $baseQuery)->where('type', FinancialTransactionType::Out->value)->sum('amount');
+        $summaryRow = FinancialTransaction::query()
+            ->when($request->filled('start_date'), function ($query) use ($request): void {
+                $query->whereDate('transaction_date', '>=', (string) $request->input('start_date'));
+            })
+            ->when($request->filled('end_date'), function ($query) use ($request): void {
+                $query->whereDate('transaction_date', '<=', (string) $request->input('end_date'));
+            })
+            ->selectRaw(
+                'COUNT(*) as total_transactions,
+                COUNT(*) FILTER (WHERE type = ?) as in_count,
+                COUNT(*) FILTER (WHERE type = ?) as out_count,
+                COALESCE(SUM(amount) FILTER (WHERE type = ?), 0) as total_in,
+                COALESCE(SUM(amount) FILTER (WHERE type = ?), 0) as total_out',
+                [
+                    FinancialTransactionType::In->value,
+                    FinancialTransactionType::Out->value,
+                    FinancialTransactionType::In->value,
+                    FinancialTransactionType::Out->value,
+                ]
+            )
+            ->first();
+
+        $totalIn = round((float) ($summaryRow->total_in ?? 0), 2);
+        $totalOut = round((float) ($summaryRow->total_out ?? 0), 2);
 
         $query = (clone $baseQuery)->with([
             'financialAccount:id,code,name,type',
@@ -119,6 +141,9 @@ class FinancialTransactionController extends Controller
             'transactions' => $transactions,
             'filters' => $filters,
             'summary' => [
+                'total_transactions' => (int) ($summaryRow->total_transactions ?? 0),
+                'in_count' => (int) ($summaryRow->in_count ?? 0),
+                'out_count' => (int) ($summaryRow->out_count ?? 0),
                 'total_in' => $totalIn,
                 'total_out' => $totalOut,
                 'net_flow' => round($totalIn - $totalOut, 2),

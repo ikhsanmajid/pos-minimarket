@@ -51,11 +51,13 @@ const fieldLabels: Record<string, string> = {
     name: 'Nama Produk',
     barcode: 'Barcode',
     category_id: 'Kategori Produk',
+    base_unit: 'Satuan Dasar',
     buy_price: 'Harga Beli (HPP)',
     sell_price: 'Harga Jual',
-    stock: 'Stok',
     min_stock: 'Minimum Stok',
     active: 'Status Aktif',
+    is_tax_exempt: 'Status PPN',
+    is_donation: 'Produk Donasi',
     image: 'Foto Produk',
 }
 
@@ -96,6 +98,9 @@ const formatValue = (key: string, val: any, categoryMap?: Record<string | number
     }
     if (key === 'active') {
         return val ? 'Aktif (Dijual)' : 'Nonaktif'
+    }
+    if (key === 'is_tax_exempt') {
+        return val ? 'Bebas PPN' : 'Kena PPN'
     }
     if (typeof val === 'boolean') {
         return val ? 'Ya' : 'Tidak'
@@ -260,7 +265,9 @@ export function RiwayatPerubahanProduct({
                     const properties = row.properties || {}
                     const oldData = changes.old || properties.old || {}
                     const newData = changes.attributes || properties.attributes || {}
-                    const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]))
+                    const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)])).filter(
+                        (key) => key !== 'stock'
+                    )
 
                     if (row.event === 'created') {
                         return (
@@ -329,7 +336,9 @@ export function RiwayatPerubahanProduct({
         const properties = activity.properties || {}
         const oldData = changes.old || properties.old || {}
         const newData = changes.attributes || properties.attributes || {}
-        const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]))
+        const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)])).filter(
+            (key) => key !== 'stock'
+        )
 
         if (allKeys.length > 0) {
             return (

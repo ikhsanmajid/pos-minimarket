@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Banknote, CreditCard, Plus, Split, Trash2 } from 'lucide-react'
+import { Banknote, CreditCard, Heart, Plus, Split, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
     Dialog,
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
     Select,
     SelectContent,
@@ -18,7 +19,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import type { PosFinancialAccount, PosPaymentMethodOption } from '@/types'
+import type { PosDonationProduct, PosFinancialAccount, PosPaymentMethodOption } from '@/types'
 import { formatRupiah, getDefaultAccountIdForMethod } from './posUtils'
 
 export interface PaymentEntryPayload {
@@ -26,6 +27,11 @@ export interface PaymentEntryPayload {
     financial_account_id: number
     amount: number
     reference_number?: string | null
+}
+
+export interface PaymentDonationPayload {
+    donation_product_id: number
+    donation_amount: number
 }
 
 interface PaymentRowState {
@@ -42,9 +48,10 @@ interface PaymentDialogProps {
     grandTotal: number
     paymentMethods: PosPaymentMethodOption[]
     financialAccounts: PosFinancialAccount[]
+    donationProducts?: PosDonationProduct[]
     isSubmitting: boolean
     errorMessage?: string | null
-    onSubmitPayment: (payments: PaymentEntryPayload[]) => void
+    onSubmitPayment: (payments: PaymentEntryPayload[], donation?: PaymentDonationPayload | null) => void
 }
 
 const QUICK_CASH_AMOUNTS = [10000, 20000, 50000, 100000]
@@ -55,6 +62,7 @@ export function PaymentDialog({
     grandTotal,
     paymentMethods,
     financialAccounts,
+    donationProducts = [],
     isSubmitting,
     errorMessage = null,
     onSubmitPayment,
@@ -65,6 +73,9 @@ export function PaymentDialog({
     const [singleAmount, setSingleAmount] = useState('')
     const [singleReference, setSingleReference] = useState('')
     const [splitRows, setSplitRows] = useState<PaymentRowState[]>([])
+    const [donateChange, setDonateChange] = useState(false)
+    const [selectedDonationId, setSelectedDonationId] = useState('')
+    const [donationAmountInput, setDonationAmountInput] = useState('')
     const [localError, setLocalError] = useState<string | null>(null)
 
     const methodItems = useMemo(
@@ -79,6 +90,15 @@ export function PaymentDialog({
                 label: `${a.name} (${a.code})`,
             })),
         [financialAccounts]
+    )
+
+    const donationItems = useMemo(
+        () =>
+            donationProducts.map((p) => ({
+                value: String(p.id),
+                label: p.name,
+            })),
+        [donationProducts]
     )
 
     useEffect(() => {
@@ -107,8 +127,11 @@ export function PaymentDialog({
                 reference_number: '',
             },
         ])
+        setDonateChange(false)
+        setSelectedDonationId(donationProducts[0] ? String(donationProducts[0].id) : '')
+        setDonationAmountInput('')
         setLocalError(null)
-    }, [open, grandTotal, financialAccounts])
+    }, [open, grandTotal, financialAccounts, donationProducts])
 
     const handleSingleMethodChange = (value: string | null) => {
         if (!value) return
@@ -140,7 +163,36 @@ export function PaymentDialog({
     }, [mode, singleMethod, singleAmount, splitRows])
 
     const remaining = Math.max(0, Math.round((grandTotal - totalPaid) * 100) / 100)
-    const change = Math.max(0, Math.round((totalPaid - grandTotal) * 100) / 100)
+    const rawChange = Math.max(0, Math.round((totalPaid - grandTotal) * 100) / 100)
+
+    useEffect(() => {
+        if (rawChange <= 0 && donateChange) {
+            setDonateChange(false)
+            setDonationAmountInput('')
+        } else if (donateChange && Number(donationAmountInput) > rawChange) {
+            setDonationAmountInput(String(rawChange))
+        }
+    }, [rawChange, donateChange, donationAmountInput])
+
+    const effectiveDonationAmount =
+        donateChange && rawChange > 0 && donationProducts.length > 0
+            ? Math.min(rawChange, Math.max(0, Math.round((Number(donationAmountInput) || 0) * 100) / 100))
+            : 0
+    const finalGrandTotal = Math.round((grandTotal + effectiveDonationAmount) * 100) / 100
+    const change = Math.max(0, Math.round((totalPaid - finalGrandTotal) * 100) / 100)
+    const smallCoinsRemainder = Math.round((rawChange % 1000) * 100) / 100
+
+    const handleToggleDonateChange = (checked: boolean) => {
+        setDonateChange(checked)
+        if (checked) {
+            if (!selectedDonationId && donationProducts[0]) {
+                setSelectedDonationId(String(donationProducts[0].id))
+            }
+            setDonationAmountInput(String(rawChange))
+        } else {
+            setDonationAmountInput('')
+        }
+    }
 
     const addSplitRow = () => {
         const defaultAcc = getDefaultAccountIdForMethod('qris', financialAccounts)
@@ -190,19 +242,38 @@ export function PaymentDialog({
             return
         }
 
+        let donationPayload: PaymentDonationPayload | null = null
+        if (effectiveDonationAmount > 0) {
+            if (!selectedDonationId) {
+                setLocalError('Pilih program produk donasi terlebih dahulu.')
+                return
+            }
+            if (effectiveDonationAmount > rawChange) {
+                setLocalError('Nominal donasi tidak boleh melebihi uang kembalian.')
+                return
+            }
+            donationPayload = {
+                donation_product_id: Number(selectedDonationId),
+                donation_amount: effectiveDonationAmount,
+            }
+        }
+
         if (mode === 'single') {
             if (!singleAccountId) {
                 setLocalError('Pilih akun kas/bank tujuan pembayaran.')
                 return
             }
-            onSubmitPayment([
-                {
-                    payment_method: singleMethod,
-                    financial_account_id: Number(singleAccountId),
-                    amount: Number(singleAmount),
-                    reference_number: singleMethod !== 'cash' && singleReference.trim() ? singleReference.trim() : null,
-                },
-            ])
+            onSubmitPayment(
+                [
+                    {
+                        payment_method: singleMethod,
+                        financial_account_id: Number(singleAccountId),
+                        amount: Number(singleAmount),
+                        reference_number: singleMethod !== 'cash' && singleReference.trim() ? singleReference.trim() : null,
+                    },
+                ],
+                donationPayload
+            )
             return
         }
 
@@ -227,7 +298,7 @@ export function PaymentDialog({
             return
         }
 
-        onSubmitPayment(payload)
+        onSubmitPayment(payload, donationPayload)
     }
 
     const displayError = errorMessage || localError
@@ -275,14 +346,19 @@ export function PaymentDialog({
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5">
                         {/* Total Tagihan Banner */}
-                        <div className="rounded-xl border bg-muted/30 p-4 flex items-center justify-between">
+                        <div className="rounded-xl border bg-muted/30 p-4 flex items-center justify-between gap-4">
                             <div>
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                    Total Tagihan
+                                    {effectiveDonationAmount > 0 ? 'Total Tagihan + Donasi' : 'Total Tagihan'}
                                 </p>
                                 <p className="font-mono text-2xl font-bold text-foreground mt-0.5">
-                                    {formatRupiah(grandTotal)}
+                                    {formatRupiah(finalGrandTotal)}
                                 </p>
+                                {effectiveDonationAmount > 0 && (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
+                                        Belanja {formatRupiah(grandTotal)} + Donasi {formatRupiah(effectiveDonationAmount)}
+                                    </p>
+                                )}
                             </div>
                             <div className="text-right">
                                 {remaining > 0 ? (
@@ -302,6 +378,11 @@ export function PaymentDialog({
                                         <p className="font-mono text-xl font-bold text-emerald-600 dark:text-emerald-400">
                                             {formatRupiah(change)}
                                         </p>
+                                        {effectiveDonationAmount > 0 && (
+                                            <p className="text-[11px] text-pink-600 dark:text-pink-400 font-medium mt-0.5">
+                                                Didonasikan: {formatRupiah(effectiveDonationAmount)}
+                                            </p>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -549,6 +630,111 @@ export function PaymentDialog({
                             </div>
                         )}
 
+                        {/* Donasi Kembalian (muncul saat ada kembalian tunai & tersedia produk donasi aktif) */}
+                        {rawChange > 0 && donationProducts.length > 0 && (
+                            <div className="rounded-xl border border-pink-200/80 bg-pink-50/40 dark:border-pink-900/60 dark:bg-pink-950/20 p-4 space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-start gap-2.5">
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pink-500/15 text-pink-600 dark:text-pink-400 mt-0.5">
+                                            <Heart className="h-4 w-4" />
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <Label htmlFor="donate-change-switch" className="text-sm font-semibold cursor-pointer">
+                                                Masukkan Kembalian ke Donasi
+                                            </Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Salurkan sisa uang kembalian ({formatRupiah(rawChange)}) ke program donasi jika uang receh tidak tersedia.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Switch
+                                        id="donate-change-switch"
+                                        checked={donateChange}
+                                        disabled={isSubmitting}
+                                        onCheckedChange={handleToggleDonateChange}
+                                    />
+                                </div>
+
+                                {donateChange && (
+                                    <div className="grid grid-cols-1 gap-3 pt-2 border-t border-pink-200/60 dark:border-pink-900/50 sm:grid-cols-2">
+                                        <div className="space-y-1.5 min-w-0">
+                                            <Label className="text-xs">Program Donasi</Label>
+                                            {donationProducts.length > 1 ? (
+                                                <Select
+                                                    value={selectedDonationId}
+                                                    onValueChange={(v) => v && setSelectedDonationId(v)}
+                                                    items={donationItems}
+                                                    disabled={isSubmitting}
+                                                >
+                                                    <SelectTrigger className="w-full h-9">
+                                                        <SelectValue>
+                                                            {(val) =>
+                                                                donationItems.find((d) => d.value === val)?.label ??
+                                                                'Pilih program donasi'
+                                                            }
+                                                        </SelectValue>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {donationItems.map((d) => (
+                                                            <SelectItem key={d.value} value={d.value}>
+                                                                {d.label}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <div className="flex h-9 items-center rounded-md border bg-background px-3 text-xs font-medium text-foreground">
+                                                    {donationProducts[0].name}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-1.5 min-w-0">
+                                            <Label htmlFor="donation-amount-input" className="text-xs">
+                                                Nominal Donasi (Maks. {formatRupiah(rawChange)})
+                                            </Label>
+                                            <Input
+                                                id="donation-amount-input"
+                                                type="number"
+                                                min={0}
+                                                max={rawChange}
+                                                step="1"
+                                                value={donationAmountInput}
+                                                onChange={(e) => setDonationAmountInput(e.target.value)}
+                                                disabled={isSubmitting}
+                                                className="h-9 font-mono text-sm font-semibold"
+                                            />
+                                        </div>
+
+                                        <div className="sm:col-span-2 flex flex-wrap gap-2">
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => setDonationAmountInput(String(rawChange))}
+                                                disabled={isSubmitting}
+                                                className="h-7 font-mono text-xs cursor-pointer"
+                                            >
+                                                Semua Kembalian ({formatRupiah(rawChange)})
+                                            </Button>
+                                            {smallCoinsRemainder > 0 && rawChange > smallCoinsRemainder && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setDonationAmountInput(String(smallCoinsRemainder))}
+                                                    disabled={isSubmitting}
+                                                    className="h-7 font-mono text-xs cursor-pointer"
+                                                >
+                                                    Sisa Receh ({formatRupiah(smallCoinsRemainder)})
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {displayError && (
                             <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs font-medium text-destructive">
                                 {displayError}
@@ -571,7 +757,7 @@ export function PaymentDialog({
                             disabled={isSubmitting || totalPaid < grandTotal || nonCashTotal > grandTotal}
                             className="cursor-pointer"
                         >
-                            {isSubmitting ? 'Memproses...' : `Bayar ${formatRupiah(grandTotal)}`}
+                            {isSubmitting ? 'Memproses...' : `Bayar ${formatRupiah(finalGrandTotal)}`}
                         </Button>
                     </DialogFooter>
                 </form>

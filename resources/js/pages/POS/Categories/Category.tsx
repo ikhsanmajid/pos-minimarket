@@ -3,6 +3,9 @@ import { router, usePage } from '@inertiajs/react'
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout'
 import { DataTable, type DataTableColumn } from '@/components/dataTable'
 import { Badge } from '@/components/ui/badge'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatPercent } from '@/lib/utils'
+import { CheckCircle2, FolderOpen, FolderTree, PauseCircle } from 'lucide-react'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'react-toastify'
@@ -31,6 +34,13 @@ interface PaginatedCategories extends PaginationMeta {
 type CategoryPageProps = PageProps<{
     categories: PaginatedCategories
     filters: CategoryFilters
+    summary: {
+        total_categories: number
+        active_categories: number
+        inactive_categories: number
+        empty_categories: number
+        categorized_products_count: number
+    }
 }>
 
 interface GetColumnsOptions {
@@ -171,9 +181,26 @@ const getColumns = ({
     ]
 
 const CategoryPage = () => {
-    const { categories, filters } = usePage<CategoryPageProps>().props
+    const { categories, filters, summary } = usePage<CategoryPageProps>().props
     const { flash, user } = useAuth()
     const [isLoading, setIsLoading] = useState(false)
+
+    const handleFilterStatus = (status?: string) => {
+        const nextStatus = status && filters.status === status ? undefined : status
+        router.visit(
+            CategoryController.index({
+                mergeQuery: {
+                    status: nextStatus,
+                    page: 1,
+                },
+            }),
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            }
+        )
+    }
 
     const canEdit = user?.role === 'admin' || user?.role === 'warehouse'
     const canDelete = user?.role === 'admin'
@@ -266,6 +293,47 @@ const CategoryPage = () => {
                     <DialogAddCategory storeUrl={CategoryController.store.url()} />
                 )}
             </div>
+
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Kategori"
+                    value={formatNumber(summary.total_categories)}
+                    icon={FolderTree}
+                    variant="blue"
+                    subInfo={`${formatNumber(summary.categorized_products_count)} produk terkategorisasi`}
+                    periodLabel="Semua Data"
+                    isActive={!filters.status || filters.status === 'all'}
+                    onClick={() => handleFilterStatus(undefined)}
+                />
+                <SummaryStatCard
+                    title="Kategori Aktif"
+                    value={formatNumber(summary.active_categories)}
+                    icon={CheckCircle2}
+                    variant="emerald"
+                    subInfo={`${formatPercent(summary.active_categories, summary.total_categories)} dari total kategori`}
+                    periodLabel="Aktif"
+                    isActive={filters.status === 'active'}
+                    onClick={() => handleFilterStatus('active')}
+                />
+                <SummaryStatCard
+                    title="Kategori Nonaktif"
+                    value={formatNumber(summary.inactive_categories)}
+                    icon={PauseCircle}
+                    variant="amber"
+                    subInfo="Terkunci dari produk baru"
+                    periodLabel="Nonaktif"
+                    isActive={filters.status === 'inactive'}
+                    onClick={() => handleFilterStatus('inactive')}
+                />
+                <SummaryStatCard
+                    title="Kategori Kosong"
+                    value={formatNumber(summary.empty_categories)}
+                    icon={FolderOpen}
+                    variant="rose"
+                    subInfo="Belum memiliki produk • perlu tinjauan"
+                    periodLabel="0 Produk"
+                />
+            </SummaryStatGrid>
 
             <CategoryTableToolbar
                 filters={filters}

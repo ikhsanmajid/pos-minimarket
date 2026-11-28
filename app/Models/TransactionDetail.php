@@ -21,6 +21,8 @@ use Illuminate\Support\Carbon;
  * @property string $unit_price
  * @property string $cost_price_snapshot
  * @property string $discount_amount
+ * @property bool $is_tax_exempt
+ * @property bool $is_donation
  * @property string $quantity
  * @property string $buy_price
  * @property string $sell_price
@@ -40,6 +42,8 @@ use Illuminate\Support\Carbon;
     'unit_price',
     'cost_price_snapshot',
     'discount_amount',
+    'is_tax_exempt',
+    'is_donation',
     'quantity',
     'buy_price',
     'sell_price',
@@ -56,6 +60,8 @@ class TransactionDetail extends Model
             'unit_price' => 'decimal:2',
             'cost_price_snapshot' => 'decimal:2',
             'discount_amount' => 'decimal:2',
+            'is_tax_exempt' => 'boolean',
+            'is_donation' => 'boolean',
             'buy_price' => 'decimal:2',
             'sell_price' => 'decimal:2',
             'subtotal' => 'decimal:2',

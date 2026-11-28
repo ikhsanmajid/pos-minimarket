@@ -6,7 +6,8 @@ import DataTablePagination, { type PaginationMeta } from '@/components/dataTable
 import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatNumber, formatRupiah } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import {
     Select,
@@ -15,7 +16,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { Search, X, CreditCard, AlertTriangle, Clock, FileWarning } from 'lucide-react'
+import { Search, X, CreditCard, AlertTriangle, CheckCircle2, Clock, FileWarning } from 'lucide-react'
 import { toast } from 'react-toastify'
 import type { PageProps } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
@@ -23,7 +24,6 @@ import AccountPayableController from '@/actions/App/Http/Controllers/AccountPaya
 import PurchaseOrderController from '@/actions/App/Http/Controllers/PurchaseOrderController'
 import { RecordPaymentDialog } from '../PurchaseOrders/component/RecordPaymentDialog'
 import {
-    formatRupiah,
     paymentStatusBadgeConfig,
     type FinancialAccountOption,
     type SelectOptionItem,
@@ -63,10 +63,16 @@ type AccountPayablePageProps = PageProps<{
     payables: PaginationMeta & { data: AccountPayableRow[] }
     filters: Filters
     summary: {
+        total_count: number
+        total_amount: number
+        paid_amount: number
+        paid_count: number
         total_outstanding: number
+        unpaid_count: number
         overdue_amount: number
         overdue_count: number
         due_soon_amount: number
+        due_soon_count: number
     }
     financialAccounts: FinancialAccountOption[]
     paymentStatuses: SelectOptionItem[]
@@ -259,11 +265,10 @@ const AccountPayablePage = () => {
                 size: 150,
                 cell: ({ row }) => (
                     <span
-                        className={`font-mono text-xs font-bold ${
-                            row.original.remaining_amount > 0
+                        className={`font-mono text-xs font-bold ${row.original.remaining_amount > 0
                                 ? 'text-rose-600 dark:text-rose-400'
                                 : 'text-emerald-600 dark:text-emerald-400'
-                        }`}
+                            }`}
                     >
                         {formatRupiah(row.original.remaining_amount)}
                     </span>
@@ -336,133 +341,183 @@ const AccountPayablePage = () => {
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Total Hutang Belum Lunas</p>
-                            <p className="text-lg font-extrabold font-mono text-primary mt-0.5">
-                                {formatRupiah(summary.total_outstanding)}
-                            </p>
-                        </div>
-                        <FileWarning className="h-8 w-8 text-primary/30" />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">
-                                Lewat Jatuh Tempo ({summary.overdue_count} tagihan)
-                            </p>
-                            <p className="text-lg font-extrabold font-mono text-rose-600 dark:text-rose-400 mt-0.5">
-                                {formatRupiah(summary.overdue_amount)}
-                            </p>
-                        </div>
-                        <AlertTriangle className="h-8 w-8 text-rose-500/30" />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Jatuh Tempo 7 Hari Ke Depan</p>
-                            <p className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5">
-                                {formatRupiah(summary.due_soon_amount)}
-                            </p>
-                        </div>
-                        <Clock className="h-8 w-8 text-amber-500/30" />
-                    </CardContent>
-                </Card>
-            </div>
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Tagihan Hutang"
+                    value={formatRupiah(summary.total_amount)}
+                    icon={FileWarning}
+                    variant="blue"
+                    subInfo={`${formatNumber(summary.total_count)} faktur hutang`}
+                    periodLabel="Semua Data"
+                    isActive={!filters.status && !filters.due_filter}
+                    onClick={() => {
+                        setStatus('all')
+                        setDueFilter('all')
+                        router.visit(
+                            AccountPayableController.index({
+                                mergeQuery: { status: undefined, due_filter: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Total Sudah Dibayar"
+                    value={formatRupiah(summary.paid_amount)}
+                    icon={CheckCircle2}
+                    variant="emerald"
+                    subInfo={`${formatNumber(summary.paid_count)} faktur lunas`}
+                    periodLabel="Lunas"
+                    isActive={filters.status === 'paid'}
+                    onClick={() => {
+                        const next = filters.status === 'paid' ? 'all' : 'paid'
+                        setStatus(next)
+                        setDueFilter('all')
+                        router.visit(
+                            AccountPayableController.index({
+                                mergeQuery: { status: next !== 'all' ? next : undefined, due_filter: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Sisa Hutang Belum Lunas"
+                    value={formatRupiah(summary.total_outstanding)}
+                    icon={Clock}
+                    variant="amber"
+                    subInfo={`${formatNumber(summary.unpaid_count)} tagihan unpaid/partial`}
+                    periodLabel={summary.due_soon_count > 0 ? `${summary.due_soon_count} ≤7 Hari` : 'Aktif'}
+                    isActive={filters.due_filter === 'due_soon'}
+                    onClick={() => {
+                        const next = filters.due_filter === 'due_soon' ? 'all' : 'due_soon'
+                        setDueFilter(next)
+                        setStatus('all')
+                        router.visit(
+                            AccountPayableController.index({
+                                mergeQuery: { due_filter: next !== 'all' ? next : undefined, status: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Jatuh Tempo / Overdue"
+                    value={formatRupiah(summary.overdue_amount)}
+                    icon={AlertTriangle}
+                    variant="rose"
+                    subInfo={`${formatNumber(summary.overdue_count)} tagihan melewati jatuh tempo`}
+                    periodLabel="Overdue"
+                    isActive={filters.due_filter === 'overdue'}
+                    onClick={() => {
+                        const next = filters.due_filter === 'overdue' ? 'all' : 'overdue'
+                        setDueFilter(next)
+                        setStatus('all')
+                        router.visit(
+                            AccountPayableController.index({
+                                mergeQuery: { due_filter: next !== 'all' ? next : undefined, status: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+            </SummaryStatGrid>
 
             {/* Filter Toolbar */}
-            <div className="flex flex-wrap items-center gap-2.5">
-                <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                        placeholder="Cari No. AP / PO / supplier..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="pl-9 h-9 text-sm"
-                    />
-                </div>
+            <div className="mb-4 space-y-3 rounded-lg border bg-card p-3.5 shadow-xs sm:p-4">
+                <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="relative w-full sm:w-64 lg:w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                            placeholder="Cari No. AP / PO / supplier…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9 pr-8 h-9 text-sm"
+                        />
+                    </div>
 
-                <Select
-                    items={statusItems}
-                    value={status}
-                    onValueChange={(val) => {
-                        if (!val) return
-                        setStatus(val)
-                        router.visit(
-                            AccountPayableController.index({
-                                mergeQuery: { status: val !== 'all' ? val : undefined, page: 1 },
-                            }),
-                            { preserveState: true, preserveScroll: true, replace: true }
-                        )
-                    }}
-                >
-                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
-                        <SelectValue placeholder="Semua Status">
-                            {(val) => statusItems.find((i) => i.value === val)?.label}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {statusItems.map((i) => (
-                            <SelectItem key={i.value} value={i.value}>
-                                {i.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-
-                <Select
-                    items={dueItems}
-                    value={dueFilter}
-                    onValueChange={(val) => {
-                        if (!val) return
-                        setDueFilter(val)
-                        router.visit(
-                            AccountPayableController.index({
-                                mergeQuery: { due_filter: val !== 'all' ? val : undefined, page: 1 },
-                            }),
-                            { preserveState: true, preserveScroll: true, replace: true }
-                        )
-                    }}
-                >
-                    <SelectTrigger className="w-full sm:w-auto sm:min-w-[195px] h-9">
-                        <SelectValue placeholder="Semua Jatuh Tempo">
-                            {(val) => dueItems.find((i) => i.value === val)?.label}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {dueItems.map((i) => (
-                            <SelectItem key={i.value} value={i.value}>
-                                {i.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-
-                {(search || status !== 'all' || dueFilter !== 'all') && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 text-xs gap-1"
-                        onClick={() => {
-                            isFirstRender.current = true
-                            setSearch('')
-                            setStatus('all')
-                            setDueFilter('all')
-                            router.visit(AccountPayableController.index.url(), {
-                                preserveState: true,
-                                preserveScroll: true,
-                                replace: true,
-                            })
+                    <Select
+                        items={statusItems}
+                        value={status}
+                        onValueChange={(val) => {
+                            if (!val) return
+                            setStatus(val)
+                            router.visit(
+                                AccountPayableController.index({
+                                    mergeQuery: { status: val !== 'all' ? val : undefined, page: 1 },
+                                }),
+                                { preserveState: true, preserveScroll: true, replace: true }
+                            )
                         }}
+                        disabled={isLoading}
                     >
-                        <X className="h-3.5 w-3.5" />
-                        Reset
-                    </Button>
-                )}
+                        <SelectTrigger className="w-full sm:w-auto sm:min-w-[175px] h-9">
+                            <SelectValue placeholder="Semua Status">
+                                {(val) => statusItems.find((i) => i.value === val)?.label}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {statusItems.map((i) => (
+                                <SelectItem key={i.value} value={i.value}>
+                                    {i.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select
+                        items={dueItems}
+                        value={dueFilter}
+                        onValueChange={(val) => {
+                            if (!val) return
+                            setDueFilter(val)
+                            router.visit(
+                                AccountPayableController.index({
+                                    mergeQuery: { due_filter: val !== 'all' ? val : undefined, page: 1 },
+                                }),
+                                { preserveState: true, preserveScroll: true, replace: true }
+                            )
+                        }}
+                        disabled={isLoading}
+                    >
+                        <SelectTrigger className="w-full sm:w-auto sm:min-w-[195px] h-9">
+                            <SelectValue placeholder="Semua Jatuh Tempo">
+                                {(val) => dueItems.find((i) => i.value === val)?.label}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {dueItems.map((i) => (
+                                <SelectItem key={i.value} value={i.value}>
+                                    {i.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {(search || status !== 'all' || dueFilter !== 'all') && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isLoading}
+                            className="h-9 px-3 text-xs gap-1.5 text-muted-foreground hover:text-foreground border-dashed"
+                            onClick={() => {
+                                isFirstRender.current = true
+                                setSearch('')
+                                setStatus('all')
+                                setDueFilter('all')
+                                router.visit(AccountPayableController.index.url(), {
+                                    preserveState: true,
+                                    preserveScroll: true,
+                                    replace: true,
+                                })
+                            }}
+                        >
+                            <X className="h-3.5 w-3.5" />
+                            Reset Filter
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <DataTable

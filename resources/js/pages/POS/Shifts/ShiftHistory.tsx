@@ -6,7 +6,9 @@ import DataTablePagination, { type PaginationMeta } from '@/components/dataTable
 import { DataTableSortHeader } from '@/components/dataTableSortHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Clock, Eye } from 'lucide-react'
+import { SummaryStatCard, SummaryStatGrid } from '@/components/SummaryStatCard'
+import { formatDateRangeLabel, formatNumber, formatRupiah } from '@/lib/utils'
+import { CheckCircle2, Clock, Eye, Scale, TrendingUp } from 'lucide-react'
 import type { PageProps } from '@/types'
 import CashierShiftController from '@/actions/App/Http/Controllers/CashierShiftController'
 import shiftsRoutes from '@/routes/pos/shifts'
@@ -14,7 +16,7 @@ import ShiftHistoryTableToolbar, {
     type CashierOption,
     type ShiftHistoryFilters,
 } from './component/ShiftHistorySearch'
-import { formatRupiah, getVarianceBadgeMeta } from './component/shiftUtils'
+import { getVarianceBadgeMeta } from './component/shiftUtils'
 
 interface ShiftHistoryRow {
     id: number
@@ -37,13 +39,38 @@ interface ShiftHistoryRow {
 type ShiftHistoryPageProps = PageProps<{
     shifts: PaginationMeta & { data: ShiftHistoryRow[] }
     filters: ShiftHistoryFilters
+    summary: {
+        total_shifts: number
+        open_shifts: number
+        normal_closed_shifts: number
+        variance_shifts: number
+        total_shift_sales: number
+        total_variance_amount: number
+    }
     cashiers: CashierOption[]
     canViewAll: boolean
 }>
 
 const ShiftHistory = () => {
-    const { shifts, filters, cashiers = [], canViewAll } = usePage<ShiftHistoryPageProps>().props
+    const { shifts, filters, summary, cashiers = [], canViewAll } = usePage<ShiftHistoryPageProps>().props
     const [isLoading, setIsLoading] = useState(false)
+
+    const isVarianceActive =
+        filters.has_variance === true ||
+        String(filters.has_variance) === 'true' ||
+        String(filters.has_variance) === '1'
+
+    const handleToggleVariance = () => {
+        router.visit(
+            CashierShiftController.history({
+                mergeQuery: {
+                    has_variance: isVarianceActive ? undefined : '1',
+                    page: 1,
+                },
+            }),
+            { preserveState: true, preserveScroll: true, replace: true }
+        )
+    }
 
     useEffect(() => {
         const removeStart = router.on('start', () => setIsLoading(true))
@@ -281,6 +308,56 @@ const ShiftHistory = () => {
                     </Button>
                 </Link>
             </div>
+
+            <SummaryStatGrid>
+                <SummaryStatCard
+                    title="Total Shift"
+                    value={formatNumber(summary.total_shifts)}
+                    icon={Clock}
+                    variant="blue"
+                    subInfo={`${formatNumber(summary.open_shifts)} shift sedang terbuka`}
+                    periodLabel={formatDateRangeLabel(
+                        filters.start_date,
+                        filters.end_date,
+                        canViewAll ? 'Semua Kasir' : 'Shift Saya'
+                    )}
+                    isActive={!filters.status && !isVarianceActive}
+                    onClick={() => {
+                        router.visit(
+                            CashierShiftController.history({
+                                mergeQuery: { status: undefined, has_variance: undefined, page: 1 },
+                            }),
+                            { preserveState: true, preserveScroll: true, replace: true }
+                        )
+                    }}
+                />
+                <SummaryStatCard
+                    title="Total Penjualan Shift"
+                    value={formatRupiah(summary.total_shift_sales)}
+                    icon={TrendingUp}
+                    variant="emerald"
+                    subInfo="Akumulasi shift yang sudah ditutup"
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Tertutup')}
+                />
+                <SummaryStatCard
+                    title="Shift Selesai Normal"
+                    value={formatNumber(summary.normal_closed_shifts)}
+                    icon={CheckCircle2}
+                    variant="amber"
+                    subInfo="Rekonsiliasi seimbang (Rp 0)"
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Normal')}
+                />
+                <SummaryStatCard
+                    title="Shift Berselisih Kas"
+                    value={formatNumber(summary.variance_shifts)}
+                    icon={Scale}
+                    variant="rose"
+                    subInfo={`Total selisih: ${formatRupiah(summary.total_variance_amount)}`}
+                    periodLabel={formatDateRangeLabel(filters.start_date, filters.end_date, 'Variance ≠ 0')}
+                    isActive={isVarianceActive}
+                    onClick={handleToggleVariance}
+                />
+            </SummaryStatGrid>
 
             <ShiftHistoryTableToolbar
                 filters={filters}

@@ -150,9 +150,45 @@ class TransactionController extends Controller
                 ->all()
             : [];
 
+        $summaryRow = Transaction::query()
+            ->when(! $canViewAll, fn ($q) => $q->where('user_id', $user->id))
+            ->when($request->filled('start_date'), function ($q) use ($request): void {
+                $q->whereDate('created_at', '>=', (string) $request->input('start_date'));
+            })
+            ->when($request->filled('end_date'), function ($q) use ($request): void {
+                $q->whereDate('created_at', '<=', (string) $request->input('end_date'));
+            })
+            ->selectRaw(
+                'COUNT(*) as total_transactions,
+                COUNT(*) FILTER (WHERE status = ?) as completed_count,
+                COUNT(*) FILTER (WHERE status IN (?, ?)) as refunded_count,
+                COUNT(*) FILTER (WHERE status = ?) as voided_count,
+                COALESCE(SUM(grand_total) FILTER (WHERE status != ?), 0) as total_sales,
+                COALESCE(SUM(grand_total) FILTER (WHERE status = ?), 0) as voided_amount',
+                [
+                    TransactionStatus::Completed->value,
+                    TransactionStatus::PartiallyRefunded->value,
+                    TransactionStatus::Refunded->value,
+                    TransactionStatus::Voided->value,
+                    TransactionStatus::Voided->value,
+                    TransactionStatus::Voided->value,
+                ]
+            )
+            ->first();
+
+        $summary = [
+            'total_transactions' => (int) ($summaryRow->total_transactions ?? 0),
+            'completed_count' => (int) ($summaryRow->completed_count ?? 0),
+            'refunded_count' => (int) ($summaryRow->refunded_count ?? 0),
+            'voided_count' => (int) ($summaryRow->voided_count ?? 0),
+            'total_sales' => round((float) ($summaryRow->total_sales ?? 0), 2),
+            'voided_amount' => round((float) ($summaryRow->voided_amount ?? 0), 2),
+        ];
+
         return Inertia::render('POS/Transactions/Transaction', [
             'transactions' => $transactions,
             'filters' => $filters,
+            'summary' => $summary,
             'cashiers' => $cashiers,
             'canViewAll' => $canViewAll,
             'statusOptions' => TransactionStatus::options(),
@@ -217,6 +253,7 @@ class TransactionController extends Controller
                 'discount_amount' => (float) $transaction->discount_amount,
                 'tax_amount' => (float) $transaction->tax_amount,
                 'rounding_amount' => (float) $transaction->rounding_amount,
+                'donation_amount' => (float) $transaction->donation_amount,
                 'grand_total' => (float) $transaction->grand_total,
                 'paid_amount' => (float) $transaction->paid_amount,
                 'change_amount' => (float) ($transaction->change_amount ?? 0),
@@ -239,9 +276,11 @@ class TransactionController extends Controller
                         'qty' => $qty,
                         'base_qty' => $d->base_qty > 0 ? $d->base_qty : $qty,
                         'returned_qty' => $returnedQty,
-                        'returnable_qty' => max(0, $qty - $returnedQty),
+                        'returnable_qty' => $d->is_donation ? 0 : max(0, $qty - $returnedQty),
                         'unit_price' => (float) ((float) $d->unit_price > 0 ? $d->unit_price : $d->sell_price),
                         'discount_amount' => (float) $d->discount_amount,
+                        'is_tax_exempt' => (bool) $d->is_tax_exempt,
+                        'is_donation' => (bool) $d->is_donation,
                         'subtotal' => (float) $d->subtotal,
                     ];
                 })->values()->all(),

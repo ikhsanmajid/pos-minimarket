@@ -13,6 +13,7 @@ enum StockMovementType: string
     case AdjustmentOut = 'adjustment_out';
     case PurchaseReturnOut = 'purchase_return_out';
     case SaleReturnIn = 'sale_return_in';
+    case Opname = 'opname';
 
     public function label(): string
     {
@@ -24,6 +25,7 @@ enum StockMovementType: string
             self::AdjustmentIn => 'Penyesuaian Masuk',
             self::AdjustmentOut => 'Penyesuaian Keluar',
             self::PurchaseReturnOut => 'Retur Pembelian',
+            self::Opname => 'Stock Opname',
         };
     }
 }
